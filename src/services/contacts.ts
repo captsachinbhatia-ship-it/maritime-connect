@@ -37,8 +37,7 @@ export async function listContactsByStage(
         company_id,
         designation,
         country_code,
-        mobile_number,
-        landline_number,
+        phone,
         phone_type,
         email,
         ice_handle,
@@ -106,7 +105,7 @@ export async function getCompanyNamesMap(companyIds: string[]): Promise<{
 
 export async function checkDuplicateContact(
   email: string | null,
-  mobileNumber: string | null
+  phone: string | null
 ): Promise<{
   isDuplicate: boolean;
   duplicateField: 'email' | 'phone' | null;
@@ -131,11 +130,11 @@ export async function checkDuplicateContact(
     }
 
     // Check by phone if provided
-    if (mobileNumber && mobileNumber.trim()) {
+    if (phone && phone.trim()) {
       const { data: phoneMatch, error: phoneError } = await supabase
         .from('contacts')
         .select('id')
-        .eq('mobile_number', mobileNumber.trim())
+        .eq('phone', phone.trim())
         .limit(1);
 
       if (phoneError) {
@@ -173,8 +172,7 @@ export async function createContact(
         company_id: payload.company_id || null,
         designation: payload.designation || null,
         country_code: payload.country_code || null,
-        mobile_number: payload.mobile_number || null,
-        landline_number: payload.landline_number || null,
+        phone: payload.phone || null,
         phone_type: payload.phone_type || null,
         email: payload.email || null,
         ice_handle: payload.ice_handle || null,

@@ -51,8 +51,7 @@ export interface Contact {
   company_id: string | null;
   designation: string | null;
   country_code: string | null;
-  mobile_number: string | null;
-  landline_number: string | null;
+  phone: string | null;
   phone_type: string | null;
   email: string | null;
   ice_handle: string | null;
@@ -71,8 +70,7 @@ export interface CreateContactPayload {
   company_id?: string | null;
   designation?: string | null;
   country_code?: string | null;
-  mobile_number?: string | null;
-  landline_number?: string | null;
+  phone?: string | null;
   phone_type?: string | null;
   email?: string | null;
   ice_handle?: string | null;

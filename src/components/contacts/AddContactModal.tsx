@@ -47,9 +47,8 @@ const contactSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
   company_id: z.string().optional(),
   designation: z.string().max(100).optional(),
-  country_code: z.string().max(5).optional(),
-  mobile_number: z.string().max(20).optional(),
-  landline_number: z.string().max(20).optional(),
+  country_code: z.string().max(10).optional(),
+  phone: z.string().max(20).optional(),
   phone_type: z.string().optional(),
   email: z.string().email('Invalid email').max(255).optional().or(z.literal('')),
   ice_handle: z.string().max(100).optional(),
@@ -64,14 +63,13 @@ interface AddContactModalProps {
 }
 
 const PREFERRED_CHANNELS = ['Email', 'Phone', 'WhatsApp', 'ICE', 'LinkedIn'];
-const PHONE_TYPES = ['Mobile', 'Work', 'Personal'];
+const PHONE_TYPES = ['MOBILE', 'LANDLINE', 'WHATSAPP'];
 
 export function AddContactModal({ onSuccess }: AddContactModalProps) {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [sameAsMobile, setSameAsMobile] = useState(false);
   
   // Company dropdown state
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([]);
@@ -96,9 +94,8 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       full_name: '',
       company_id: '',
       designation: '',
-      country_code: '',
-      mobile_number: '',
-      landline_number: '',
+      country_code: '+91',
+      phone: '',
       phone_type: '',
       email: '',
       ice_handle: '',
@@ -107,21 +104,12 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     },
   });
 
-  const mobileNumber = watch('mobile_number');
-
   // Load companies on mount
   useEffect(() => {
     if (open) {
       loadCompanies();
     }
   }, [open]);
-
-  // Handle "Same as mobile" checkbox
-  useEffect(() => {
-    if (sameAsMobile && mobileNumber) {
-      setValue('landline_number', mobileNumber);
-    }
-  }, [sameAsMobile, mobileNumber, setValue]);
 
   const loadCompanies = async () => {
     const result = await getAllCompaniesForDropdown();
@@ -182,7 +170,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       // Check for duplicates
       const duplicateCheck = await checkDuplicateContact(
         data.email || null,
-        data.mobile_number || null
+        data.phone || null
       );
 
       if (duplicateCheck.error) {
@@ -204,8 +192,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
         company_id: data.company_id || null,
         designation: data.designation || null,
         country_code: data.country_code || null,
-        mobile_number: data.mobile_number || null,
-        landline_number: data.landline_number || null,
+        phone: data.phone || null,
         phone_type: data.phone_type || null,
         email: data.email || null,
         ice_handle: data.ice_handle || null,
@@ -222,7 +209,6 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       // Success
       reset();
       setSelectedCompany(null);
-      setSameAsMobile(false);
       setOpen(false);
       onSuccess();
     } catch (err) {
@@ -236,7 +222,6 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     if (!newOpen) {
       reset();
       setSelectedCompany(null);
-      setSameAsMobile(false);
       setSubmitError(null);
       setCompanySearch('');
     }
@@ -361,39 +346,16 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
                   <Input
                     id="country_code"
                     {...register('country_code')}
-                    placeholder="+1"
+                    placeholder="+91"
                   />
                 </div>
                 <div className="col-span-2 space-y-2">
-                  <Label htmlFor="mobile_number">Mobile Number</Label>
+                  <Label htmlFor="phone">Phone</Label>
                   <Input
-                    id="mobile_number"
-                    {...register('mobile_number')}
-                    placeholder="Enter mobile number"
+                    id="phone"
+                    {...register('phone')}
+                    placeholder="Enter phone number"
                   />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="landline_number">Landline Number</Label>
-                <Input
-                  id="landline_number"
-                  {...register('landline_number')}
-                  placeholder="Enter landline number"
-                  disabled={sameAsMobile}
-                />
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="same_as_mobile"
-                    checked={sameAsMobile}
-                    onCheckedChange={(checked) => setSameAsMobile(checked === true)}
-                  />
-                  <label
-                    htmlFor="same_as_mobile"
-                    className="text-sm text-muted-foreground"
-                  >
-                    Same as mobile
-                  </label>
                 </div>
               </div>
 
