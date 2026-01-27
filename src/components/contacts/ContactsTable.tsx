@@ -65,12 +65,9 @@ export function ContactsTable({
   }
 
   const formatPhone = (contact: ContactWithCompany) => {
-    if (contact.mobile_number) {
-      const code = contact.country_code ? `+${contact.country_code} ` : '';
-      return `${code}${contact.mobile_number}`;
-    }
-    if (contact.landline_number) {
-      return contact.landline_number;
+    if (contact.phone) {
+      const code = contact.country_code ? `${contact.country_code} ` : '';
+      return `${code}${contact.phone}`;
     }
     return '-';
   };

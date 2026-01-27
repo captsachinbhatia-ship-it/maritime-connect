@@ -27,9 +27,9 @@ export function ContactDetailsDrawer({
   if (!contact) return null;
 
   const formatPhone = () => {
-    if (contact.mobile_number) {
-      const code = contact.country_code ? `+${contact.country_code} ` : '';
-      return `${code}${contact.mobile_number}`;
+    if (contact.phone) {
+      const code = contact.country_code ? `${contact.country_code} ` : '';
+      return `${code}${contact.phone}`;
     }
     return null;
   };
@@ -82,22 +82,15 @@ export function ContactDetailsDrawer({
                 Phone
               </h4>
               <div className="space-y-2">
-                {formatPhone() && (
+                {formatPhone() ? (
                   <div>
-                    <span className="text-xs text-muted-foreground">Mobile: </span>
+                    <span className="text-xs text-muted-foreground">Phone: </span>
                     <span className="text-foreground">{formatPhone()}</span>
                     {contact.phone_type && (
                       <span className="ml-2 text-xs text-muted-foreground">({contact.phone_type})</span>
                     )}
                   </div>
-                )}
-                {contact.landline_number && (
-                  <div>
-                    <span className="text-xs text-muted-foreground">Landline: </span>
-                    <span className="text-foreground">{contact.landline_number}</span>
-                  </div>
-                )}
-                {!formatPhone() && !contact.landline_number && (
+                ) : (
                   <p className="text-muted-foreground">No phone number</p>
                 )}
               </div>
