@@ -352,41 +352,88 @@ export function ContactDetailsDrawer({
                   <p>No assignment history</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {assignments.map((assignment, index) => (
-                    <div 
-                      key={assignment.id} 
-                      className={`rounded-lg border p-4 ${index === 0 ? 'border-primary/50 bg-primary/5' : ''}`}
-                    >
-                      {index === 0 && (
-                        <Badge variant="outline" className="mb-3 text-xs">Current</Badge>
-                      )}
-                      <div className="grid gap-3 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Stage</span>
-                          <Badge className={STAGE_COLORS[assignment.stage] || STAGE_COLORS.INACTIVE}>
-                            {assignment.stage.replace('_', ' ')}
-                          </Badge>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Assigned To</span>
-                          <span>{getUserName(assignment.assigned_to, assigneeNames)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Assigned By</span>
-                          <span>{getUserName(assignment.assigned_by, assigneeNames)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Assigned At</span>
-                          <span>{formatDate(assignment.assigned_at)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Status</span>
-                          <span>{assignment.status}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="space-y-6">
+                  {/* Current Assignment (ACTIVE) */}
+                  {(() => {
+                    const currentAssignment = assignments.find(a => a.status === 'ACTIVE');
+                    const historyAssignments = assignments.filter(a => a.status === 'CLOSED' || a.status === 'PAUSED');
+                    
+                    return (
+                      <>
+                        {currentAssignment && (
+                          <div>
+                            <h4 className="text-sm font-medium text-muted-foreground mb-3">Current Assignment</h4>
+                            <div className="rounded-lg border border-primary/50 bg-primary/5 p-4">
+                              <div className="grid gap-3 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Stage</span>
+                                  <Badge className={STAGE_COLORS[currentAssignment.stage] || STAGE_COLORS.INACTIVE}>
+                                    {currentAssignment.stage.replace('_', ' ')}
+                                  </Badge>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Assigned To</span>
+                                  <span>{getUserName(currentAssignment.assigned_to, assigneeNames)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Assigned By</span>
+                                  <span>{getUserName(currentAssignment.assigned_by, assigneeNames)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Assigned At</span>
+                                  <span>{formatDate(currentAssignment.assigned_at)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* History (CLOSED/PAUSED) */}
+                        {historyAssignments.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-muted-foreground mb-3">
+                              Assignment History ({historyAssignments.length})
+                            </h4>
+                            <div className="space-y-3">
+                              {historyAssignments.map((assignment) => (
+                                <div key={assignment.id} className="rounded-lg border p-4">
+                                  <div className="grid gap-2 text-sm">
+                                    <div className="flex justify-between items-center">
+                                      <Badge className={STAGE_COLORS[assignment.stage] || STAGE_COLORS.INACTIVE}>
+                                        {assignment.stage.replace('_', ' ')}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">
+                                        {assignment.status}
+                                      </Badge>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Assigned To</span>
+                                      <span>{getUserName(assignment.assigned_to, assigneeNames)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Assigned By</span>
+                                      <span>{getUserName(assignment.assigned_by, assigneeNames)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Assigned At</span>
+                                      <span>{formatDate(assignment.assigned_at)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {!currentAssignment && historyAssignments.length === 0 && (
+                          <div className="text-center py-12 text-muted-foreground">
+                            <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                            <p>No assignment records</p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </TabsContent>
