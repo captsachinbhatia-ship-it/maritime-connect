@@ -10,8 +10,9 @@ export interface ContactAssignment {
   assigned_to: string | null;
   assigned_by: string | null;
   assigned_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  stage_changed_at: string | null;
+  stage_changed_by: string | null;
+  notes: string | null;
 }
 
 export async function getAssignmentsForContacts(contactIds: string[]): Promise<{
@@ -73,7 +74,7 @@ export async function upsertAssignment(params: {
     }
 
     if (existing) {
-      // Update existing assignment
+      // Update existing assignment - don't use updated_at as it doesn't exist
       const { data, error } = await supabase
         .from('contact_assignments')
         .update({
@@ -81,7 +82,6 @@ export async function upsertAssignment(params: {
           stage,
           assigned_by: currentUserId,
           assigned_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id)
         .select()
@@ -138,11 +138,14 @@ export async function updateStage(params: {
   try {
     const { contact_id, stage, currentUserId } = params;
 
+    // Note: contact_assignments table doesn't have updated_at column
+    // Use stage_changed_at and stage_changed_by instead
     const { data, error } = await supabase
       .from('contact_assignments')
       .update({
         stage,
-        updated_at: new Date().toISOString(),
+        stage_changed_at: new Date().toISOString(),
+        stage_changed_by: currentUserId,
       })
       .eq('contact_id', contact_id)
       .eq('status', 'ACTIVE')
@@ -157,6 +160,31 @@ export async function updateStage(params: {
     }
 
     return { data: data as ContactAssignment, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Unknown error occurred'
+    };
+  }
+}
+
+// Get all assignments for a single contact (for drawer)
+export async function getAssignmentsByContact(contactId: string): Promise<{
+  data: ContactAssignment[] | null;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('contact_assignments')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('assigned_at', { ascending: false });
+
+    if (error) {
+      return { data: null, error: error.message };
+    }
+
+    return { data: data as ContactAssignment[], error: null };
   } catch (err) {
     return {
       data: null,

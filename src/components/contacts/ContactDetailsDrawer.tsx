@@ -1,166 +1,459 @@
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { X, User, Building2, Phone, Mail, MessageSquare, FileText } from 'lucide-react';
+import { 
+  User, Building2, Phone, Mail, MessageSquare, FileText, 
+  MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
+  FileEdit, Loader2, AlertCircle 
+} from 'lucide-react';
 import { ContactWithCompany } from '@/types';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { getAssignmentsByContact, ContactAssignment } from '@/services/assignments';
+import { getInteractionsByContact, getCreatorNames, ContactInteraction } from '@/services/interactions';
 
 interface ContactDetailsDrawerProps {
   contact: ContactWithCompany | null;
   companyName: string | null;
+  currentStage: string | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
+const STAGE_COLORS: Record<string, string> = {
+  COLD_CALLING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  ASPIRATION: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+  ACHIEVEMENT: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  INACTIVE: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
+};
+
+const INTERACTION_ICONS: Record<string, React.ReactNode> = {
+  CALL: <PhoneCall className="h-4 w-4" />,
+  WHATSAPP: <MessageSquare className="h-4 w-4" />,
+  EMAIL: <Mail className="h-4 w-4" />,
+  MEETING: <Video className="h-4 w-4" />,
+  NOTE: <FileEdit className="h-4 w-4" />,
+};
+
+const INTERACTION_COLORS: Record<string, string> = {
+  CALL: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  WHATSAPP: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  EMAIL: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+  MEETING: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
+  NOTE: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
+};
+
 export function ContactDetailsDrawer({
   contact,
   companyName,
+  currentStage,
   isOpen,
   onClose,
 }: ContactDetailsDrawerProps) {
+  const [activeTab, setActiveTab] = useState('details');
+  const [assignments, setAssignments] = useState<ContactAssignment[]>([]);
+  const [interactions, setInteractions] = useState<ContactInteraction[]>([]);
+  const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
+  const [creatorNames, setCreatorNames] = useState<Record<string, string>>({});
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
+  const [isLoadingInteractions, setIsLoadingInteractions] = useState(false);
+  const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+  const [interactionsError, setInteractionsError] = useState<string | null>(null);
+  const [interactionsTableExists, setInteractionsTableExists] = useState(true);
+
+  // Reset state when drawer closes
+  useEffect(() => {
+    if (!isOpen) {
+      setActiveTab('details');
+      setAssignments([]);
+      setInteractions([]);
+      setAssignmentsError(null);
+      setInteractionsError(null);
+    }
+  }, [isOpen]);
+
+  // Load assignments when tab changes to assignments
+  useEffect(() => {
+    if (isOpen && contact && activeTab === 'assignments') {
+      loadAssignments();
+    }
+  }, [isOpen, contact?.id, activeTab]);
+
+  // Load interactions when tab changes to interactions
+  useEffect(() => {
+    if (isOpen && contact && activeTab === 'interactions') {
+      loadInteractions();
+    }
+  }, [isOpen, contact?.id, activeTab]);
+
+  const loadAssignments = async () => {
+    if (!contact) return;
+    
+    setIsLoadingAssignments(true);
+    setAssignmentsError(null);
+    
+    const result = await getAssignmentsByContact(contact.id);
+    
+    if (result.error) {
+      setAssignmentsError(result.error);
+    } else if (result.data) {
+      setAssignments(result.data);
+      
+      // Get user names for assigned_to and assigned_by
+      const userIds = result.data
+        .flatMap(a => [a.assigned_to, a.assigned_by])
+        .filter((id): id is string => id !== null);
+      
+      if (userIds.length > 0) {
+        const namesResult = await getCreatorNames(userIds);
+        if (namesResult.data) {
+          setAssigneeNames(namesResult.data);
+        }
+      }
+    }
+    
+    setIsLoadingAssignments(false);
+  };
+
+  const loadInteractions = async () => {
+    if (!contact) return;
+    
+    setIsLoadingInteractions(true);
+    setInteractionsError(null);
+    
+    const result = await getInteractionsByContact(contact.id);
+    
+    setInteractionsTableExists(result.tableExists);
+    
+    if (result.error) {
+      setInteractionsError(result.error);
+    } else if (result.data) {
+      setInteractions(result.data);
+      
+      // Get creator names
+      const creatorIds = result.data
+        .map(i => i.created_by)
+        .filter((id): id is string => id !== null);
+      
+      if (creatorIds.length > 0) {
+        const namesResult = await getCreatorNames(creatorIds);
+        if (namesResult.data) {
+          setCreatorNames(namesResult.data);
+        }
+      }
+    }
+    
+    setIsLoadingInteractions(false);
+  };
+
   if (!contact) return null;
 
   const formatPhone = () => {
     if (contact.phone) {
-      const code = contact.country_code ? `${contact.country_code} ` : '';
+      const code = contact.country_code ? `+${contact.country_code} ` : '';
       return `${code}${contact.phone}`;
     }
     return null;
   };
 
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    try {
+      return format(new Date(dateStr), 'MMM d, yyyy h:mm a');
+    } catch {
+      return '-';
+    }
+  };
+
+  const formatShortDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    try {
+      return format(new Date(dateStr), 'MMM d, yyyy');
+    } catch {
+      return '-';
+    }
+  };
+
+  const getUserName = (userId: string | null, nameMap: Record<string, string>) => {
+    if (!userId) return '-';
+    return nameMap[userId] || userId.slice(0, 8) + '...';
+  };
+
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full max-w-md overflow-hidden p-0">
+      <SheetContent className="w-full max-w-lg overflow-hidden p-0">
         <SheetHeader className="border-b px-6 py-4">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-lg font-semibold">
-              Contact Details
-            </SheetTitle>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <User className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <SheetTitle className="text-lg font-semibold truncate">
+                  {contact.full_name || 'Unknown'}
+                </SheetTitle>
+                <p className="text-sm text-muted-foreground truncate">
+                  {companyName || 'No company'}
+                </p>
+              </div>
+            </div>
+            {currentStage && (
+              <Badge className={`shrink-0 ${STAGE_COLORS[currentStage] || STAGE_COLORS.INACTIVE}`}>
+                {currentStage.replace('_', ' ')}
+              </Badge>
+            )}
           </div>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-80px)] px-6 py-4">
-          <div className="space-y-6">
-            {/* Basic Info */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                  <User className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold">{contact.full_name || 'Unknown'}</h3>
-                  {contact.designation && (
-                    <p className="text-sm text-muted-foreground">{contact.designation}</p>
-                  )}
-                </div>
-              </div>
-            </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-[calc(100vh-100px)]">
+          <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-6">
+            <TabsTrigger value="details" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="assignments" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
+              Assignments
+            </TabsTrigger>
+            <TabsTrigger value="interactions" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
+              Interactions
+            </TabsTrigger>
+          </TabsList>
 
-            <Separator />
-
-            {/* Company */}
-            <div className="space-y-3">
-              <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Building2 className="h-4 w-4" />
-                Company
-              </h4>
-              <p className="text-foreground">{companyName || 'Not assigned'}</p>
-            </div>
-
-            <Separator />
-
-            {/* Contact Information */}
-            <div className="space-y-3">
-              <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Phone className="h-4 w-4" />
-                Phone
-              </h4>
-              <div className="space-y-2">
-                {formatPhone() ? (
-                  <div>
-                    <span className="text-xs text-muted-foreground">Phone: </span>
-                    <span className="text-foreground">{formatPhone()}</span>
-                    {contact.phone_type && (
-                      <span className="ml-2 text-xs text-muted-foreground">({contact.phone_type})</span>
+          <ScrollArea className="flex-1">
+            {/* Details Tab */}
+            <TabsContent value="details" className="m-0 p-6">
+              <div className="space-y-6">
+                {/* Basic Info */}
+                <div className="space-y-3">
+                  <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <User className="h-4 w-4" />
+                    Basic Information
+                  </h4>
+                  <div className="grid gap-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Full Name</span>
+                      <p className="text-foreground">{contact.full_name || '-'}</p>
+                    </div>
+                    {contact.designation && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">Designation</span>
+                        <p className="text-foreground">{contact.designation}</p>
+                      </div>
                     )}
                   </div>
-                ) : (
-                  <p className="text-muted-foreground">No phone number</p>
+                </div>
+
+                <Separator />
+
+                {/* Company */}
+                <div className="space-y-3">
+                  <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Building2 className="h-4 w-4" />
+                    Company
+                  </h4>
+                  <p className="text-foreground">{companyName || 'Not assigned'}</p>
+                </div>
+
+                <Separator />
+
+                {/* Contact Information */}
+                <div className="space-y-3">
+                  <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Phone className="h-4 w-4" />
+                    Contact Information
+                  </h4>
+                  <div className="grid gap-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Phone</span>
+                      <p className="text-foreground">
+                        {formatPhone() || '-'}
+                        {contact.phone_type && (
+                          <span className="ml-2 text-xs text-muted-foreground">({contact.phone_type})</span>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Email</span>
+                      <p className="text-foreground">{contact.email || '-'}</p>
+                    </div>
+                    {contact.ice_handle && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">ICE Handle</span>
+                        <p className="text-foreground">{contact.ice_handle}</p>
+                      </div>
+                    )}
+                    {contact.preferred_channel && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">Preferred Channel</span>
+                        <p className="text-foreground">{contact.preferred_channel}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Notes */}
+                {contact.notes && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <FileText className="h-4 w-4" />
+                        Notes
+                      </h4>
+                      <p className="text-foreground whitespace-pre-wrap">{contact.notes}</p>
+                    </div>
+                  </>
                 )}
-              </div>
-            </div>
 
-            <Separator />
-
-            {/* Email */}
-            <div className="space-y-3">
-              <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Mail className="h-4 w-4" />
-                Email
-              </h4>
-              <p className="text-foreground">{contact.email || 'Not provided'}</p>
-            </div>
-
-            <Separator />
-
-            {/* Communication */}
-            <div className="space-y-3">
-              <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <MessageSquare className="h-4 w-4" />
-                Communication
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <span className="text-xs text-muted-foreground">Preferred Channel</span>
-                  <p className="text-foreground">{contact.preferred_channel || '-'}</p>
-                </div>
-                <div>
-                  <span className="text-xs text-muted-foreground">ICE Handle</span>
-                  <p className="text-foreground">{contact.ice_handle || '-'}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Notes */}
-            {contact.notes && (
-              <>
+                {/* Meta */}
                 <Separator />
                 <div className="space-y-3">
                   <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <FileText className="h-4 w-4" />
-                    Notes
+                    <Calendar className="h-4 w-4" />
+                    Record Info
                   </h4>
-                  <p className="text-foreground whitespace-pre-wrap">{contact.notes}</p>
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className={contact.is_active ? 'text-green-600' : 'text-red-600'}>
+                        {contact.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Last Updated</span>
+                      <span>{formatDate(contact.updated_at)}</span>
+                    </div>
+                  </div>
                 </div>
-              </>
-            )}
+              </div>
+            </TabsContent>
 
-            {/* Meta */}
-            <Separator />
-            <div className="space-y-2 text-sm text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Status</span>
-                <span className={contact.is_active ? 'text-green-600' : 'text-red-600'}>
-                  {contact.is_active ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Last Updated</span>
-                <span>
-                  {contact.updated_at
-                    ? format(new Date(contact.updated_at), 'MMM d, yyyy h:mm a')
-                    : '-'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </ScrollArea>
+            {/* Assignments Tab */}
+            <TabsContent value="assignments" className="m-0 p-6">
+              {isLoadingAssignments ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : assignmentsError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{assignmentsError}</AlertDescription>
+                </Alert>
+              ) : assignments.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No assignment history</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {assignments.map((assignment, index) => (
+                    <div 
+                      key={assignment.id} 
+                      className={`rounded-lg border p-4 ${index === 0 ? 'border-primary/50 bg-primary/5' : ''}`}
+                    >
+                      {index === 0 && (
+                        <Badge variant="outline" className="mb-3 text-xs">Current</Badge>
+                      )}
+                      <div className="grid gap-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Stage</span>
+                          <Badge className={STAGE_COLORS[assignment.stage] || STAGE_COLORS.INACTIVE}>
+                            {assignment.stage.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Assigned To</span>
+                          <span>{getUserName(assignment.assigned_to, assigneeNames)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Assigned By</span>
+                          <span>{getUserName(assignment.assigned_by, assigneeNames)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Assigned At</span>
+                          <span>{formatDate(assignment.assigned_at)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Status</span>
+                          <span>{assignment.status}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Interactions Tab */}
+            <TabsContent value="interactions" className="m-0 p-6">
+              {isLoadingInteractions ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : interactionsError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{interactionsError}</AlertDescription>
+                </Alert>
+              ) : !interactionsTableExists ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium">Interactions not available</p>
+                  <p className="text-sm mt-1">The interactions table has not been set up yet.</p>
+                </div>
+              ) : interactions.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No interactions yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {interactions.map((interaction) => (
+                    <div key={interaction.id} className="rounded-lg border p-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`rounded-full p-2 ${INTERACTION_COLORS[interaction.interaction_type] || INTERACTION_COLORS.NOTE}`}>
+                          {INTERACTION_ICONS[interaction.interaction_type] || <FileEdit className="h-4 w-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="text-xs">
+                              {interaction.interaction_type}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(interaction.created_at)}
+                            </span>
+                          </div>
+                          {interaction.summary && (
+                            <p className="text-sm text-foreground mb-2">{interaction.summary}</p>
+                          )}
+                          {interaction.next_action && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 pt-2 border-t">
+                              <Clock className="h-3 w-3" />
+                              <span>Next: {interaction.next_action}</span>
+                              {interaction.next_action_date && (
+                                <span>({formatShortDate(interaction.next_action_date)})</span>
+                              )}
+                            </div>
+                          )}
+                          <div className="text-xs text-muted-foreground mt-2">
+                            By: {getUserName(interaction.created_by, creatorNames)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </ScrollArea>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );

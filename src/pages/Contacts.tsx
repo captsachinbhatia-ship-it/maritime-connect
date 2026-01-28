@@ -312,6 +312,7 @@ export default function Contacts() {
       <ContactDetailsDrawer
         contact={selectedContact}
         companyName={selectedContact?.company_id ? companyNamesMap[selectedContact.company_id] || null : null}
+        currentStage={selectedContact ? assignmentsMap[selectedContact.id]?.stage || null : null}
         isOpen={drawerOpen}
         onClose={handleDrawerClose}
       />
