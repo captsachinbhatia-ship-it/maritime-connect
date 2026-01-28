@@ -157,7 +157,7 @@ export function AssignContactModal({
                 <SelectContent>
                   {profiles.map((profile) => (
                     <SelectItem key={profile.id} value={profile.id}>
-                      {profile.full_name || profile.email || 'Unknown'} 
+                      {profile.full_name || 'Unknown'} 
                       {profile.role && (
                         <span className="ml-2 text-muted-foreground">({profile.role})</span>
                       )}

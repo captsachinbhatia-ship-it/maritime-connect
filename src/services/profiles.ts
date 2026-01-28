@@ -4,7 +4,6 @@ export interface Profile {
   id: string;
   full_name: string | null;
   role: string | null;
-  email: string | null;
 }
 
 export async function getCurrentUserProfile(): Promise<{
@@ -20,7 +19,7 @@ export async function getCurrentUserProfile(): Promise<{
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, role, email')
+      .select('id, full_name, role')
       .eq('id', user.id)
       .maybeSingle();
 
@@ -44,7 +43,7 @@ export async function listProfilesForAssignment(): Promise<{
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, role, email')
+      .select('id, full_name, role')
       .order('full_name', { ascending: true });
 
     if (error) {
