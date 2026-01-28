@@ -17,8 +17,9 @@ export async function getCurrentUserProfile(): Promise<{
       return { data: null, error: 'Not authenticated' };
     }
 
+    // Fetch role from crm_users table instead of profiles
     const { data, error } = await supabase
-      .from('profiles')
+      .from('crm_users')
       .select('id, full_name, role')
       .eq('id', user.id)
       .maybeSingle();
@@ -41,8 +42,9 @@ export async function listProfilesForAssignment(): Promise<{
   error: string | null;
 }> {
   try {
+    // Fetch from crm_users table instead of profiles
     const { data, error } = await supabase
-      .from('profiles')
+      .from('crm_users')
       .select('id, full_name, role')
       .order('full_name', { ascending: true });
 
