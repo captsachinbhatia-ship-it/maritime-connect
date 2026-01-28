@@ -69,37 +69,73 @@ export default function Contacts() {
     setError(null);
 
     try {
-      // Step 1: Get assignments first (filtered by stage and optionally by user)
-      let assignmentQuery = supabase
-        .from('contact_assignments')
-        .select('*')
-        .eq('status', 'ACTIVE');
+      // Step 1: Get assignments based on role and toggle
+      let assignments: ContactAssignment[] = [];
       
-      // If not admin or not viewing all, filter by current user
-      if (!isAdmin || !viewAllContacts) {
-        if (user?.id) {
-          assignmentQuery = assignmentQuery.eq('assigned_to', user.id);
+      if (isAdmin && viewAllContacts) {
+        // Admin + All Contacts: fetch all assignments, then get latest per contact
+        const { data: allAssignments, error: assignmentError } = await supabase
+          .from('contact_assignments')
+          .select('*')
+          .eq('status', 'ACTIVE')
+          .order('assigned_at', { ascending: false });
+
+        if (assignmentError) {
+          setError(assignmentError.message);
+          setContacts([]);
+          setIsLoading(false);
+          return;
         }
+
+        // Get latest assignment per contact (client-side distinct on contact_id)
+        const latestByContact = new Map<string, ContactAssignment>();
+        (allAssignments || []).forEach(a => {
+          if (!latestByContact.has(a.contact_id)) {
+            latestByContact.set(a.contact_id, a as ContactAssignment);
+          }
+        });
+        assignments = Array.from(latestByContact.values());
+      } else {
+        // Non-admin or "My Contacts": filter by assigned_to = current user
+        if (!user?.id) {
+          setContacts([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const { data: userAssignments, error: assignmentError } = await supabase
+          .from('contact_assignments')
+          .select('*')
+          .eq('status', 'ACTIVE')
+          .eq('assigned_to', user.id)
+          .order('assigned_at', { ascending: false });
+
+        if (assignmentError) {
+          setError(assignmentError.message);
+          setContacts([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Get latest assignment per contact for this user
+        const latestByContact = new Map<string, ContactAssignment>();
+        (userAssignments || []).forEach(a => {
+          if (!latestByContact.has(a.contact_id)) {
+            latestByContact.set(a.contact_id, a as ContactAssignment);
+          }
+        });
+        assignments = Array.from(latestByContact.values());
       }
 
-      const { data: assignments, error: assignmentError } = await assignmentQuery;
-
-      if (assignmentError) {
-        setError(assignmentError.message);
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Build assignments map
+      // Build assignments map (latest per contact)
       const assignmentsById: Record<string, ContactAssignment> = {};
-      assignments?.forEach(a => {
-        assignmentsById[a.contact_id] = a as ContactAssignment;
+      assignments.forEach(a => {
+        assignmentsById[a.contact_id] = a;
       });
       setAssignmentsMap(assignmentsById);
 
-      // Get contact IDs for current stage
-      const stageAssignments = assignments?.filter(a => a.stage === activeStage) || [];
+      // Filter by active stage tab
+      const stageAssignments = assignments.filter(a => a.stage === activeStage);
       const contactIds = stageAssignments.map(a => a.contact_id);
 
       if (contactIds.length === 0) {
