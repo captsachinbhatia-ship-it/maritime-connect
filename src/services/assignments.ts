@@ -61,64 +61,42 @@ export async function upsertAssignment(params: {
   try {
     const { contact_id, assigned_to, stage, currentUserId } = params;
 
-    // First check if assignment exists
-    const { data: existing, error: checkError } = await supabase
+    // Close all existing ACTIVE rows for this contact
+    const { error: closeError } = await supabase
       .from('contact_assignments')
-      .select('id')
+      .update({ status: 'CLOSED' })
       .eq('contact_id', contact_id)
-      .eq('status', 'ACTIVE')
-      .maybeSingle();
+      .eq('status', 'ACTIVE');
 
-    if (checkError) {
-      return { data: null, error: checkError.message };
+    if (closeError) {
+      if (closeError.message.includes('row-level security')) {
+        return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
+      }
+      return { data: null, error: closeError.message };
     }
 
-    if (existing) {
-      // Update existing assignment - don't use updated_at as it doesn't exist
-      const { data, error } = await supabase
-        .from('contact_assignments')
-        .update({
-          assigned_to,
-          stage,
-          assigned_by: currentUserId,
-          assigned_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id)
-        .select()
-        .single();
+    // Insert new ACTIVE assignment
+    const { data, error } = await supabase
+      .from('contact_assignments')
+      .insert({
+        contact_id,
+        assigned_to,
+        stage,
+        status: 'ACTIVE',
+        assigned_by: currentUserId,
+        assigned_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-      if (error) {
-        if (error.message.includes('row-level security')) {
-          return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
-        }
-        return { data: null, error: error.message };
+    if (error) {
+      if (error.message.includes('row-level security')) {
+        return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
       }
-
-      return { data: data as ContactAssignment, error: null };
-    } else {
-      // Insert new assignment
-      const { data, error } = await supabase
-        .from('contact_assignments')
-        .insert({
-          contact_id,
-          assigned_to,
-          stage,
-          status: 'ACTIVE',
-          assigned_by: currentUserId,
-          assigned_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        if (error.message.includes('row-level security')) {
-          return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
-        }
-        return { data: null, error: error.message };
-      }
-
-      return { data: data as ContactAssignment, error: null };
+      return { data: null, error: error.message };
     }
+
+    return { data: data as ContactAssignment, error: null };
   } catch (err) {
     return {
       data: null,
@@ -138,17 +116,49 @@ export async function updateStage(params: {
   try {
     const { contact_id, stage, currentUserId } = params;
 
-    // Note: contact_assignments table doesn't have updated_at column
-    // Use stage_changed_at and stage_changed_by instead
+    // Get current ACTIVE assignment to preserve assigned_to
+    const { data: currentAssignment, error: fetchError } = await supabase
+      .from('contact_assignments')
+      .select('assigned_to')
+      .eq('contact_id', contact_id)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+
+    if (fetchError) {
+      return { data: null, error: fetchError.message };
+    }
+
+    if (!currentAssignment) {
+      return { data: null, error: 'No active assignment found for this contact.' };
+    }
+
+    // Close existing ACTIVE rows
+    const { error: closeError } = await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED' })
+      .eq('contact_id', contact_id)
+      .eq('status', 'ACTIVE');
+
+    if (closeError) {
+      if (closeError.message.includes('row-level security')) {
+        return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
+      }
+      return { data: null, error: closeError.message };
+    }
+
+    // Insert new ACTIVE row with new stage
     const { data, error } = await supabase
       .from('contact_assignments')
-      .update({
+      .insert({
+        contact_id,
+        assigned_to: currentAssignment.assigned_to,
         stage,
+        status: 'ACTIVE',
+        assigned_by: currentUserId,
+        assigned_at: new Date().toISOString(),
         stage_changed_at: new Date().toISOString(),
         stage_changed_by: currentUserId,
       })
-      .eq('contact_id', contact_id)
-      .eq('status', 'ACTIVE')
       .select()
       .single();
 
