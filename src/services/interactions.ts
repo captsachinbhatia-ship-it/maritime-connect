@@ -46,8 +46,9 @@ export async function getInteractionsByContact(contactId: string): Promise<{
   }
 }
 
-// Get user names for interaction creators
-export async function getCreatorNames(userIds: string[]): Promise<{
+// Get user names from crm_users table
+// Fallback: crm_users.full_name → "Unknown User"
+export async function getUserNames(userIds: string[]): Promise<{
   data: Record<string, string> | null;
   error: string | null;
 }> {
@@ -58,9 +59,9 @@ export async function getCreatorNames(userIds: string[]): Promise<{
 
     const uniqueIds = [...new Set(userIds)];
 
-    // Try profiles table first for display names
+    // Fetch from crm_users table
     const { data, error } = await supabase
-      .from('profiles')
+      .from('crm_users')
       .select('id, full_name')
       .in('id', uniqueIds);
 
@@ -69,8 +70,17 @@ export async function getCreatorNames(userIds: string[]): Promise<{
     }
 
     const nameMap: Record<string, string> = {};
-    data?.forEach(profile => {
-      nameMap[profile.id] = profile.full_name || profile.id.slice(0, 8);
+    
+    // Map all found users
+    data?.forEach(user => {
+      nameMap[user.id] = user.full_name || 'Unknown User';
+    });
+
+    // For any ID not found in crm_users, set "Unknown User"
+    uniqueIds.forEach(id => {
+      if (!nameMap[id]) {
+        nameMap[id] = 'Unknown User';
+      }
     });
 
     return { data: nameMap, error: null };
@@ -81,3 +91,6 @@ export async function getCreatorNames(userIds: string[]): Promise<{
     };
   }
 }
+
+// Alias for backward compatibility
+export const getCreatorNames = getUserNames;

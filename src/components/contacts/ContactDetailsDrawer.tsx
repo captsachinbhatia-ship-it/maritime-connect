@@ -184,7 +184,7 @@ export function ContactDetailsDrawer({
 
   const getUserName = (userId: string | null, nameMap: Record<string, string>) => {
     if (!userId) return '-';
-    return nameMap[userId] || userId.slice(0, 8) + '...';
+    return nameMap[userId] || 'Unknown User';
   };
 
   return (
