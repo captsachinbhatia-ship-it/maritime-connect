@@ -180,11 +180,37 @@ export default function Contacts() {
         return;
       }
 
-      const contactsList = (contactsData || []) as ContactWithCompany[];
+      let contactsList = (contactsData || []) as ContactWithCompany[];
+
+      // Step 3: Fetch last interaction data from view
+      if (contactsList.length > 0) {
+        const contactIdsForInteraction = contactsList.map(c => c.id);
+        const { data: lastInteractionData } = await supabase
+          .from('v_contacts_last_interaction')
+          .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
+          .in('contact_id', contactIdsForInteraction);
+
+        // Merge last interaction data into contacts
+        if (lastInteractionData && lastInteractionData.length > 0) {
+          const liMap: Record<string, { last_interaction_at: string | null; last_interaction_type: string | null; last_interaction_outcome: string | null }> = {};
+          lastInteractionData.forEach((li) => {
+            liMap[li.contact_id] = {
+              last_interaction_at: li.last_interaction_at,
+              last_interaction_type: li.last_interaction_type,
+              last_interaction_outcome: li.last_interaction_outcome,
+            };
+          });
+          contactsList = contactsList.map(c => ({
+            ...c,
+            ...liMap[c.id],
+          }));
+        }
+      }
+
       setContacts(contactsList);
       setAllContacts(contactsList);
 
-      // Step 3: Fetch company names
+      // Step 4: Fetch company names
       const companyIds = contactsList
         .map(c => c.company_id)
         .filter((id): id is string => id !== null);
