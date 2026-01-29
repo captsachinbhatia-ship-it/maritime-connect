@@ -175,14 +175,14 @@ export function FollowupsTab({
           <p>No follow-ups scheduled</p>
         </div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
+        <div className="rounded-md border overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Due</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="w-[140px]">Due</TableHead>
+                <TableHead className="w-[100px]">Type</TableHead>
+                <TableHead className="min-w-[200px]">Reason</TableHead>
+                <TableHead className="w-[100px]">Status</TableHead>
                 <TableHead className="w-[60px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -211,12 +211,12 @@ export function FollowupsTab({
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="max-w-[200px]">
-                        <p className="text-sm truncate" title={followup.followup_reason}>
+                      <div>
+                        <p className="text-sm" title={followup.followup_reason}>
                           {followup.followup_reason}
                         </p>
                         {followup.notes && (
-                          <p className="text-xs text-muted-foreground truncate" title={followup.notes}>
+                          <p className="text-xs text-muted-foreground line-clamp-2" title={followup.notes}>
                             {followup.notes}
                           </p>
                         )}
