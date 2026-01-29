@@ -16,9 +16,9 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Executive Dashboard</h1>
+          <h1 className="text-3xl font-bold text-foreground">Management Dashboard</h1>
           <p className="mt-1 text-muted-foreground">
-            Organization-wide performance overview
+            Company-wide overview
           </p>
         </div>
         {isAdmin && <ModeIndicator isCEO={isCEO} />}
