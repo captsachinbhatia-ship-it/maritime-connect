@@ -133,14 +133,14 @@ export async function getOverdueByCaller(): Promise<{
       }
     });
 
-    // Fetch caller names from crm_users
+    // Fetch caller names from profiles
     const callerIds = Object.keys(callerStats);
     if (callerIds.length === 0) {
       return { data: [], error: null };
     }
 
     const { data: users, error: usersError } = await supabase
-      .from('crm_users')
+      .from('profiles')
       .select('id, full_name, email')
       .in('id', callerIds);
 
@@ -398,12 +398,12 @@ export async function getSlippingContacts(): Promise<{
       });
     }
 
-    // Fetch user names
+    // Fetch user names from profiles
     const userIds = [...new Set(Object.values(assignmentUserMap))];
     let userNameMap: Record<string, string> = {};
     if (userIds.length > 0) {
       const { data: users } = await supabase
-        .from('crm_users')
+        .from('profiles')
         .select('id, full_name, email')
         .in('id', userIds);
 
