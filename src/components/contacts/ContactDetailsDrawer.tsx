@@ -18,7 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAssignmentsByContact, ContactAssignment } from '@/services/assignments';
-import { getInteractionsByContact, getCreatorNames, ContactInteraction } from '@/services/interactions';
+import { getInteractionsByContact, getUserNames, ContactInteraction } from '@/services/interactions';
 
 interface ContactDetailsDrawerProps {
   contact: ContactWithCompany | null;
@@ -62,7 +62,6 @@ export function ContactDetailsDrawer({
   const [assignments, setAssignments] = useState<ContactAssignment[]>([]);
   const [interactions, setInteractions] = useState<ContactInteraction[]>([]);
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
-  const [creatorNames, setCreatorNames] = useState<Record<string, string>>({});
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
   const [isLoadingInteractions, setIsLoadingInteractions] = useState(false);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
@@ -113,7 +112,7 @@ export function ContactDetailsDrawer({
         .filter((id): id is string => id !== null);
       
       if (userIds.length > 0) {
-        const namesResult = await getCreatorNames(userIds);
+        const namesResult = await getUserNames(userIds);
         if (namesResult.data) {
           setAssigneeNames(namesResult.data);
         }
@@ -137,18 +136,6 @@ export function ContactDetailsDrawer({
       setInteractionsError(result.error);
     } else if (result.data) {
       setInteractions(result.data);
-      
-      // Get creator names
-      const creatorIds = result.data
-        .map(i => i.created_by)
-        .filter((id): id is string => id !== null);
-      
-      if (creatorIds.length > 0) {
-        const namesResult = await getCreatorNames(creatorIds);
-        if (namesResult.data) {
-          setCreatorNames(namesResult.data);
-        }
-      }
     }
     
     setIsLoadingInteractions(false);
@@ -474,7 +461,7 @@ export function ContactDetailsDrawer({
                               {interaction.interaction_type}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
-                              {formatDate(interaction.created_at)}
+                              {formatDate(interaction.interaction_at)}
                             </span>
                           </div>
                           {interaction.summary && (
@@ -490,7 +477,7 @@ export function ContactDetailsDrawer({
                             </div>
                           )}
                           <div className="text-xs text-muted-foreground mt-2">
-                            By: {getUserName(interaction.created_by, creatorNames)}
+                            By: {interaction.creator_name || 'Unknown User'}
                           </div>
                         </div>
                       </div>

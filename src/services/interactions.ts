@@ -5,15 +5,12 @@ export type InteractionType = 'CALL' | 'WHATSAPP' | 'EMAIL' | 'MEETING' | 'NOTE'
 export interface ContactInteraction {
   id: string;
   contact_id: string;
-  created_at: string;
-  created_by: string | null;
+  interaction_at: string;
   interaction_type: InteractionType;
   summary: string | null;
   next_action: string | null;
   next_action_date: string | null;
-  meta: Record<string, unknown> | null;
-  // Joined field
-  creator_name?: string;
+  creator_name: string | null;
 }
 
 export async function getInteractionsByContact(contactId: string): Promise<{
@@ -23,13 +20,13 @@ export async function getInteractionsByContact(contactId: string): Promise<{
 }> {
   try {
     const { data, error } = await supabase
-      .from('contact_interactions')
+      .from('v_contact_interactions_timeline')
       .select('*')
       .eq('contact_id', contactId)
-      .order('created_at', { ascending: false });
+      .order('interaction_at', { ascending: false });
 
     if (error) {
-      // Check if table doesn't exist
+      // Check if view doesn't exist
       if (error.message.includes('does not exist') || error.code === '42P01') {
         return { data: [], error: null, tableExists: false };
       }
