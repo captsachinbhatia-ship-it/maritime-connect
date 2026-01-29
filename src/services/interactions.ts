@@ -54,10 +54,10 @@ export async function getInteractionsByContact(
       }
     }
 
-    // Apply search filter (ilike on summary - the view column for notes)
+    // Apply search filter (ilike on subject and notes)
     if (filters?.search && filters.search.trim()) {
       const searchTerm = `%${filters.search.trim()}%`;
-      query = query.or(`summary.ilike.${searchTerm},subject.ilike.${searchTerm}`);
+      query = query.or(`subject.ilike.${searchTerm},notes.ilike.${searchTerm}`);
     }
 
     // Always order by interaction_at desc
