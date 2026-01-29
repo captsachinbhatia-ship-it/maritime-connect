@@ -203,11 +203,14 @@ export default function FollowupsOversight() {
       </div>
 
       {/* KPI Tiles - override next7Days count with actual RPC data length */}
-      <OversightKPITiles 
-        kpis={kpis ? { ...kpis, next7Days: next7Days?.length ?? kpis.next7Days } : null} 
-        isLoading={isLoadingKPIs || isLoadingNext7Days} 
-        error={kpisError} 
-      />
+      <div className="space-y-2">
+        <OversightKPITiles 
+          kpis={kpis ? { ...kpis, next7Days: next7Days?.length ?? kpis.next7Days } : null} 
+          isLoading={isLoadingKPIs || isLoadingNext7Days} 
+          error={kpisError} 
+        />
+        <p className="text-xs text-muted-foreground text-right">OPEN follow-ups only</p>
+      </div>
 
       {/* Two-column layout for top tables */}
       <div className="grid gap-6 lg:grid-cols-2">

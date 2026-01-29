@@ -87,6 +87,9 @@ export async function getNext7DaysFollowups(): Promise<{
       followupReason: row.followup_reason,
     }));
 
+    // Sort by due_at ascending (soonest first)
+    result.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+
     return { data: result, error: null };
   } catch (err) {
     return {
