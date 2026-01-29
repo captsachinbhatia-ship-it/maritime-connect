@@ -1,5 +1,5 @@
-import { format } from 'date-fns';
-import { UserPlus } from 'lucide-react';
+import { format, formatDistanceToNow } from 'date-fns';
+import { UserPlus, PhoneCall, Mail, Video, MessageSquare, FileEdit } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { ContactAssignment, AssignmentStage } from '@/services/assignments';
 import { StageDropdown } from './StageDropdown';
@@ -25,6 +25,14 @@ interface ContactsTableProps {
   showAssignColumn?: boolean;
 }
 
+const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
+  CALL: <PhoneCall className="h-3 w-3" />,
+  WHATSAPP: <MessageSquare className="h-3 w-3" />,
+  EMAIL: <Mail className="h-3 w-3" />,
+  MEETING: <Video className="h-3 w-3" />,
+  NOTE: <FileEdit className="h-3 w-3" />,
+};
+
 export function ContactsTable({
   contacts,
   companyNamesMap,
@@ -47,8 +55,8 @@ export function ContactsTable({
               <TableHead>Phone</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Stage</TableHead>
-              <TableHead>Updated</TableHead>
-              {showAssignColumn && <TableHead>Actions</TableHead>}
+              <TableHead>Last Activity</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -61,7 +69,7 @@ export function ContactsTable({
                 <TableCell><Skeleton className="h-4 w-36" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                {showAssignColumn && <TableCell><Skeleton className="h-4 w-20" /></TableCell>}
+                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -86,6 +94,16 @@ export function ContactsTable({
     return '-';
   };
 
+  const formatLastInteraction = (contact: ContactWithCompany) => {
+    if (!contact.last_interaction_at) return null;
+
+    const type = contact.last_interaction_type || '';
+    const timeAgo = formatDistanceToNow(new Date(contact.last_interaction_at), { addSuffix: true });
+    const outcome = contact.last_interaction_outcome;
+
+    return { type, timeAgo, outcome };
+  };
+
   const handleRowClick = (e: React.MouseEvent, contact: ContactWithCompany) => {
     // Don't trigger row click if clicking on interactive elements
     const target = e.target as HTMLElement;
@@ -106,7 +124,7 @@ export function ContactsTable({
             <TableHead>Phone</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Stage</TableHead>
-            <TableHead>Updated</TableHead>
+            <TableHead>Last Activity</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -114,6 +132,7 @@ export function ContactsTable({
           {contacts.map((contact) => {
             const assignment = assignmentsMap[contact.id];
             const currentStage = assignment?.stage as AssignmentStage | undefined;
+            const lastInteraction = formatLastInteraction(contact);
             
             return (
               <TableRow
@@ -142,9 +161,24 @@ export function ContactsTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  {contact.updated_at
-                    ? format(new Date(contact.updated_at), 'MMM d, yyyy')
-                    : '-'}
+                  {lastInteraction ? (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        {INTERACTION_TYPE_ICONS[lastInteraction.type] || null}
+                        <span>{lastInteraction.type}</span>
+                      </span>
+                      <span>·</span>
+                      <span>{lastInteraction.timeAgo}</span>
+                      {lastInteraction.outcome && (
+                        <>
+                          <span>·</span>
+                          <span className="text-foreground/70">{lastInteraction.outcome.replace('_', ' ')}</span>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/50">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Button
