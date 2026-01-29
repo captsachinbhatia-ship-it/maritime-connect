@@ -62,7 +62,7 @@ const DUE_STATUS_STYLES: Record<string, string> = {
 
 export default function MyFollowups() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabType>('overdue');
+  const [activeTab, setActiveTab] = useState<TabType>('today');
   const [followups, setFollowups] = useState<FollowupWithContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -178,8 +178,8 @@ export default function MyFollowups() {
                 <TableHead>Company</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Reason</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-[60px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -223,8 +223,8 @@ export default function MyFollowups() {
               <TableHead>Company</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Reason</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="w-[60px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -276,7 +276,7 @@ export default function MyFollowups() {
                   <TableCell className="text-xs text-muted-foreground">
                     {formatDate(followup.created_at)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
