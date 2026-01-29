@@ -173,8 +173,8 @@ export function AddFollowupModal({
     }
 
     toast({
-      title: 'Follow-up created',
-      description: `Follow-up scheduled for ${format(dueAt, 'MMM d, yyyy h:mm a')}`,
+      title: 'Follow-up scheduled successfully',
+      description: `Scheduled for ${format(dueAt, 'MMM d, yyyy h:mm a')}`,
     });
 
     onSuccess();
