@@ -57,7 +57,7 @@ export function AppSidebar() {
     }
 
     const { data } = await supabase
-      .from('crm_users')
+      .from('profiles')
       .select('role')
       .eq('id', user.id)
       .maybeSingle();
