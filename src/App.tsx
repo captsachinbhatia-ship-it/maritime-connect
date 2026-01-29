@@ -15,6 +15,7 @@ import Contacts from "./pages/Contacts";
 import Enquiries from "./pages/Enquiries";
 import Reporting from "./pages/Reporting";
 import MyFollowups from "./pages/MyFollowups";
+import FollowupsOversight from "./pages/FollowupsOversight";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => {
                 <Route path="companies" element={<Companies />} />
                 <Route path="contacts" element={<Contacts />} />
                 <Route path="followups" element={<MyFollowups />} />
+                <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="reporting" element={<Reporting />} />
               </Route>
