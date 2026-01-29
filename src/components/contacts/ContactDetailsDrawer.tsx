@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { 
   User, Building2, Phone, Mail, MessageSquare, FileText, 
   MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
-  FileEdit, Loader2, AlertCircle 
+  FileEdit, Loader2, AlertCircle, Plus
 } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Sheet,
   SheetContent,
@@ -19,6 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAssignmentsByContact, ContactAssignment } from '@/services/assignments';
 import { getInteractionsByContact, getUserNames, ContactInteraction } from '@/services/interactions';
+import { AddInteractionModal } from './AddInteractionModal';
 
 interface ContactDetailsDrawerProps {
   contact: ContactWithCompany | null;
@@ -67,6 +69,7 @@ export function ContactDetailsDrawer({
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
   const [interactionsError, setInteractionsError] = useState<string | null>(null);
   const [interactionsTableExists, setInteractionsTableExists] = useState(true);
+  const [isAddInteractionOpen, setIsAddInteractionOpen] = useState(false);
 
   // Reset state when drawer closes
   useEffect(() => {
@@ -122,7 +125,7 @@ export function ContactDetailsDrawer({
     setIsLoadingAssignments(false);
   };
 
-  const loadInteractions = async () => {
+  const loadInteractions = useCallback(async () => {
     if (!contact) return;
     
     setIsLoadingInteractions(true);
@@ -139,7 +142,7 @@ export function ContactDetailsDrawer({
     }
     
     setIsLoadingInteractions(false);
-  };
+  }, [contact]);
 
   if (!contact) return null;
 
@@ -427,6 +430,17 @@ export function ContactDetailsDrawer({
 
             {/* Interactions Tab */}
             <TabsContent value="interactions" className="m-0 p-6">
+              {/* Add Interaction Button */}
+              <div className="mb-4">
+                <Button
+                  onClick={() => setIsAddInteractionOpen(true)}
+                  className="w-full"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Interaction
+                </Button>
+              </div>
+
               {isLoadingInteractions ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -488,6 +502,16 @@ export function ContactDetailsDrawer({
             </TabsContent>
           </ScrollArea>
         </Tabs>
+
+        {/* Add Interaction Modal */}
+        {contact && (
+          <AddInteractionModal
+            contactId={contact.id}
+            isOpen={isAddInteractionOpen}
+            onClose={() => setIsAddInteractionOpen(false)}
+            onSuccess={loadInteractions}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
