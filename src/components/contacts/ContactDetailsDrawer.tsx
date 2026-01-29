@@ -524,7 +524,7 @@ export function ContactDetailsDrawer({
                             </div>
                           )}
                           <div className="text-xs text-muted-foreground mt-2">
-                            By: {interaction.creator_name || 'Unknown User'}
+                            By: {interaction.creator_full_name || interaction.creator_email || 'Unknown User'}
                           </div>
                         </div>
                       </div>
