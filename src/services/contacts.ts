@@ -3,6 +3,13 @@ import type { Contact, ContactWithCompany, CreateContactPayload, ContactFilters,
 
 export type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
 
+interface LastInteractionData {
+  contact_id: string;
+  last_interaction_at: string | null;
+  last_interaction_type: string | null;
+  last_interaction_outcome: string | null;
+}
+
 export async function listContactsByStage(
   stage: StageType,
   filters: ContactFilters = {}
@@ -28,7 +35,7 @@ export async function listContactsByStage(
 
     const contactIds = assignments.map(a => a.contact_id);
 
-    // Now fetch contacts with those IDs
+    // Fetch contacts with those IDs
     let query = supabase
       .from('contacts')
       .select(`
@@ -60,7 +67,36 @@ export async function listContactsByStage(
       return { data: null, error: contactsError.message };
     }
 
-    return { data: contacts as ContactWithCompany[], error: null };
+    if (!contacts || contacts.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Fetch last interaction data from v_contacts_last_interaction view
+    const { data: lastInteractions, error: liError } = await supabase
+      .from('v_contacts_last_interaction')
+      .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
+      .in('contact_id', contactIds);
+
+    // Build a map for quick lookup
+    const liMap: Record<string, LastInteractionData> = {};
+    if (!liError && lastInteractions) {
+      lastInteractions.forEach((li: LastInteractionData) => {
+        liMap[li.contact_id] = li;
+      });
+    }
+
+    // Merge last interaction data into contacts
+    const contactsWithLI = contacts.map(contact => {
+      const li = liMap[contact.id];
+      return {
+        ...contact,
+        last_interaction_at: li?.last_interaction_at || null,
+        last_interaction_type: li?.last_interaction_type || null,
+        last_interaction_outcome: li?.last_interaction_outcome || null,
+      };
+    });
+
+    return { data: contactsWithLI as ContactWithCompany[], error: null };
   } catch (err) {
     return {
       data: null,
