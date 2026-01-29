@@ -6,8 +6,14 @@ import { StageSnapshot } from './StageSnapshot';
 import { RecentCompanies } from './RecentCompanies';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
+import { ModeIndicator } from './ModeIndicator';
 
-export function CallerDashboard() {
+interface CallerDashboardProps {
+  isAdmin: boolean;
+  isCEO: boolean;
+}
+
+export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -24,11 +30,14 @@ export function CallerDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">
-          Welcome to AQ Maritime CRM
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="mt-1 text-muted-foreground">
+            Welcome to AQ Maritime CRM
+          </p>
+        </div>
+        {isAdmin && <ModeIndicator isCEO={isCEO} />}
       </div>
 
       {/* KPI Row */}

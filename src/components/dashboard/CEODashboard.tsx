@@ -3,16 +3,25 @@ import { PipelineHealth } from './PipelineHealth';
 import { TeamActivitySnapshot } from './TeamActivitySnapshot';
 import { RiskNeglectList } from './RiskNeglectList';
 import { RecentCompanies } from './RecentCompanies';
+import { ModeIndicator } from './ModeIndicator';
 
-export function CEODashboard() {
+interface CEODashboardProps {
+  isAdmin: boolean;
+  isCEO: boolean;
+}
+
+export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Executive Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">
-          Organization-wide performance overview
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Executive Dashboard</h1>
+          <p className="mt-1 text-muted-foreground">
+            Organization-wide performance overview
+          </p>
+        </div>
+        {isAdmin && <ModeIndicator isCEO={isCEO} />}
       </div>
 
       {/* Global KPI Row */}
