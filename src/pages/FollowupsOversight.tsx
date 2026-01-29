@@ -8,14 +8,17 @@ import { OversightKPITiles } from '@/components/followups-oversight/OversightKPI
 import { OverdueByCallerTable } from '@/components/followups-oversight/OverdueByCallerTable';
 import { SlippingContactsTable } from '@/components/followups-oversight/SlippingContactsTable';
 import { CallerDrilldownDrawer } from '@/components/followups-oversight/CallerDrilldownDrawer';
+import { Next7DaysTable } from '@/components/followups-oversight/Next7DaysTable';
 import {
   checkIsAdmin,
   getOversightKPIs,
   getOverdueByCaller,
   getSlippingContacts,
+  getNext7DaysFollowups,
   OversightKPIs,
   OverdueByCaller,
   SlippingContact,
+  Next7DaysFollowup,
 } from '@/services/followupsOversight';
 
 export default function FollowupsOversight() {
@@ -30,16 +33,19 @@ export default function FollowupsOversight() {
   const [kpis, setKpis] = useState<OversightKPIs | null>(null);
   const [overdueByCaller, setOverdueByCaller] = useState<OverdueByCaller[] | null>(null);
   const [slippingContacts, setSlippingContacts] = useState<SlippingContact[] | null>(null);
+  const [next7Days, setNext7Days] = useState<Next7DaysFollowup[] | null>(null);
 
   // Loading states
   const [isLoadingKPIs, setIsLoadingKPIs] = useState(false);
   const [isLoadingOverdue, setIsLoadingOverdue] = useState(false);
   const [isLoadingSlipping, setIsLoadingSlipping] = useState(false);
+  const [isLoadingNext7Days, setIsLoadingNext7Days] = useState(false);
 
   // Error states
   const [kpisError, setKpisError] = useState<string | null>(null);
   const [overdueError, setOverdueError] = useState<string | null>(null);
   const [slippingError, setSlippingError] = useState<string | null>(null);
+  const [next7DaysError, setNext7DaysError] = useState<string | null>(null);
 
   // Drawer state
   const [drilldownCaller, setDrilldownCaller] = useState<{
@@ -77,6 +83,7 @@ export default function FollowupsOversight() {
     loadKPIs();
     loadOverdueByCaller();
     loadSlippingContacts();
+    loadNext7Days();
   };
 
   const loadKPIs = async () => {
@@ -108,11 +115,33 @@ export default function FollowupsOversight() {
     setSlippingError(null);
     const result = await getSlippingContacts();
     if (result.error) {
+      // Handle access restriction from RPC
+      if (result.error === 'Access restricted') {
+        setAccessError(result.error);
+        setHasAccess(false);
+      }
       setSlippingError(result.error);
     } else {
       setSlippingContacts(result.data);
     }
     setIsLoadingSlipping(false);
+  };
+
+  const loadNext7Days = async () => {
+    setIsLoadingNext7Days(true);
+    setNext7DaysError(null);
+    const result = await getNext7DaysFollowups();
+    if (result.error) {
+      // Handle access restriction from RPC
+      if (result.error === 'Access restricted') {
+        setAccessError(result.error);
+        setHasAccess(false);
+      }
+      setNext7DaysError(result.error);
+    } else {
+      setNext7Days(result.data);
+    }
+    setIsLoadingNext7Days(false);
   };
 
   const handleViewList = (callerId: string, callerName: string) => {
@@ -166,17 +195,17 @@ export default function FollowupsOversight() {
         <Button
           variant="outline"
           onClick={loadAllData}
-          disabled={isLoadingKPIs || isLoadingOverdue || isLoadingSlipping}
+          disabled={isLoadingKPIs || isLoadingOverdue || isLoadingSlipping || isLoadingNext7Days}
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${(isLoadingKPIs || isLoadingOverdue || isLoadingSlipping) ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 mr-2 ${(isLoadingKPIs || isLoadingOverdue || isLoadingSlipping || isLoadingNext7Days) ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
       {/* KPI Tiles */}
-      <OversightKPITiles kpis={kpis} isLoading={isLoadingKPIs} />
+      <OversightKPITiles kpis={kpis} isLoading={isLoadingKPIs} error={kpisError} />
 
-      {/* Two-column layout for tables */}
+      {/* Two-column layout for top tables */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Overdue by Caller */}
         <OverdueByCallerTable
@@ -186,7 +215,12 @@ export default function FollowupsOversight() {
           onViewList={handleViewList}
         />
 
-        {/* Slipping Contacts - full width on its own row */}
+        {/* Next 7 Days */}
+        <Next7DaysTable
+          data={next7Days}
+          isLoading={isLoadingNext7Days}
+          error={next7DaysError}
+        />
       </div>
 
       {/* Slipping Contacts - full width */}
