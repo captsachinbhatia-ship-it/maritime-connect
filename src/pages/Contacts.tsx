@@ -10,6 +10,7 @@ import { ContactsSearch } from '@/components/contacts/ContactsSearch';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { getCurrentUserProfile, Profile } from '@/services/profiles';
 import { getAssignmentsForContacts, ContactAssignment, AssignmentStage } from '@/services/assignments';
+import { getNextFollowupDueMap } from '@/services/followups';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactWithCompany } from '@/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -32,6 +33,7 @@ export default function Contacts() {
   const [allContacts, setAllContacts] = useState<ContactWithCompany[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [assignmentsMap, setAssignmentsMap] = useState<Record<string, ContactAssignment>>({});
+  const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -221,6 +223,15 @@ export default function Contacts() {
           setCompanyNamesMap(namesResult.data);
         }
       }
+
+      // Step 5: Fetch next follow-up due dates
+      const contactIdsForFollowups = contactsList.map(c => c.id);
+      if (contactIdsForFollowups.length > 0) {
+        const followupResult = await getNextFollowupDueMap(contactIdsForFollowups);
+        if (followupResult.data) {
+          setNextFollowupMap(followupResult.data);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load contacts');
     } finally {
@@ -325,6 +336,7 @@ export default function Contacts() {
               contacts={contacts}
               companyNamesMap={companyNamesMap}
               assignmentsMap={assignmentsMap}
+              nextFollowupMap={nextFollowupMap}
               isLoading={isLoading}
               onRowClick={handleRowClick}
               onAssignClick={handleAssignClick}

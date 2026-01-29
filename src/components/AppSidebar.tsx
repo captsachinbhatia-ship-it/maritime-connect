@@ -6,7 +6,8 @@ import {
   FileText, 
   BarChart3,
   LogOut,
-  Anchor
+  Anchor,
+  CalendarClock
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,6 +29,7 @@ const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Companies', url: '/companies', icon: Building2 },
   { title: 'Contacts', url: '/contacts', icon: Users },
+  { title: 'My Follow-ups', url: '/followups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Reporting', url: '/reporting', icon: BarChart3 },
 ];
