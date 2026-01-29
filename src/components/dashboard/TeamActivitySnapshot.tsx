@@ -6,12 +6,10 @@ import { Loader2, Users2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface TeamMemberStats {
-  userId: string;
-  fullName: string;
-  email: string;
-  activeContacts: number;
-  interactionsToday: number;
-  staleContacts: number;
+  team_member: string;
+  active_contacts: number;
+  interactions_today: number;
+  stale_contacts: number;
 }
 
 export function TeamActivitySnapshot() {
@@ -23,94 +21,17 @@ export function TeamActivitySnapshot() {
       setIsLoading(true);
 
       try {
-        // Get all active assignments grouped by user
-        const { data: assignments } = await supabase
-          .from('contact_assignments')
-          .select('assigned_to, contact_id')
-          .eq('status', 'ACTIVE');
+        const { data, error } = await supabase
+          .from('v_team_activity_snapshot')
+          .select('team_member, active_contacts, interactions_today, stale_contacts')
+          .order('active_contacts', { ascending: false });
 
-        if (!assignments || assignments.length === 0) {
+        if (error) {
+          console.error('Failed to fetch team stats:', error);
           setTeamStats([]);
-          setIsLoading(false);
-          return;
+        } else {
+          setTeamStats(data || []);
         }
-
-        // Group contacts by user
-        const userContactMap = new Map<string, Set<string>>();
-        assignments.forEach(a => {
-          if (!userContactMap.has(a.assigned_to)) {
-            userContactMap.set(a.assigned_to, new Set());
-          }
-          userContactMap.get(a.assigned_to)!.add(a.contact_id);
-        });
-
-        const userIds = [...userContactMap.keys()];
-        const allContactIds = [...new Set(assignments.map(a => a.contact_id))];
-
-        // Fetch user profiles
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .in('id', userIds);
-
-        const profileMap = new Map(
-          profiles?.map(p => [p.id, { fullName: p.full_name || 'Unknown', email: p.email || '' }]) || []
-        );
-
-        // Get today's interactions
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const { data: todayInteractions } = await supabase
-          .from('contact_interactions')
-          .select('contact_id')
-          .in('contact_id', allContactIds)
-          .gte('interaction_at', today.toISOString());
-
-        const touchedTodaySet = new Set(todayInteractions?.map(i => i.contact_id) || []);
-
-        // Get last interaction data for stale calculation
-        const { data: lastInteractions } = await supabase
-          .from('v_contacts_last_interaction')
-          .select('contact_id, last_interaction_at')
-          .in('contact_id', allContactIds);
-
-        const interactionMap = new Map(
-          lastInteractions?.map(li => [li.contact_id, li.last_interaction_at]) || []
-        );
-
-        const fourteenDaysAgo = new Date();
-        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-
-        // Build stats per user
-        const stats: TeamMemberStats[] = userIds.map(userId => {
-          const contactIds = userContactMap.get(userId) || new Set();
-          const contactArray = [...contactIds];
-          
-          const activeContacts = contactArray.length;
-          const interactionsToday = contactArray.filter(id => touchedTodaySet.has(id)).length;
-          const staleContacts = contactArray.filter(id => {
-            const lastAt = interactionMap.get(id);
-            if (!lastAt) return true;
-            return new Date(lastAt) < fourteenDaysAgo;
-          }).length;
-
-          const profile = profileMap.get(userId) || { fullName: 'Unknown User', email: '' };
-
-          return {
-            userId,
-            fullName: profile.fullName,
-            email: profile.email,
-            activeContacts,
-            interactionsToday,
-            staleContacts,
-          };
-        });
-
-        // Sort by active contacts descending
-        stats.sort((a, b) => b.activeContacts - a.activeContacts);
-
-        setTeamStats(stats);
       } catch (error) {
         console.error('Failed to fetch team stats:', error);
       } finally {
@@ -154,28 +75,28 @@ export function TeamActivitySnapshot() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {teamStats.map((member) => (
-                <TableRow key={member.userId}>
+              {teamStats.map((member, index) => (
+                <TableRow key={index}>
                   <TableCell>
-                    <div>
-                      <p className="font-medium">{member.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{member.email}</p>
-                    </div>
+                    <p className="font-medium">{member.team_member || 'Unknown'}</p>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant="outline">{member.activeContacts}</Badge>
+                    <Badge variant="outline">{member.active_contacts}</Badge>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge variant="outline" className={member.interactionsToday > 0 ? 'text-emerald-600' : ''}>
-                      {member.interactionsToday}
+                    <Badge 
+                      variant="outline" 
+                      className={member.interactions_today > 0 ? 'text-emerald-600' : ''}
+                    >
+                      {member.interactions_today}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge 
                       variant="outline" 
-                      className={member.staleContacts > 0 ? 'text-orange-600' : ''}
+                      className={member.stale_contacts > 0 ? 'text-orange-600' : ''}
                     >
-                      {member.staleContacts}
+                      {member.stale_contacts}
                     </Badge>
                   </TableCell>
                 </TableRow>
