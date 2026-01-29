@@ -465,7 +465,7 @@ export async function checkIsAdmin(): Promise<{
     const userId = sessionData.session.user.id;
 
     const { data, error } = await supabase
-      .from('crm_users')
+      .from('profiles')
       .select('role')
       .eq('id', userId)
       .maybeSingle();
