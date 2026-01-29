@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 
-// Q1: KPI counts (Overdue, Due Today, Next 7 Days)
+// Q1: KPI counts (Overdue, Due Today, Next 7 Days) - via RPC
 export interface OversightKPIs {
   overdue: number;
   dueToday: number;
@@ -12,48 +12,86 @@ export async function getOversightKPIs(): Promise<{
   error: string | null;
 }> {
   try {
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000 - 1);
-    const tomorrow = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
-    const next7Days = new Date(startOfToday.getTime() + 8 * 24 * 60 * 60 * 1000);
-
-    // Fetch all OPEN followups
-    const { data, error } = await supabase
-      .from('contact_followups')
-      .select('due_at')
-      .eq('status', 'OPEN');
+    const { data, error } = await supabase.rpc('rpc_followups_kpis');
 
     if (error) {
-      if (error.message.includes('does not exist') || error.code === '42P01') {
+      // Check for access restriction
+      if (error.message.includes('Access restricted') || error.code === '42501') {
+        return { data: null, error: 'Access restricted' };
+      }
+      // Fallback for missing function
+      if (error.message.includes('does not exist') || error.code === '42883') {
         return { data: { overdue: 0, dueToday: 0, next7Days: 0 }, error: null };
       }
       return { data: null, error: error.message };
     }
 
-    let overdue = 0;
-    let dueToday = 0;
-    let next7DaysCount = 0;
-
-    (data || []).forEach((row) => {
-      const dueAt = new Date(row.due_at);
-      if (dueAt < startOfToday) {
-        overdue++;
-      } else if (dueAt >= startOfToday && dueAt <= endOfToday) {
-        dueToday++;
-      } else if (dueAt >= tomorrow && dueAt < next7Days) {
-        next7DaysCount++;
-      }
-    });
-
+    // Map RPC response to our interface
+    // Expected format: { overdue: number, due_today: number, next_7_days: number }
     return {
-      data: { overdue, dueToday, next7Days: next7DaysCount },
+      data: {
+        overdue: data?.overdue ?? 0,
+        dueToday: data?.due_today ?? 0,
+        next7Days: data?.next_7_days ?? 0,
+      },
       error: null,
     };
   } catch (err) {
     return {
       data: null,
       error: err instanceof Error ? err.message : 'Failed to load KPIs',
+    };
+  }
+}
+
+// Next 7 Days list - via RPC
+export interface Next7DaysFollowup {
+  id: string;
+  dueAt: string;
+  contactId: string;
+  contactName: string;
+  companyName: string | null;
+  callerName: string;
+  followupType: string;
+  followupReason: string;
+}
+
+export async function getNext7DaysFollowups(): Promise<{
+  data: Next7DaysFollowup[] | null;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase.rpc('rpc_followups_next_7_days');
+
+    if (error) {
+      // Check for access restriction
+      if (error.message.includes('Access restricted') || error.code === '42501') {
+        return { data: null, error: 'Access restricted' };
+      }
+      // Fallback for missing function
+      if (error.message.includes('does not exist') || error.code === '42883') {
+        return { data: [], error: null };
+      }
+      return { data: null, error: error.message };
+    }
+
+    // Map RPC response to our interface
+    const result: Next7DaysFollowup[] = (data || []).map((row: any) => ({
+      id: row.id,
+      dueAt: row.due_at,
+      contactId: row.contact_id,
+      contactName: row.contact_name || 'Unknown',
+      companyName: row.company_name || null,
+      callerName: row.caller_name || 'Unassigned',
+      followupType: row.followup_type,
+      followupReason: row.followup_reason,
+    }));
+
+    return { data: result, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Failed to load next 7 days',
     };
   }
 }

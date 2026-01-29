@@ -1,14 +1,25 @@
-import { AlertTriangle, Calendar, CalendarClock } from 'lucide-react';
+import { AlertTriangle, Calendar, CalendarClock, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { OversightKPIs } from '@/services/followupsOversight';
 
 interface OversightKPITilesProps {
   kpis: OversightKPIs | null;
   isLoading: boolean;
+  error?: string | null;
 }
 
-export function OversightKPITiles({ kpis, isLoading }: OversightKPITilesProps) {
+export function OversightKPITiles({ kpis, isLoading, error }: OversightKPITilesProps) {
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    );
+  }
+
   const tiles = [
     {
       label: 'Overdue',
