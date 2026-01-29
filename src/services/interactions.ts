@@ -102,6 +102,14 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
   error: string | null;
 }> {
   try {
+    // Verify authenticated session exists before insert
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !sessionData.session) {
+      return { error: 'No authenticated session. Please log in again.' };
+    }
+
+    // Insert using the client with user JWT (auth.uid() will be populated)
     const { error } = await supabase
       .from('interactions')
       .insert({
