@@ -89,5 +89,41 @@ export async function getUserNames(userIds: string[]): Promise<{
   }
 }
 
+export interface CreateInteractionPayload {
+  contact_id: string;
+  interaction_type: InteractionType;
+  outcome: string | null;
+  subject: string | null;
+  notes: string;
+  interaction_at: string;
+}
+
+export async function createInteraction(payload: CreateInteractionPayload): Promise<{
+  error: string | null;
+}> {
+  try {
+    const { error } = await supabase
+      .from('interactions')
+      .insert({
+        contact_id: payload.contact_id,
+        interaction_type: payload.interaction_type,
+        outcome: payload.outcome,
+        subject: payload.subject,
+        notes: payload.notes,
+        interaction_at: payload.interaction_at,
+      });
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    return { error: null };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : 'Failed to create interaction',
+    };
+  }
+}
+
 // Alias for backward compatibility
 export const getCreatorNames = getUserNames;
