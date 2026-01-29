@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, ShieldAlert, RefreshCw } from 'lucide-react';
+import { Loader2, ShieldAlert, RefreshCw, Bug } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OversightKPITiles } from '@/components/followups-oversight/OversightKPITiles';
 import { OverdueByCallerTable } from '@/components/followups-oversight/OverdueByCallerTable';
 import { SlippingContactsTable } from '@/components/followups-oversight/SlippingContactsTable';
 import { CallerDrilldownDrawer } from '@/components/followups-oversight/CallerDrilldownDrawer';
 import { Next7DaysTable } from '@/components/followups-oversight/Next7DaysTable';
+import { supabase } from '@/lib/supabaseClient';
 import {
   checkIsAdmin,
   getOversightKPIs,
@@ -47,6 +49,11 @@ export default function FollowupsOversight() {
   const [slippingError, setSlippingError] = useState<string | null>(null);
   const [next7DaysError, setNext7DaysError] = useState<string | null>(null);
 
+  // DEBUG state
+  const [debugOverview, setDebugOverview] = useState<{ data: any; error: any } | null>(null);
+  const [debugNext7Days, setDebugNext7Days] = useState<{ count: number; firstRow: any; error: any } | null>(null);
+  const [isLoadingDebug, setIsLoadingDebug] = useState(false);
+
   // Drawer state
   const [drilldownCaller, setDrilldownCaller] = useState<{
     id: string;
@@ -62,8 +69,28 @@ export default function FollowupsOversight() {
   useEffect(() => {
     if (hasAccess) {
       loadAllData();
+      loadDebugData();
     }
   }, [hasAccess]);
+
+  // DEBUG: Load raw RPC output
+  const loadDebugData = async () => {
+    setIsLoadingDebug(true);
+    
+    // Call rpc_followups_debug_overview
+    const { data: overviewData, error: overviewError } = await supabase.rpc('rpc_followups_debug_overview');
+    setDebugOverview({ data: overviewData, error: overviewError?.message || null });
+
+    // Call rpc_followups_next_7_days
+    const { data: next7Data, error: next7Error } = await supabase.rpc('rpc_followups_next_7_days');
+    setDebugNext7Days({
+      count: Array.isArray(next7Data) ? next7Data.length : 0,
+      firstRow: Array.isArray(next7Data) && next7Data.length > 0 ? next7Data[0] : null,
+      error: next7Error?.message || null,
+    });
+
+    setIsLoadingDebug(false);
+  };
 
   const checkAccess = async () => {
     setIsCheckingAccess(true);
@@ -179,6 +206,65 @@ export default function FollowupsOversight() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* DEBUG CARD - Temporary */}
+      <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2 text-amber-700 dark:text-amber-400">
+            <Bug className="h-5 w-5" />
+            DEBUG: Raw RPC Output (Temporary)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoadingDebug ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading debug data...
+            </div>
+          ) : (
+            <>
+              {/* rpc_followups_debug_overview */}
+              <div>
+                <h4 className="font-semibold text-sm mb-1">rpc_followups_debug_overview:</h4>
+                {debugOverview?.error ? (
+                  <pre className="text-xs bg-red-100 dark:bg-red-900/30 p-2 rounded text-red-700 dark:text-red-300 overflow-auto max-h-40">
+                    Error: {debugOverview.error}
+                  </pre>
+                ) : (
+                  <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-40">
+                    {JSON.stringify(debugOverview?.data, null, 2) || 'null'}
+                  </pre>
+                )}
+              </div>
+
+              {/* rpc_followups_next_7_days */}
+              <div>
+                <h4 className="font-semibold text-sm mb-1">rpc_followups_next_7_days:</h4>
+                {debugNext7Days?.error ? (
+                  <pre className="text-xs bg-red-100 dark:bg-red-900/30 p-2 rounded text-red-700 dark:text-red-300 overflow-auto max-h-40">
+                    Error: {debugNext7Days.error}
+                  </pre>
+                ) : (
+                  <div className="text-xs bg-muted p-2 rounded overflow-auto max-h-40">
+                    <p><strong>next7_rows:</strong> {debugNext7Days?.count ?? 0}</p>
+                    {debugNext7Days?.firstRow && (
+                      <div className="mt-2">
+                        <p className="font-semibold">First row:</p>
+                        <pre>{JSON.stringify(debugNext7Days.firstRow, null, 2)}</pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <Button variant="outline" size="sm" onClick={loadDebugData}>
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Refresh Debug
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
