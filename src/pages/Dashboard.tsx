@@ -1,59 +1,42 @@
-import { useState } from 'react';
-import { KPIRow } from '@/components/dashboard/KPIRow';
-import { MyWorkToday } from '@/components/dashboard/MyWorkToday';
-import { RecentInteractions } from '@/components/dashboard/RecentInteractions';
-import { StageSnapshot } from '@/components/dashboard/StageSnapshot';
-import { RecentCompanies } from '@/components/dashboard/RecentCompanies';
-import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
-import { ContactWithCompany } from '@/types';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { CEODashboard } from '@/components/dashboard/CEODashboard';
+import { CallerDashboard } from '@/components/dashboard/CallerDashboard';
+import { Loader2 } from 'lucide-react';
 
 export default function Dashboard() {
-  const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isCEO, setIsCEO] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleContactClick = (contact: ContactWithCompany) => {
-    setSelectedContact(contact);
-    setDrawerOpen(true);
-  };
+  useEffect(() => {
+    const checkCEOMode = async () => {
+      try {
+        const { data, error } = await supabase.rpc('is_ceo_mode');
+        
+        if (error) {
+          console.error('Failed to check CEO mode:', error);
+          setIsCEO(false);
+        } else {
+          setIsCEO(data === true);
+        }
+      } catch (error) {
+        console.error('Error checking CEO mode:', error);
+        setIsCEO(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const handleDrawerClose = () => {
-    setDrawerOpen(false);
-    setSelectedContact(null);
-  };
+    checkCEOMode();
+  }, []);
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-        <p className="mt-1 text-muted-foreground">
-          Welcome to AQ Maritime CRM
-        </p>
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
+    );
+  }
 
-      {/* KPI Row */}
-      <KPIRow />
-
-      {/* My Work Today */}
-      <MyWorkToday onContactClick={handleContactClick} />
-
-      {/* Secondary Panels */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <RecentInteractions />
-        <StageSnapshot />
-      </div>
-
-      {/* Recent Companies */}
-      <RecentCompanies />
-
-      {/* Contact Details Drawer */}
-      <ContactDetailsDrawer
-        contact={selectedContact}
-        companyName={null}
-        currentStage={null}
-        isOpen={drawerOpen}
-        onClose={handleDrawerClose}
-      />
-    </div>
-  );
+  return isCEO ? <CEODashboard /> : <CallerDashboard />;
 }
