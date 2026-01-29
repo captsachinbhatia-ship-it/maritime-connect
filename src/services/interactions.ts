@@ -13,17 +13,55 @@ export interface ContactInteraction {
   creator_name: string | null;
 }
 
-export async function getInteractionsByContact(contactId: string): Promise<{
+export interface InteractionFilters {
+  type?: string;
+  outcome?: string;
+  dateRange?: string;
+  search?: string;
+}
+
+export async function getInteractionsByContact(
+  contactId: string,
+  filters?: InteractionFilters
+): Promise<{
   data: ContactInteraction[] | null;
   error: string | null;
   tableExists: boolean;
 }> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('v_contact_interactions_timeline')
       .select('*')
-      .eq('contact_id', contactId)
-      .order('interaction_at', { ascending: false });
+      .eq('contact_id', contactId);
+
+    // Apply type filter
+    if (filters?.type && filters.type !== 'all') {
+      query = query.eq('interaction_type', filters.type);
+    }
+
+    // Apply outcome filter
+    if (filters?.outcome && filters.outcome !== 'all') {
+      query = query.eq('outcome', filters.outcome);
+    }
+
+    // Apply date range filter
+    if (filters?.dateRange && filters.dateRange !== 'all') {
+      const days = parseInt(filters.dateRange, 10);
+      if (!isNaN(days)) {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+        query = query.gte('interaction_at', cutoffDate.toISOString());
+      }
+    }
+
+    // Apply search filter (ilike on summary - the view column for notes)
+    if (filters?.search && filters.search.trim()) {
+      const searchTerm = `%${filters.search.trim()}%`;
+      query = query.or(`summary.ilike.${searchTerm},subject.ilike.${searchTerm}`);
+    }
+
+    // Always order by interaction_at desc
+    const { data, error } = await query.order('interaction_at', { ascending: false });
 
     if (error) {
       // Check if view doesn't exist

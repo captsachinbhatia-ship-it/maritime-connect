@@ -19,8 +19,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAssignmentsByContact, ContactAssignment } from '@/services/assignments';
-import { getInteractionsByContact, getUserNames, ContactInteraction } from '@/services/interactions';
+import { getInteractionsByContact, getUserNames, ContactInteraction, InteractionFilters } from '@/services/interactions';
 import { AddInteractionModal } from './AddInteractionModal';
+import { InteractionsFilters, InteractionsFiltersState } from './InteractionsFilters';
 
 
 interface ContactDetailsDrawerProps {
@@ -71,6 +72,14 @@ export function ContactDetailsDrawer({
   const [interactionsError, setInteractionsError] = useState<string | null>(null);
   const [interactionsTableExists, setInteractionsTableExists] = useState(true);
   const [isAddInteractionOpen, setIsAddInteractionOpen] = useState(false);
+  
+  // Interactions filters state
+  const [interactionsFilters, setInteractionsFilters] = useState<InteractionsFiltersState>({
+    type: 'all',
+    outcome: 'all',
+    dateRange: 'all',
+    search: '',
+  });
 
   // Reset state when drawer closes
   useEffect(() => {
@@ -80,6 +89,13 @@ export function ContactDetailsDrawer({
       setInteractions([]);
       setAssignmentsError(null);
       setInteractionsError(null);
+      // Reset filters when drawer closes
+      setInteractionsFilters({
+        type: 'all',
+        outcome: 'all',
+        dateRange: 'all',
+        search: '',
+      });
     }
   }, [isOpen]);
 
@@ -90,12 +106,12 @@ export function ContactDetailsDrawer({
     }
   }, [isOpen, contact?.id, activeTab]);
 
-  // Load interactions when tab changes to interactions
+  // Load interactions when tab changes to interactions or filters change
   useEffect(() => {
     if (isOpen && contact && activeTab === 'interactions') {
       loadInteractions();
     }
-  }, [isOpen, contact?.id, activeTab]);
+  }, [isOpen, contact?.id, activeTab, interactionsFilters]);
 
   const loadAssignments = async () => {
     if (!contact) return;
@@ -132,7 +148,15 @@ export function ContactDetailsDrawer({
     setIsLoadingInteractions(true);
     setInteractionsError(null);
     
-    const result = await getInteractionsByContact(contact.id);
+    // Build filters object for query
+    const filters: InteractionFilters = {
+      type: interactionsFilters.type,
+      outcome: interactionsFilters.outcome,
+      dateRange: interactionsFilters.dateRange,
+      search: interactionsFilters.search,
+    };
+    
+    const result = await getInteractionsByContact(contact.id, filters);
     
     setInteractionsTableExists(result.tableExists);
     
@@ -143,7 +167,7 @@ export function ContactDetailsDrawer({
     }
     
     setIsLoadingInteractions(false);
-  }, [contact]);
+  }, [contact, interactionsFilters]);
 
   if (!contact) return null;
 
@@ -440,6 +464,14 @@ export function ContactDetailsDrawer({
                   <Plus className="mr-2 h-4 w-4" />
                   Add Interaction
                 </Button>
+              </div>
+
+              {/* Filter Bar */}
+              <div className="mb-4">
+                <InteractionsFilters
+                  filters={interactionsFilters}
+                  onFiltersChange={setInteractionsFilters}
+                />
               </div>
 
               {isLoadingInteractions ? (
