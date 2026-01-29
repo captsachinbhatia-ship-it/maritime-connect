@@ -7,10 +7,12 @@ export interface ContactInteraction {
   contact_id: string;
   interaction_at: string;
   interaction_type: InteractionType;
+  outcome: string | null;
   summary: string | null;
   next_action: string | null;
   next_action_date: string | null;
-  creator_name: string | null;
+  creator_full_name: string | null;
+  creator_email: string | null;
 }
 
 export interface InteractionFilters {
