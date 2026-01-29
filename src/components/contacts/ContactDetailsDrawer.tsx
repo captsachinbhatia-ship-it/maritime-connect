@@ -21,7 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAssignmentsByContact, ContactAssignment } from '@/services/assignments';
 import { getInteractionsByContact, getUserNames, ContactInteraction } from '@/services/interactions';
 import { AddInteractionModal } from './AddInteractionModal';
-import { supabase } from '@/lib/supabaseClient';
+
 
 interface ContactDetailsDrawerProps {
   contact: ContactWithCompany | null;
@@ -71,11 +71,6 @@ export function ContactDetailsDrawer({
   const [interactionsError, setInteractionsError] = useState<string | null>(null);
   const [interactionsTableExists, setInteractionsTableExists] = useState(true);
   const [isAddInteractionOpen, setIsAddInteractionOpen] = useState(false);
-  
-  // Debug state
-  const [debugAuth, setDebugAuth] = useState<{ uid: string | null; role: string | null } | null>(null);
-  const [debugCanAdd, setDebugCanAdd] = useState<{ can_add: boolean | null } | null>(null);
-  const [debugLoading, setDebugLoading] = useState(false);
 
   // Reset state when drawer closes
   useEffect(() => {
@@ -95,48 +90,12 @@ export function ContactDetailsDrawer({
     }
   }, [isOpen, contact?.id, activeTab]);
 
-  // Load interactions and debug queries when tab changes to interactions
+  // Load interactions when tab changes to interactions
   useEffect(() => {
     if (isOpen && contact && activeTab === 'interactions') {
       loadInteractions();
-      loadDebugQueries(contact.id);
     }
   }, [isOpen, contact?.id, activeTab]);
-
-  const loadDebugQueries = async (contactId: string) => {
-    setDebugLoading(true);
-    setDebugAuth(null);
-    setDebugCanAdd(null);
-
-    try {
-      // Query 1: q_debug_auth
-      const { data: authData } = await supabase
-        .rpc('auth_debug', {})
-        .maybeSingle();
-      
-      // Fallback: use raw SQL via rpc if auth_debug doesn't exist
-      // For now, we'll query auth info differently
-      const { data: sessionData } = await supabase.auth.getSession();
-      const uid = sessionData?.session?.user?.id || null;
-      const role = sessionData?.session?.user?.role || 'authenticated';
-      setDebugAuth({ uid, role });
-
-      // Query 2: q_debug_can_add
-      const { data: canAddData, error: canAddError } = await supabase
-        .rpc('can_add_contact_interaction', { _contact_id: contactId });
-      
-      if (canAddError) {
-        console.error('can_add_contact_interaction error:', canAddError);
-        setDebugCanAdd({ can_add: null });
-      } else {
-        setDebugCanAdd({ can_add: canAddData });
-      }
-    } catch (err) {
-      console.error('Debug query error:', err);
-    } finally {
-      setDebugLoading(false);
-    }
-  };
 
   const loadAssignments = async () => {
     if (!contact) return;
@@ -472,19 +431,6 @@ export function ContactDetailsDrawer({
 
             {/* Interactions Tab */}
             <TabsContent value="interactions" className="m-0 p-6">
-              {/* Debug Panel */}
-              <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-dashed font-mono text-xs space-y-1">
-                <p className="font-semibold text-muted-foreground">DEBUG</p>
-                {debugLoading ? (
-                  <p className="text-muted-foreground">Loading...</p>
-                ) : (
-                  <>
-                    <p>uid={debugAuth?.uid ?? 'null'} role={debugAuth?.role ?? 'null'}</p>
-                    <p>can_add={debugCanAdd?.can_add === null ? 'error/null' : String(debugCanAdd?.can_add)}</p>
-                  </>
-                )}
-              </div>
-
               {/* Add Interaction Button */}
               <div className="mb-4">
                 <Button
