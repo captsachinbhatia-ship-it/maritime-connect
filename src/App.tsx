@@ -14,6 +14,7 @@ import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
 import Enquiries from "./pages/Enquiries";
 import Reporting from "./pages/Reporting";
+import MyFollowups from "./pages/MyFollowups";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => {
                 <Route index element={<Dashboard />} />
                 <Route path="companies" element={<Companies />} />
                 <Route path="contacts" element={<Contacts />} />
+                <Route path="followups" element={<MyFollowups />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="reporting" element={<Reporting />} />
               </Route>

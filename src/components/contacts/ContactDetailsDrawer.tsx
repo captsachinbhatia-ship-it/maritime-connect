@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { 
   User, Building2, Phone, Mail, MessageSquare, FileText, 
   MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
-  FileEdit, Loader2, AlertCircle, Plus
+  FileEdit, Loader2, AlertCircle, Plus, CalendarClock
 } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -20,8 +20,11 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAssignmentsByContact, ContactAssignment } from '@/services/assignments';
 import { getInteractionsByContact, getUserNames, ContactInteraction, InteractionFilters } from '@/services/interactions';
+import { getFollowupsByContact, ContactFollowup } from '@/services/followups';
 import { AddInteractionModal } from './AddInteractionModal';
 import { InteractionsFilters, InteractionsFiltersState } from './InteractionsFilters';
+import { FollowupsTab } from './FollowupsTab';
+import { AddFollowupModal } from './AddFollowupModal';
 
 
 interface ContactDetailsDrawerProps {
@@ -68,10 +71,14 @@ export function ContactDetailsDrawer({
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
   const [isLoadingInteractions, setIsLoadingInteractions] = useState(false);
+  const [isLoadingFollowups, setIsLoadingFollowups] = useState(false);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
   const [interactionsError, setInteractionsError] = useState<string | null>(null);
+  const [followupsError, setFollowupsError] = useState<string | null>(null);
   const [interactionsTableExists, setInteractionsTableExists] = useState(true);
   const [isAddInteractionOpen, setIsAddInteractionOpen] = useState(false);
+  const [isAddFollowupOpen, setIsAddFollowupOpen] = useState(false);
+  const [followups, setFollowups] = useState<ContactFollowup[]>([]);
   
   // Interactions filters state
   const [interactionsFilters, setInteractionsFilters] = useState<InteractionsFiltersState>({
@@ -87,8 +94,10 @@ export function ContactDetailsDrawer({
       setActiveTab('details');
       setAssignments([]);
       setInteractions([]);
+      setFollowups([]);
       setAssignmentsError(null);
       setInteractionsError(null);
+      setFollowupsError(null);
       // Reset filters when drawer closes
       setInteractionsFilters({
         type: 'all',
@@ -112,6 +121,14 @@ export function ContactDetailsDrawer({
       loadInteractions();
     }
   }, [isOpen, contact?.id, activeTab, interactionsFilters]);
+
+  // Load followups when tab changes to followups
+  useEffect(() => {
+    if (isOpen && contact && activeTab === 'followups') {
+      loadFollowups();
+    }
+  }, [isOpen, contact?.id, activeTab]);
+
 
   const loadAssignments = async () => {
     if (!contact) return;
@@ -168,6 +185,23 @@ export function ContactDetailsDrawer({
     
     setIsLoadingInteractions(false);
   }, [contact, interactionsFilters]);
+
+  const loadFollowups = useCallback(async () => {
+    if (!contact) return;
+    
+    setIsLoadingFollowups(true);
+    setFollowupsError(null);
+    
+    const result = await getFollowupsByContact(contact.id);
+    
+    if (result.error) {
+      setFollowupsError(result.error);
+    } else if (result.data) {
+      setFollowups(result.data);
+    }
+    
+    setIsLoadingFollowups(false);
+  }, [contact]);
 
   if (!contact) return null;
 
@@ -238,6 +272,9 @@ export function ContactDetailsDrawer({
             </TabsTrigger>
             <TabsTrigger value="interactions" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               Interactions
+            </TabsTrigger>
+            <TabsTrigger value="followups" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
+              Follow-ups
             </TabsTrigger>
           </TabsList>
 
@@ -533,6 +570,17 @@ export function ContactDetailsDrawer({
                 </div>
               )}
             </TabsContent>
+
+            {/* Follow-ups Tab */}
+            <TabsContent value="followups" className="m-0 p-6">
+              <FollowupsTab
+                followups={followups}
+                isLoading={isLoadingFollowups}
+                error={followupsError}
+                onRefresh={loadFollowups}
+                onAddFollowup={() => setIsAddFollowupOpen(true)}
+              />
+            </TabsContent>
           </ScrollArea>
         </Tabs>
 
@@ -543,6 +591,17 @@ export function ContactDetailsDrawer({
             isOpen={isAddInteractionOpen}
             onClose={() => setIsAddInteractionOpen(false)}
             onSuccess={loadInteractions}
+          />
+        )}
+
+        {/* Add Follow-up Modal */}
+        {contact && (
+          <AddFollowupModal
+            contactId={contact.id}
+            contactName={contact.full_name || 'Unknown'}
+            isOpen={isAddFollowupOpen}
+            onClose={() => setIsAddFollowupOpen(false)}
+            onSuccess={loadFollowups}
           />
         )}
       </SheetContent>

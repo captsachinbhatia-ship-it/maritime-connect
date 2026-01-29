@@ -1,9 +1,11 @@
 import { format, formatDistanceToNow } from 'date-fns';
-import { UserPlus, PhoneCall, Mail, Video, MessageSquare, FileEdit } from 'lucide-react';
+import { UserPlus, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { ContactAssignment, AssignmentStage } from '@/services/assignments';
+import { getFollowupStatusLabel } from '@/services/followups';
 import { StageDropdown } from './StageDropdown';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -18,12 +20,14 @@ interface ContactsTableProps {
   contacts: ContactWithCompany[];
   companyNamesMap: Record<string, string>;
   assignmentsMap: Record<string, ContactAssignment>;
+  nextFollowupMap: Record<string, string | null>;
   isLoading: boolean;
   onRowClick: (contact: ContactWithCompany) => void;
   onAssignClick: (contact: ContactWithCompany) => void;
   onStageChange: () => void;
   showAssignColumn?: boolean;
 }
+
 
 const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
   CALL: <PhoneCall className="h-3 w-3" />,
@@ -33,10 +37,18 @@ const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
   NOTE: <FileEdit className="h-3 w-3" />,
 };
 
+const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
+  OVERDUE: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
+  DUE_TODAY: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+  UPCOMING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+};
+
+
 export function ContactsTable({
   contacts,
   companyNamesMap,
   assignmentsMap,
+  nextFollowupMap,
   isLoading,
   onRowClick,
   onAssignClick,
@@ -53,8 +65,8 @@ export function ContactsTable({
               <TableHead>Company</TableHead>
               <TableHead>Designation</TableHead>
               <TableHead>Phone</TableHead>
-              <TableHead>Email</TableHead>
               <TableHead>Stage</TableHead>
+              <TableHead>Next Follow-up</TableHead>
               <TableHead>Last Activity</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -66,8 +78,8 @@ export function ContactsTable({
                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-36" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20" /></TableCell>
               </TableRow>
@@ -122,8 +134,8 @@ export function ContactsTable({
             <TableHead>Company</TableHead>
             <TableHead>Designation</TableHead>
             <TableHead>Phone</TableHead>
-            <TableHead>Email</TableHead>
             <TableHead>Stage</TableHead>
+            <TableHead>Next Follow-up</TableHead>
             <TableHead>Last Activity</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
@@ -133,6 +145,8 @@ export function ContactsTable({
             const assignment = assignmentsMap[contact.id];
             const currentStage = assignment?.stage as AssignmentStage | undefined;
             const lastInteraction = formatLastInteraction(contact);
+            const nextFollowupDue = nextFollowupMap[contact.id] || null;
+            const followupStatus = getFollowupStatusLabel(nextFollowupDue);
             
             return (
               <TableRow
@@ -148,7 +162,6 @@ export function ContactsTable({
                 </TableCell>
                 <TableCell>{contact.designation || '-'}</TableCell>
                 <TableCell>{formatPhone(contact)}</TableCell>
-                <TableCell>{contact.email || '-'}</TableCell>
                 <TableCell>
                   {currentStage ? (
                     <StageDropdown
@@ -158,6 +171,23 @@ export function ContactsTable({
                     />
                   ) : (
                     <span className="text-muted-foreground">Unassigned</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {nextFollowupDue ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <CalendarClock className="h-3 w-3 text-muted-foreground" />
+                        <span>{format(new Date(nextFollowupDue), 'MMM d, h:mm a')}</span>
+                      </div>
+                      {followupStatus && (
+                        <Badge className={`text-xs ${FOLLOWUP_STATUS_STYLES[followupStatus]}`}>
+                          {followupStatus.replace('_', ' ')}
+                        </Badge>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/50">—</span>
                   )}
                 </TableCell>
                 <TableCell>
