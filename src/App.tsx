@@ -17,6 +17,7 @@ import Reporting from "./pages/Reporting";
 import MyFollowups from "./pages/MyFollowups";
 import FollowupsOversight from "./pages/FollowupsOversight";
 import AdminUsers from "./pages/AdminUsers";
+import CompleteProfile from "./pages/CompleteProfile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/complete-profile" element={<CompleteProfile />} />
               <Route
                 path="/"
                 element={
