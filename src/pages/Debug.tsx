@@ -19,6 +19,7 @@ export default function Debug() {
     { name: 'companies', data: null, error: null, isLoading: true, count: 0 },
     { name: 'contacts', data: null, error: null, isLoading: true, count: 0 },
     { name: 'interactions', data: null, error: null, isLoading: true, count: 0 },
+    { name: 'v_unassigned_contacts', data: null, error: null, isLoading: true, count: 0 },
   ]);
 
   const fetchTableData = async (tableName: string): Promise<Partial<TableData>> => {
