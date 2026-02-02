@@ -45,36 +45,23 @@ export async function createCrmUserViaEdgeFunction(userData: {
   region_focus?: string;
 }): Promise<{ data: unknown; error: string | null }> {
   try {
-    // Get the current session to extract the access token
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !sessionData.session) {
-      return { data: null, error: 'Not authenticated' };
-    }
-
-    const accessToken = sessionData.session.access_token;
-
-    const response = await fetch('https://kirwzfxgzzqxtesolhbg.supabase.co/functions/v1/admin-create-user', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify({
+    // Use supabase.functions.invoke which automatically handles auth headers
+    const { data, error } = await supabase.functions.invoke('admin-create-user', {
+      body: {
         full_name: userData.full_name,
         email: userData.email,
         role: userData.role,
         region_focus: userData.region_focus || null,
-      }),
+      },
     });
 
-    const responseData = await response.json();
-
-    if (!response.ok) {
-      return { data: null, error: responseData.error || responseData.message || 'Failed to create user' };
+    if (error) {
+      // Handle FunctionsHttpError which contains the response body
+      const errorMessage = error.message || 'Failed to create user';
+      return { data: null, error: errorMessage };
     }
 
-    return { data: responseData, error: null };
+    return { data, error: null };
   } catch (err) {
     return {
       data: null,
