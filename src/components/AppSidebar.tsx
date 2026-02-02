@@ -9,8 +9,7 @@ import {
   LogOut,
   Anchor,
   CalendarClock,
-  ClipboardCheck,
-  Bug
+  ClipboardCheck
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -40,7 +39,6 @@ const navItems = [
 
 const adminNavItems = [
   { title: 'Follow-ups Oversight', url: '/followups-oversight', icon: ClipboardCheck },
-  { title: 'Debug', url: '/debug', icon: Bug },
 ];
 
 export function AppSidebar() {
