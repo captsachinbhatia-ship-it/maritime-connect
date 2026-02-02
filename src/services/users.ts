@@ -12,6 +12,9 @@ export interface CrmUser {
   updated_at: string;
 }
 
+export const CRM_ROLES = ['ShipBroker', 'Desk Manager', 'Operations', 'Accounts Executive'] as const;
+export type CrmRole = typeof CRM_ROLES[number];
+
 export async function listCrmUsers(): Promise<{
   data: CrmUser[] | null;
   error: string | null;
@@ -35,33 +38,21 @@ export async function listCrmUsers(): Promise<{
   }
 }
 
-export async function createCrmUser(userData: {
+export async function createCrmUserViaEdgeFunction(userData: {
   full_name: string;
-  email?: string;
+  email: string;
   role: string;
   region_focus?: string;
-  active?: boolean;
-}): Promise<{ data: CrmUser | null; error: string | null }> {
+}): Promise<{ data: unknown; error: string | null }> {
   try {
-    // Get current authenticated user
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authData.user) {
-      return { data: null, error: 'You must be logged in to create users.' };
-    }
-
-    const { data, error } = await supabase
-      .from('crm_users')
-      .insert({
-        auth_user_id: authData.user.id,
+    const { data, error } = await supabase.functions.invoke('admin-create-user', {
+      body: {
         full_name: userData.full_name,
-        email: userData.email || null,
+        email: userData.email,
         role: userData.role,
         region_focus: userData.region_focus || null,
-        active: userData.active ?? true,
-      })
-      .select()
-      .single();
+      },
+    });
 
     if (error) {
       return { data: null, error: error.message };

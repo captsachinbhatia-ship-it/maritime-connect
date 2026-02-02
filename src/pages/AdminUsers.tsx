@@ -39,9 +39,9 @@ export default function AdminUsers() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">User Management</h1>
+          <h1 className="text-3xl font-bold text-foreground">Admin – Users</h1>
           <p className="mt-1 text-muted-foreground">
-            Manage CRM users, roles, and access
+            Invite and manage CRM users
           </p>
         </div>
         <div className="flex gap-2">

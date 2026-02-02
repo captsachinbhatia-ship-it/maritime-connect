@@ -17,10 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createCrmUser } from '@/services/users';
+import { createCrmUserViaEdgeFunction, CRM_ROLES } from '@/services/users';
 import { useToast } from '@/hooks/use-toast';
-
-const ROLES = ['ADMIN', 'CEO', 'OPS', 'BROKER'] as const;
 
 interface AddUserModalProps {
   open: boolean;
@@ -35,26 +33,45 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
     full_name: '',
     email: '',
     role: '',
+    region_focus: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.full_name.trim() || !formData.email.trim() || !formData.role) {
+    if (!formData.full_name.trim()) {
       toast({
         title: 'Validation Error',
-        description: 'Please fill in all required fields.',
+        description: 'Full Name is required.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Email is required.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!formData.role) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select a role.',
         variant: 'destructive',
       });
       return;
     }
 
     setIsSubmitting(true);
-    const { error } = await createCrmUser({
+    const { error } = await createCrmUserViaEdgeFunction({
       full_name: formData.full_name.trim(),
-      email: formData.email.trim() || undefined,
+      email: formData.email.trim(),
       role: formData.role,
-      active: true,
+      region_focus: formData.region_focus.trim() || undefined,
     });
 
     setIsSubmitting(false);
@@ -70,21 +87,28 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
 
     toast({
       title: 'Success',
-      description: 'User created successfully.',
+      description: 'User invited successfully',
     });
 
-    setFormData({ full_name: '', email: '', role: '' });
+    setFormData({ full_name: '', email: '', role: '', region_focus: '' });
     onUserCreated();
     onOpenChange(false);
   };
 
+  const handleClose = (open: boolean) => {
+    if (!open) {
+      setFormData({ full_name: '', email: '', role: '', region_focus: '' });
+    }
+    onOpenChange(open);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New User</DialogTitle>
+          <DialogTitle>Invite New User</DialogTitle>
           <DialogDescription>
-            Create a new CRM user. Fill in the details below.
+            Send an invitation to a new CRM user. They will receive an email to set up their account.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -118,7 +142,7 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
                   <SelectValue placeholder="Select a role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((role) => (
+                  {CRM_ROLES.map((role) => (
                     <SelectItem key={role} value={role}>
                       {role}
                     </SelectItem>
@@ -126,13 +150,22 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="region_focus">Region Focus</Label>
+              <Input
+                id="region_focus"
+                value={formData.region_focus}
+                onChange={(e) => setFormData({ ...formData, region_focus: e.target.value })}
+                placeholder="e.g., Asia Pacific, Europe"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => handleClose(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating...' : 'Create User'}
+              {isSubmitting ? 'Sending Invite...' : 'Create User'}
             </Button>
           </DialogFooter>
         </form>

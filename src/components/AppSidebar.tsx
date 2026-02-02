@@ -40,7 +40,7 @@ const navItems = [
 
 const adminNavItems = [
   { title: 'Follow-ups Oversight', url: '/followups-oversight', icon: ClipboardCheck },
-  { title: 'User Management', url: '/admin-users', icon: UserCog },
+  { title: 'Admin – Users', url: '/admin-users', icon: UserCog },
 ];
 
 export function AppSidebar() {

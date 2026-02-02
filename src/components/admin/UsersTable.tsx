@@ -28,11 +28,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Trash2, Loader2 } from 'lucide-react';
-import { CrmUser, updateCrmUser, deleteCrmUser } from '@/services/users';
+import { CrmUser, updateCrmUser, deleteCrmUser, CRM_ROLES } from '@/services/users';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
-
-const ROLES = ['ADMIN', 'CEO', 'OPS', 'BROKER'] as const;
 
 interface UsersTableProps {
   users: CrmUser[];
@@ -116,14 +113,14 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
 
   const getRoleBadgeVariant = (role: string | null) => {
     switch (role) {
-      case 'ADMIN':
-        return 'destructive';
-      case 'CEO':
+      case 'ShipBroker':
         return 'default';
-      case 'OPS':
+      case 'Desk Manager':
         return 'secondary';
-      case 'BROKER':
+      case 'Operations':
         return 'outline';
+      case 'Accounts Executive':
+        return 'default';
       default:
         return 'outline';
     }
@@ -151,11 +148,11 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead>Full Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead>Region Focus</TableHead>
+              <TableHead>Active</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -172,7 +169,7 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
                     onValueChange={(value) => handleRoleChange(user, value)}
                     disabled={updatingUserId === user.id}
                   >
-                    <SelectTrigger className="w-[120px]">
+                    <SelectTrigger className="w-[160px]">
                       <SelectValue>
                         <Badge variant={getRoleBadgeVariant(user.role)}>
                           {user.role || 'None'}
@@ -180,13 +177,16 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {ROLES.map((role) => (
+                      {CRM_ROLES.map((role) => (
                         <SelectItem key={role} value={role}>
                           {role}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {user.region_focus || '—'}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -196,14 +196,9 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
                       disabled={updatingUserId === user.id}
                     />
                     <span className={user.active ? 'text-green-600' : 'text-muted-foreground'}>
-                      {user.active ? 'Active' : 'Inactive'}
+                      {user.active ? 'Yes' : 'No'}
                     </span>
                   </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {user.created_at
-                    ? format(new Date(user.created_at), 'MMM d, yyyy')
-                    : 'N/A'}
                 </TableCell>
                 <TableCell>
                   <Button
