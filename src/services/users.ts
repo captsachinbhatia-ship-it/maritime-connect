@@ -43,9 +43,17 @@ export async function createCrmUser(userData: {
   active?: boolean;
 }): Promise<{ data: CrmUser | null; error: string | null }> {
   try {
+    // Get current authenticated user
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !authData.user) {
+      return { data: null, error: 'You must be logged in to create users.' };
+    }
+
     const { data, error } = await supabase
       .from('crm_users')
       .insert({
+        auth_user_id: authData.user.id,
         full_name: userData.full_name,
         email: userData.email || null,
         role: userData.role,
