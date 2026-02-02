@@ -5,27 +5,22 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-
-const ROLES = ['Broker', 'OPS', 'CEO', 'ADMIN'] as const;
 
 export default function CompleteProfile() {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState(user?.email || '');
-  const [role, setRole] = useState('Broker');
+  // Auto-fill from user metadata if available
+  const defaultFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+  
+  const [fullName, setFullName] = useState(defaultFullName);
   const [regionFocus, setRegionFocus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Email is read-only, always from current user
+  const email = user?.email || '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,10 +34,10 @@ export default function CompleteProfile() {
       return;
     }
 
-    if (!email.trim()) {
+    if (!email) {
       toast({
         title: 'Validation Error',
-        description: 'Email is required.',
+        description: 'Email is required. Please log in again.',
         variant: 'destructive',
       });
       return;
@@ -53,8 +48,8 @@ export default function CompleteProfile() {
     try {
       const { error } = await supabase.rpc('fn_crm_user_upsert_self', {
         p_full_name: fullName.trim(),
-        p_email: email.trim(),
-        p_role: role,
+        p_email: email,
+        p_role: 'Broker', // Hardcoded - users cannot choose their role
         p_region_focus: regionFocus.trim() || null,
         p_active: true,
       });
@@ -109,26 +104,9 @@ export default function CompleteProfile() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-                required
+                readOnly
+                className="bg-muted cursor-not-allowed"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger id="role">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
