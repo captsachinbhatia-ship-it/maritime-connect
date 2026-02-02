@@ -2,11 +2,14 @@ import { supabase } from '@/lib/supabaseClient';
 
 export interface CrmUser {
   id: string;
-  full_name: string | null;
-  role: string | null;
+  auth_user_id: string | null;
+  full_name: string;
   email: string | null;
-  is_active: boolean;
-  created_at: string | null;
+  role: string;
+  region_focus: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export async function listCrmUsers(): Promise<{
@@ -16,7 +19,7 @@ export async function listCrmUsers(): Promise<{
   try {
     const { data, error } = await supabase
       .from('crm_users')
-      .select('id, full_name, role, email, is_active, created_at')
+      .select('id, auth_user_id, full_name, email, role, region_focus, active, created_at, updated_at')
       .order('full_name', { ascending: true });
 
     if (error) {
@@ -34,18 +37,20 @@ export async function listCrmUsers(): Promise<{
 
 export async function createCrmUser(userData: {
   full_name: string;
-  email: string;
+  email?: string;
   role: string;
-  is_active?: boolean;
+  region_focus?: string;
+  active?: boolean;
 }): Promise<{ data: CrmUser | null; error: string | null }> {
   try {
     const { data, error } = await supabase
       .from('crm_users')
       .insert({
         full_name: userData.full_name,
-        email: userData.email,
+        email: userData.email || null,
         role: userData.role,
-        is_active: userData.is_active ?? true,
+        region_focus: userData.region_focus || null,
+        active: userData.active ?? true,
       })
       .select()
       .single();
@@ -65,7 +70,7 @@ export async function createCrmUser(userData: {
 
 export async function updateCrmUser(
   userId: string,
-  updates: Partial<Pick<CrmUser, 'full_name' | 'role' | 'is_active' | 'email'>>
+  updates: Partial<Pick<CrmUser, 'full_name' | 'role' | 'active' | 'email' | 'region_focus'>>
 ): Promise<{ error: string | null }> {
   try {
     const { error } = await supabase
