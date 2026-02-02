@@ -58,7 +58,7 @@ export async function createCrmUserViaEdgeFunction(userData: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${accessToken}`
       },
       body: JSON.stringify({
         full_name: userData.full_name,
