@@ -52,9 +52,9 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
     setIsSubmitting(true);
     const { error } = await createCrmUser({
       full_name: formData.full_name.trim(),
-      email: formData.email.trim(),
+      email: formData.email.trim() || undefined,
       role: formData.role,
-      is_active: true,
+      active: true,
     });
 
     setIsSubmitting(false);

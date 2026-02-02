@@ -50,7 +50,7 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
 
   const handleToggleActive = async (user: CrmUser) => {
     setUpdatingUserId(user.id);
-    const { error } = await updateCrmUser(user.id, { is_active: !user.is_active });
+    const { error } = await updateCrmUser(user.id, { active: !user.active });
     setUpdatingUserId(null);
 
     if (error) {
@@ -64,7 +64,7 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
 
     toast({
       title: 'Success',
-      description: `User ${user.is_active ? 'deactivated' : 'activated'} successfully.`,
+      description: `User ${user.active ? 'deactivated' : 'activated'} successfully.`,
     });
     onRefresh();
   };
@@ -191,12 +191,12 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Switch
-                      checked={user.is_active}
+                      checked={user.active}
                       onCheckedChange={() => handleToggleActive(user)}
                       disabled={updatingUserId === user.id}
                     />
-                    <span className={user.is_active ? 'text-green-600' : 'text-muted-foreground'}>
-                      {user.is_active ? 'Active' : 'Inactive'}
+                    <span className={user.active ? 'text-green-600' : 'text-muted-foreground'}>
+                      {user.active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </TableCell>
