@@ -45,20 +45,36 @@ export async function createCrmUserViaEdgeFunction(userData: {
   region_focus?: string;
 }): Promise<{ data: unknown; error: string | null }> {
   try {
-    const { data, error } = await supabase.functions.invoke('admin-create-user', {
-      body: {
+    // Get the current session to extract the access token
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !sessionData.session) {
+      return { data: null, error: 'Not authenticated' };
+    }
+
+    const accessToken = sessionData.session.access_token;
+
+    const response = await fetch('https://kirwzfxgzzqxtesolhbg.supabase.co/functions/v1/admin-create-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
         full_name: userData.full_name,
         email: userData.email,
         role: userData.role,
         region_focus: userData.region_focus || null,
-      },
+      }),
     });
 
-    if (error) {
-      return { data: null, error: error.message };
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      return { data: null, error: responseData.error || responseData.message || 'Failed to create user' };
     }
 
-    return { data, error: null };
+    return { data: responseData, error: null };
   } catch (err) {
     return {
       data: null,
