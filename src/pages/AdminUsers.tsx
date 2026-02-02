@@ -6,12 +6,27 @@ import { UsersTable } from '@/components/admin/UsersTable';
 import { AddUserModal } from '@/components/admin/AddUserModal';
 import { listCrmUsers, CrmUser } from '@/services/users';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabaseClient';
+import { User } from '@supabase/supabase-js';
 
 export default function AdminUsers() {
   const { toast } = useToast();
   const [users, setUsers] = useState<CrmUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [debugUser, setDebugUser] = useState<User | null>(null);
+  const [debugLoading, setDebugLoading] = useState(true);
+
+  // PART 2: Debug panel - fetch current user session
+  useEffect(() => {
+    const fetchDebugUser = async () => {
+      setDebugLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      setDebugUser(user);
+      setDebugLoading(false);
+    };
+    fetchDebugUser();
+  }, []);
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -36,6 +51,24 @@ export default function AdminUsers() {
 
   return (
     <div className="space-y-6">
+      {/* PART 2: Debug Panel - TEMPORARY */}
+      <Card className="border-dashed border-accent bg-accent/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-accent-foreground">🔧 Session Debug (Temporary)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {debugLoading ? (
+            <p className="text-sm text-muted-foreground">Loading session...</p>
+          ) : debugUser ? (
+            <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-32">
+              {JSON.stringify({ id: debugUser.id, email: debugUser.email, role: debugUser.role }, null, 2)}
+            </pre>
+          ) : (
+            <p className="text-sm text-destructive font-medium">⚠️ Session is NULL - User not authenticated!</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -48,7 +81,7 @@ export default function AdminUsers() {
           <Button variant="outline" size="icon" onClick={fetchUsers} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button onClick={() => setIsAddModalOpen(true)}>
+          <Button onClick={() => setIsAddModalOpen(true)} disabled={!debugUser}>
             <UserPlus className="mr-2 h-4 w-4" />
             Add User
           </Button>

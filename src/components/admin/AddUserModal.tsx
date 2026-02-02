@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { createCrmUserViaEdgeFunction, CRM_ROLES } from '@/services/users';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabaseClient';
 
 interface AddUserModalProps {
   open: boolean;
@@ -39,6 +40,18 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // PART 4: Block UI if session is missing
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast({
+        title: 'Authentication Required',
+        description: 'You must be logged in as Admin to create users.',
+        variant: 'destructive',
+      });
+      console.error('Session missing: supabase.auth.getUser() returned null');
+      return;
+    }
+
     if (!formData.full_name.trim()) {
       toast({
         title: 'Validation Error',
@@ -67,7 +80,7 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
     }
 
     setIsSubmitting(true);
-    const { error } = await createCrmUserViaEdgeFunction({
+    const { data, error } = await createCrmUserViaEdgeFunction({
       full_name: formData.full_name.trim(),
       email: formData.email.trim(),
       role: formData.role,
@@ -76,15 +89,18 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
 
     setIsSubmitting(false);
 
+    // PART 5: Show friendly error from Edge Function
     if (error) {
+      console.error('Edge Function error:', error);
       toast({
-        title: 'Error',
+        title: 'Failed to Create User',
         description: error,
         variant: 'destructive',
       });
       return;
     }
 
+    console.log('User created successfully:', data);
     toast({
       title: 'Success',
       description: 'User invited successfully',
