@@ -71,41 +71,23 @@ export default function Contacts() {
     setError(null);
 
     try {
-      // Step 1: Get assignments based on role and toggle
-      let assignments: ContactAssignment[] = [];
-      
-      if (isAdmin && viewAllContacts) {
-        // Admin + All Contacts: fetch all assignments, then get latest per contact
-        const { data: allAssignments, error: assignmentError } = await supabase
-          .from('contact_assignments')
-          .select('*')
-          .eq('status', 'ACTIVE')
-          .order('assigned_at', { ascending: false });
+      // RLS enforces visibility - just fetch all active assignments
+      // Admin toggle: when viewAllContacts=false, filter by current user's CRM ID
+      let assignmentsQuery = supabase
+        .from('contact_assignments')
+        .select('*')
+        .eq('status', 'ACTIVE')
+        .order('assigned_at', { ascending: false });
 
-        if (assignmentError) {
-          setError(assignmentError.message);
-          setContacts([]);
-          setIsLoading(false);
-          return;
-        }
-
-        // Get latest assignment per contact (client-side distinct on contact_id)
-        const latestByContact = new Map<string, ContactAssignment>();
-        (allAssignments || []).forEach(a => {
-          if (!latestByContact.has(a.contact_id)) {
-            latestByContact.set(a.contact_id, a as ContactAssignment);
-          }
-        });
-        assignments = Array.from(latestByContact.values());
-      } else {
-        // Non-admin or "My Contacts": filter by assigned_to_crm_user_id = current user's CRM ID
+      // For non-admin users or "My Contacts" view, filter by current user's CRM ID
+      if (!isAdmin || !viewAllContacts) {
         if (!user?.id) {
           setContacts([]);
           setIsLoading(false);
           return;
         }
 
-        // First get the current user's CRM ID
+        // Resolve current user's CRM ID
         const { data: crmUser } = await supabase
           .from('crm_users')
           .select('id')
@@ -118,31 +100,28 @@ export default function Contacts() {
           return;
         }
 
-        const { data: userAssignments, error: assignmentError } = await supabase
-          .from('contact_assignments')
-          .select('*')
-          .eq('status', 'ACTIVE')
-          .eq('assigned_to_crm_user_id', crmUser.id)
-          .order('assigned_at', { ascending: false });
-
-        if (assignmentError) {
-          setError(assignmentError.message);
-          setContacts([]);
-          setIsLoading(false);
-          return;
-        }
-
-        // Get latest assignment per contact for this user
-        const latestByContact = new Map<string, ContactAssignment>();
-        (userAssignments || []).forEach(a => {
-          if (!latestByContact.has(a.contact_id)) {
-            latestByContact.set(a.contact_id, a as ContactAssignment);
-          }
-        });
-        assignments = Array.from(latestByContact.values());
+        assignmentsQuery = assignmentsQuery.eq('assigned_to_crm_user_id', crmUser.id);
       }
 
-      // Build assignments map (latest per contact)
+      const { data: allAssignments, error: assignmentError } = await assignmentsQuery;
+
+      if (assignmentError) {
+        setError(assignmentError.message);
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Deduplicate: get latest assignment per contact
+      const latestByContact = new Map<string, ContactAssignment>();
+      (allAssignments || []).forEach(a => {
+        if (!latestByContact.has(a.contact_id)) {
+          latestByContact.set(a.contact_id, a as ContactAssignment);
+        }
+      });
+      const assignments = Array.from(latestByContact.values());
+
+      // Build assignments map
       const assignmentsById: Record<string, ContactAssignment> = {};
       assignments.forEach(a => {
         assignmentsById[a.contact_id] = a;
