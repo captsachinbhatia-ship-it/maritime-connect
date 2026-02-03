@@ -9,6 +9,8 @@ import { AppLayout } from "@/components/AppLayout";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { ConfigError } from "@/components/ConfigError";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
+import AccountSecurity from "./pages/AccountSecurity";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
@@ -37,6 +39,7 @@ const App = () => {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/auth/reset" element={<ResetPassword />} />
               <Route path="/complete-profile" element={<CompleteProfile />} />
               <Route
                 path="/"
@@ -55,6 +58,7 @@ const App = () => {
                 <Route path="unassigned-contacts" element={<UnassignedContacts />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="reporting" element={<Reporting />} />
+                <Route path="account/security" element={<AccountSecurity />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
