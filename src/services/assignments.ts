@@ -194,71 +194,49 @@ export async function upsertOwners(params: {
       .eq('assignment_role', 'SECONDARY')
       .maybeSingle();
 
+    // Preserve stage: use provided stage, or existing primary's stage, or fallback to ASPIRATION
     const finalStage = stage || (existingPrimary?.stage as AssignmentStage) || 'ASPIRATION';
     const now = new Date().toISOString();
 
-    // ========== CLOSE ALL EXISTING ACTIVE ASSIGNMENTS ==========
-    // This ensures we don't hit unique constraint violations
-    // Close by role to be explicit and handle any orphan data
-    console.log('[upsertOwners] Closing all existing ACTIVE assignments for contact:', contact_id);
-    
-    // Close existing PRIMARY if exists
-    if (existingPrimary) {
-      console.log('[upsertOwners] Closing existing PRIMARY:', existingPrimary.id);
-      const { error: closePrimaryError } = await supabase
-        .from('contact_assignments')
-        .update({ status: 'CLOSED' })
-        .eq('id', existingPrimary.id);
+    console.log('[upsertOwners] Contact:', contact_id);
+    console.log('[upsertOwners] Existing PRIMARY:', existingPrimary?.id);
+    console.log('[upsertOwners] Existing SECONDARY:', existingSecondary?.id);
+    console.log('[upsertOwners] Final stage:', finalStage);
 
-      if (closePrimaryError) {
-        console.error('[upsertOwners] Failed to close PRIMARY:', closePrimaryError);
-        if (closePrimaryError.message.includes('row-level security')) {
-          return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
-        }
-        return { data: null, error: closePrimaryError.message };
-      }
-    }
-
-    // Close existing SECONDARY if exists (even if we're not creating a new one)
-    if (existingSecondary) {
-      console.log('[upsertOwners] Closing existing SECONDARY:', existingSecondary.id);
-      const { error: closeSecondaryError } = await supabase
-        .from('contact_assignments')
-        .update({ status: 'CLOSED' })
-        .eq('id', existingSecondary.id);
-
-      if (closeSecondaryError) {
-        console.error('[upsertOwners] Failed to close SECONDARY:', closeSecondaryError);
-        // Don't fail for secondary, continue with primary insertion
-      }
-    }
-
-    // Also close any other ACTIVE assignments that might exist (cleanup orphan data)
-    const { error: closeAllError } = await supabase
+    // ========== STEP 1: CLOSE ALL EXISTING ACTIVE ASSIGNMENTS ==========
+    // Use a single bulk update to close ALL ACTIVE assignments for this contact
+    // This prevents race conditions and ensures unique constraint is satisfied
+    const { data: closedRows, error: closeAllError } = await supabase
       .from('contact_assignments')
       .update({ status: 'CLOSED' })
       .eq('contact_id', contact_id)
-      .eq('status', 'ACTIVE');
+      .eq('status', 'ACTIVE')
+      .select('id');
 
     if (closeAllError) {
-      console.warn('[upsertOwners] Bulk close warning:', closeAllError.message);
-      // Continue anyway - the individual closes should have worked
+      console.error('[upsertOwners] Failed to close existing assignments:', closeAllError);
+      if (closeAllError.message.includes('row-level security')) {
+        return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
+      }
+      return { data: null, error: closeAllError.message };
     }
 
-    // ========== INSERT NEW PRIMARY ==========
+    console.log('[upsertOwners] Closed assignments:', closedRows?.length || 0);
+
+    // ========== STEP 2: INSERT NEW PRIMARY ==========
     const primaryPayload = {
       contact_id,
       assigned_to_crm_user_id: primary_owner_id,
       assigned_by_crm_user_id: currentCrmUserId,
-      assignment_role: 'PRIMARY',
+      assignment_role: 'PRIMARY' as const,
       stage: finalStage,
-      status: 'ACTIVE',
+      status: 'ACTIVE' as const,
       assigned_at: now,
       stage_changed_at: now,
       stage_changed_by_crm_user_id: currentCrmUserId,
     };
 
-    console.log('[upsertOwners] Insert PRIMARY payload:', primaryPayload);
+    console.log('[upsertOwners] Inserting PRIMARY:', primaryPayload);
 
     const { data: primaryData, error: primaryError } = await supabase
       .from('contact_assignments')
@@ -272,27 +250,28 @@ export async function upsertOwners(params: {
         return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
       }
       if (primaryError.message.includes('one_active_assignment') || primaryError.message.includes('duplicate key')) {
-        return { data: null, error: 'An active assignment already exists. Please refresh and try again.' };
+        return { data: null, error: `Constraint error: ${primaryError.message}. Please refresh and try again.` };
       }
       return { data: null, error: primaryError.message };
     }
 
-    // ========== INSERT NEW SECONDARY (if provided) ==========
+    // ========== STEP 3: INSERT NEW SECONDARY (if provided) ==========
     let secondaryData: ContactAssignment | null = null;
+    
     if (secondary_owner_id) {
       const secondaryPayload = {
         contact_id,
         assigned_to_crm_user_id: secondary_owner_id,
         assigned_by_crm_user_id: currentCrmUserId,
-        assignment_role: 'SECONDARY',
+        assignment_role: 'SECONDARY' as const,
         stage: finalStage,
-        status: 'ACTIVE',
+        status: 'ACTIVE' as const,
         assigned_at: now,
         stage_changed_at: now,
         stage_changed_by_crm_user_id: currentCrmUserId,
       };
 
-      console.log('[upsertOwners] Insert SECONDARY payload:', secondaryPayload);
+      console.log('[upsertOwners] Inserting SECONDARY:', secondaryPayload);
 
       const { data: secData, error: secondaryError } = await supabase
         .from('contact_assignments')
@@ -302,9 +281,9 @@ export async function upsertOwners(params: {
 
       if (secondaryError) {
         console.error('[upsertOwners] SECONDARY insert error:', secondaryError);
-        // Primary was successful, so we continue but log the secondary failure
-        if (!secondaryError.message.includes('row-level security')) {
-          console.warn('[upsertOwners] Secondary assignment failed but primary succeeded');
+        // Primary succeeded, log but don't fail the entire operation
+        if (secondaryError.message.includes('one_active_assignment') || secondaryError.message.includes('duplicate key')) {
+          console.warn('[upsertOwners] Secondary constraint violation - primary succeeded but secondary failed');
         }
       } else {
         secondaryData = secData as ContactAssignment;
@@ -319,6 +298,7 @@ export async function upsertOwners(params: {
       error: null,
     };
   } catch (err) {
+    console.error('[upsertOwners] Unexpected error:', err);
     return {
       data: null,
       error: err instanceof Error ? err.message : 'Unknown error occurred'
