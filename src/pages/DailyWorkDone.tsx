@@ -49,7 +49,7 @@ interface CrmUser {
 
 export default function DailyWorkDone() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, crmUser } = useAuth();
   const { toast } = useToast();
 
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
@@ -76,7 +76,7 @@ export default function DailyWorkDone() {
   // Check admin access
   useEffect(() => {
     const checkAdminAccess = async () => {
-      if (!user) {
+      if (!crmUser || !user) {
         setIsAdmin(false);
         return;
       }
@@ -101,7 +101,7 @@ export default function DailyWorkDone() {
     };
 
     checkAdminAccess();
-  }, [user, navigate, toast]);
+  }, [user, crmUser, navigate, toast]);
 
   // Load CRM users for dropdown
   useEffect(() => {

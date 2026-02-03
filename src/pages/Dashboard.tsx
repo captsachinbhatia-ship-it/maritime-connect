@@ -7,14 +7,14 @@ import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, crmUser } = useAuth();
   const [isCEO, setIsCEO] = useState<boolean | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const checkModeAndRole = async () => {
-      if (!user?.id) {
+      if (!crmUser?.id) {
         setIsLoading(false);
         return;
       }
@@ -24,9 +24,9 @@ export default function Dashboard() {
         const [ceoResult, roleResult] = await Promise.all([
           supabase.rpc('is_ceo_mode'),
           supabase
-            .from('crm_users')
+            .from('profiles')
             .select('role')
-            .eq('id', user.id)
+            .eq('id', user?.id)
             .maybeSingle()
         ]);
 
@@ -37,7 +37,7 @@ export default function Dashboard() {
           setIsCEO(ceoResult.data === true);
         }
 
-        // Check if user is admin
+        // Check if user is admin based on profiles table
         if (!roleResult.error && roleResult.data) {
           setIsAdmin(roleResult.data.role === 'ADMIN');
         }
@@ -50,7 +50,7 @@ export default function Dashboard() {
     };
 
     checkModeAndRole();
-  }, [user?.id]);
+  }, [crmUser?.id, user?.id]);
 
   if (isLoading) {
     return (

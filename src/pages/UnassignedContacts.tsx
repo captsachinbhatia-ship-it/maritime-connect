@@ -6,13 +6,13 @@ import { supabase } from '@/lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
 
 export default function UnassignedContacts() {
-  const { user } = useAuth();
+  const { user, crmUser } = useAuth();
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     const checkRole = async () => {
-      if (!user) {
+      if (!crmUser || !user) {
         navigate('/');
         return;
       }
@@ -33,7 +33,7 @@ export default function UnassignedContacts() {
     };
 
     checkRole();
-  }, [user, navigate]);
+  }, [user, crmUser, navigate]);
 
   if (isAdmin === null) {
     return (

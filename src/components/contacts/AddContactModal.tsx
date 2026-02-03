@@ -66,7 +66,7 @@ const PREFERRED_CHANNELS = ['Email', 'Phone', 'WhatsApp', 'ICE', 'LinkedIn'];
 const PHONE_TYPES = ['MOBILE', 'LANDLINE', 'WHATSAPP'];
 
 export function AddContactModal({ onSuccess }: AddContactModalProps) {
-  const { user } = useAuth();
+  const { user, crmUser } = useAuth();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -158,7 +158,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
   };
 
   const onSubmit = async (data: ContactFormData) => {
-    if (!user) {
+    if (!user || !crmUser) {
       setSubmitError('You must be logged in to create a contact');
       return;
     }

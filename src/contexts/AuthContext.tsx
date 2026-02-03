@@ -1,63 +1,106 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
+import {
+  CrmUser,
+  bootstrapAuth,
+  signInWithGoogleOnly,
+  signOutUser,
+  attachAuthStateListener,
+} from '@/lib/authGuard';
 
 interface AuthContextType {
-  user: User | null;
+  user: User | null; // Supabase auth user (for backward compatibility)
   session: Session | null;
+  crmUser: CrmUser | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  authError: { code: string; message: string } | null;
+  signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  clearAuthError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [crmUser, setCrmUser] = useState<CrmUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<{ code: string; message: string } | null>(null);
 
-  useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+  // Derive user from session for backward compatibility
+  const user = session?.user ?? null;
+
+  const runBootstrap = useCallback(async (currentSession: Session | null) => {
+    setLoading(true);
+    setAuthError(null);
+
+    const result = await bootstrapAuth(currentSession);
+
+    if (result.success && result.crmUser) {
+      setSession(currentSession);
+      setCrmUser(result.crmUser);
+      setAuthError(null);
+    } else {
+      setSession(null);
+      setCrmUser(null);
+      if (result.error && result.error.code !== 'NO_SESSION') {
+        setAuthError(result.error);
       }
-    );
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      return { error: error.message };
     }
 
-    return { error: null };
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      runBootstrap(initialSession);
+    });
+
+    // Attach auth state listener
+    const unsubscribe = attachAuthStateListener((event, newSession) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        runBootstrap(newSession);
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setCrmUser(null);
+        setLoading(false);
+      }
+    });
+
+    return unsubscribe;
+  }, [runBootstrap]);
+
+  const signInWithGoogle = async () => {
+    setAuthError(null);
+    return signInWithGoogleOnly();
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+    await signOutUser();
     setSession(null);
+    setCrmUser(null);
+    setAuthError(null);
+  };
+
+  const clearAuthError = () => {
+    setAuthError(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        crmUser,
+        loading,
+        authError,
+        signInWithGoogle,
+        signOut,
+        clearAuthError,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
