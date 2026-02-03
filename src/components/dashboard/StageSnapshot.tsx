@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabaseClient';
-import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +19,6 @@ const stageConfig = [
 ] as const;
 
 export function StageSnapshot() {
-  const { user } = useAuth();
   const [counts, setCounts] = useState<StageCounts>({
     COLD_CALLING: 0,
     ASPIRATION: 0,
@@ -31,27 +29,13 @@ export function StageSnapshot() {
 
   useEffect(() => {
     const fetchStageCounts = async () => {
-      if (!user?.id) return;
-
       setIsLoading(true);
 
       try {
-        // First get the current user's CRM ID
-        const { data: crmUser } = await supabase
-          .from('crm_users')
-          .select('id')
-          .eq('auth_user_id', user.id)
-          .maybeSingle();
-
-        if (!crmUser) {
-          setIsLoading(false);
-          return;
-        }
-
+        // RLS enforces visibility - fetch active assignments directly
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id, stage')
-          .eq('assigned_to_crm_user_id', crmUser.id)
           .eq('status', 'ACTIVE');
 
         // Get unique contact per stage (latest assignment)
@@ -85,7 +69,7 @@ export function StageSnapshot() {
     };
 
     fetchStageCounts();
-  }, [user?.id]);
+  }, []);
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
 

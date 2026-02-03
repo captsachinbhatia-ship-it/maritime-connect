@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabaseClient';
-import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, MessageSquare, Phone, Mail, Video, StickyNote } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -24,35 +23,18 @@ const typeIcons: Record<string, typeof Phone> = {
 };
 
 export function RecentInteractions() {
-  const { user } = useAuth();
   const [interactions, setInteractions] = useState<RecentInteraction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchRecentInteractions = async () => {
-      if (!user?.id) return;
-
       setIsLoading(true);
 
       try {
-        // First get the current user's CRM ID
-        const { data: crmUser } = await supabase
-          .from('crm_users')
-          .select('id')
-          .eq('auth_user_id', user.id)
-          .maybeSingle();
-
-        if (!crmUser) {
-          setInteractions([]);
-          setIsLoading(false);
-          return;
-        }
-
-        // Get contacts assigned to user via CRM ID
+        // RLS enforces visibility - fetch active assignments directly
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
-          .eq('assigned_to_crm_user_id', crmUser.id)
           .eq('status', 'ACTIVE');
 
         const contactIds = assignments?.map(a => a.contact_id) || [];
@@ -100,7 +82,7 @@ export function RecentInteractions() {
     };
 
     fetchRecentInteractions();
-  }, [user?.id]);
+  }, []);
 
   return (
     <Card className="h-full">
