@@ -6,12 +6,13 @@ import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { AssignContactModal } from '@/components/contacts/AssignContactModal';
 import { ContactsSearch } from '@/components/contacts/ContactsSearch';
 import { getCompanyNamesMap } from '@/services/contacts';
-import { ContactAssignment, AssignmentStage } from '@/services/assignments';
+import { ContactAssignment } from '@/services/assignments';
 import { getNextFollowupDueMap } from '@/services/followups';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactWithCompany } from '@/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
@@ -23,6 +24,7 @@ const STAGES: { value: StageType; label: string }[] = [
 ];
 
 export default function Contacts() {
+  const { session, loading: authLoading } = useAuth();
   const [activeStage, setActiveStage] = useState<StageType>('ASPIRATION');
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
@@ -41,51 +43,18 @@ export default function Contacts() {
   const [contactToAssign, setContactToAssign] = useState<ContactWithCompany | null>(null);
 
   const loadContacts = useCallback(async () => {
+    // Don't fetch if session not ready
+    if (!session) {
+      setContacts([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      // RLS enforces visibility - fetch all active assignments visible to user
-      const { data: allAssignments, error: assignmentError } = await supabase
-        .from('contact_assignments')
-        .select('*')
-        .eq('status', 'ACTIVE')
-        .order('assigned_at', { ascending: false });
-
-      if (assignmentError) {
-        setError(assignmentError.message);
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Deduplicate: get latest assignment per contact
-      const latestByContact = new Map<string, ContactAssignment>();
-      (allAssignments || []).forEach(a => {
-        if (!latestByContact.has(a.contact_id)) {
-          latestByContact.set(a.contact_id, a as ContactAssignment);
-        }
-      });
-      const assignments = Array.from(latestByContact.values());
-
-      // Build assignments map
-      const assignmentsById: Record<string, ContactAssignment> = {};
-      assignments.forEach(a => {
-        assignmentsById[a.contact_id] = a;
-      });
-      setAssignmentsMap(assignmentsById);
-
-      // Filter by active stage tab
-      const stageAssignments = assignments.filter(a => a.stage === activeStage);
-      const contactIds = stageAssignments.map(a => a.contact_id);
-
-      if (contactIds.length === 0) {
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Fetch contacts with those IDs - RLS handles visibility
+      // Step 1: Fetch contacts directly - RLS enforces visibility
       let contactsQuery = supabase
         .from('contacts')
         .select(`
@@ -103,7 +72,6 @@ export default function Contacts() {
           is_active,
           updated_at
         `)
-        .in('id', contactIds)
         .order('full_name', { ascending: true });
 
       // Apply search filter
@@ -122,9 +90,46 @@ export default function Contacts() {
 
       let contactsList = (contactsData || []) as ContactWithCompany[];
 
-      // Fetch last interaction data from view
-      if (contactsList.length > 0) {
-        const contactIdsForInteraction = contactsList.map(c => c.id);
+      if (contactsList.length === 0) {
+        setContacts([]);
+        setAssignmentsMap({});
+        setIsLoading(false);
+        return;
+      }
+
+      const allContactIds = contactsList.map(c => c.id);
+
+      // Step 2: Fetch active assignments for these contacts - RLS enforces visibility
+      const { data: allAssignments, error: assignmentError } = await supabase
+        .from('contact_assignments')
+        .select('*')
+        .eq('status', 'ACTIVE')
+        .in('contact_id', allContactIds)
+        .order('assigned_at', { ascending: false });
+
+      if (assignmentError) {
+        console.error('Assignment fetch error:', assignmentError.message);
+      }
+
+      // Build assignments map (contact_id -> assignment with stage)
+      const assignmentsById: Record<string, ContactAssignment> = {};
+      (allAssignments || []).forEach(a => {
+        // Only keep the latest assignment per contact
+        if (!assignmentsById[a.contact_id]) {
+          assignmentsById[a.contact_id] = a as ContactAssignment;
+        }
+      });
+      setAssignmentsMap(assignmentsById);
+
+      // Step 3: Filter contacts by active stage tab
+      const filteredContacts = contactsList.filter(c => {
+        const assignment = assignmentsById[c.id];
+        return assignment?.stage === activeStage;
+      });
+
+      // Step 4: Fetch last interaction data from view
+      if (filteredContacts.length > 0) {
+        const contactIdsForInteraction = filteredContacts.map(c => c.id);
         const { data: lastInteractionData } = await supabase
           .from('v_contacts_last_interaction')
           .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
@@ -140,16 +145,20 @@ export default function Contacts() {
               last_interaction_outcome: li.last_interaction_outcome,
             };
           });
-          contactsList = contactsList.map(c => ({
+          contactsList = filteredContacts.map(c => ({
             ...c,
             ...liMap[c.id],
           }));
+        } else {
+          contactsList = filteredContacts;
         }
+      } else {
+        contactsList = filteredContacts;
       }
 
       setContacts(contactsList);
 
-      // Fetch company names
+      // Step 5: Fetch company names
       const companyIds = contactsList
         .map(c => c.company_id)
         .filter((id): id is string => id !== null);
@@ -161,7 +170,7 @@ export default function Contacts() {
         }
       }
 
-      // Fetch next follow-up due dates
+      // Step 6: Fetch next follow-up due dates
       const contactIdsForFollowups = contactsList.map(c => c.id);
       if (contactIdsForFollowups.length > 0) {
         const followupResult = await getNextFollowupDueMap(contactIdsForFollowups);
@@ -174,11 +183,14 @@ export default function Contacts() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeStage, search]);
+  }, [activeStage, search, session]);
 
+  // Only fetch after auth is ready
   useEffect(() => {
-    loadContacts();
-  }, [loadContacts]);
+    if (!authLoading) {
+      loadContacts();
+    }
+  }, [loadContacts, authLoading]);
 
   const handleRowClick = (contact: ContactWithCompany) => {
     setSelectedContact(contact);
