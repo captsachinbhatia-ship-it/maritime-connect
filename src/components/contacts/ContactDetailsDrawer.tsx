@@ -130,13 +130,19 @@ export function ContactDetailsDrawer({
     if (result.data) {
       setOwners(result.data);
       
-      // Get user names for owners
+      // Get user names for owners (assigned_to, assigned_by, stage_changed_by)
       const userIds: string[] = [];
       if (result.data.primary?.assigned_to_crm_user_id) {
         userIds.push(result.data.primary.assigned_to_crm_user_id);
       }
+      if (result.data.primary?.assigned_by_crm_user_id) {
+        userIds.push(result.data.primary.assigned_by_crm_user_id);
+      }
       if (result.data.secondary?.assigned_to_crm_user_id) {
         userIds.push(result.data.secondary.assigned_to_crm_user_id);
+      }
+      if (result.data.secondary?.assigned_by_crm_user_id) {
+        userIds.push(result.data.secondary.assigned_by_crm_user_id);
       }
       
       if (userIds.length > 0) {
