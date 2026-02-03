@@ -359,7 +359,7 @@ export async function updateStage(params: {
   contact_id: string;
   stage: AssignmentStage;
 }): Promise<{
-  data: ContactAssignment | null;
+  data: ContactAssignment[] | null;
   error: string | null;
 }> {
   try {
@@ -371,23 +371,22 @@ export async function updateStage(params: {
       return { data: null, error: crmError || 'Could not resolve current CRM user' };
     }
 
-    // Get current ACTIVE assignment to preserve assigned_to_crm_user_id
-    const { data: currentAssignment, error: fetchError } = await supabase
+    // Get ALL current ACTIVE assignments to preserve both PRIMARY and SECONDARY
+    const { data: currentAssignments, error: fetchError } = await supabase
       .from('contact_assignments')
-      .select('assigned_to_crm_user_id')
+      .select('assigned_to_crm_user_id, assignment_role')
       .eq('contact_id', contact_id)
-      .eq('status', 'ACTIVE')
-      .maybeSingle();
+      .eq('status', 'ACTIVE');
 
     if (fetchError) {
       return { data: null, error: fetchError.message };
     }
 
-    if (!currentAssignment) {
+    if (!currentAssignments || currentAssignments.length === 0) {
       return { data: null, error: 'No active assignment found for this contact.' };
     }
 
-    // Close existing ACTIVE rows
+    // Close all existing ACTIVE rows
     const { error: closeError } = await supabase
       .from('contact_assignments')
       .update({ status: 'CLOSED' })
@@ -403,25 +402,25 @@ export async function updateStage(params: {
 
     const now = new Date().toISOString();
 
-    // Insert new ACTIVE row with new stage using NEW CRM columns
-    const insertPayload = {
+    // Insert new ACTIVE rows for EACH assignment (preserving both PRIMARY and SECONDARY)
+    const insertPayloads = currentAssignments.map(assignment => ({
       contact_id,
-      assigned_to_crm_user_id: currentAssignment.assigned_to_crm_user_id,
+      assigned_to_crm_user_id: assignment.assigned_to_crm_user_id,
       assigned_by_crm_user_id: currentCrmUserId,
+      assignment_role: assignment.assignment_role,
       stage,
       status: 'ACTIVE',
       assigned_at: now,
       stage_changed_at: now,
       stage_changed_by_crm_user_id: currentCrmUserId,
-    };
+    }));
 
-    console.log('[updateStage] Insert payload:', insertPayload);
+    console.log('[updateStage] Insert payloads:', insertPayloads);
 
     const { data, error } = await supabase
       .from('contact_assignments')
-      .insert(insertPayload)
-      .select()
-      .single();
+      .insert(insertPayloads)
+      .select();
 
     if (error) {
       console.error('[updateStage] Insert error:', error);
@@ -431,7 +430,7 @@ export async function updateStage(params: {
       return { data: null, error: error.message };
     }
 
-    return { data: data as ContactAssignment, error: null };
+    return { data: data as ContactAssignment[], error: null };
   } catch (err) {
     return {
       data: null,
