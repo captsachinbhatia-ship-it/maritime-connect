@@ -34,9 +34,11 @@ export async function signInWithGoogleOnly(): Promise<{ error: string | null }> 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/auth/callback`,
       queryParams: {
-        prompt: 'select_account',
+        prompt: 'consent select_account',
+        access_type: 'offline',
+        include_granted_scopes: 'true',
       },
     },
   });
