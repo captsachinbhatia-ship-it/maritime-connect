@@ -25,7 +25,6 @@ interface ContactsTableProps {
   onRowClick: (contact: ContactWithCompany) => void;
   onAssignClick: (contact: ContactWithCompany) => void;
   onStageChange: () => void;
-  showAssignColumn?: boolean;
 }
 
 
@@ -53,7 +52,6 @@ export function ContactsTable({
   onRowClick,
   onAssignClick,
   onStageChange,
-  showAssignColumn = false,
 }: ContactsTableProps) {
   if (isLoading) {
     return (
