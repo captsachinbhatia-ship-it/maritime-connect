@@ -1,7 +1,7 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { UserPlus, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
-import { ContactAssignment, AssignmentStage } from '@/services/assignments';
+import { ContactAssignment, AssignmentStage, ContactOwners } from '@/services/assignments';
 import { getFollowupStatusLabel } from '@/services/followups';
 import { StageDropdown } from './StageDropdown';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,8 @@ interface ContactsTableProps {
   contacts: ContactWithCompany[];
   companyNamesMap: Record<string, string>;
   assignmentsMap: Record<string, ContactAssignment>;
+  ownersMap: Record<string, ContactOwners>;
+  ownerNamesMap: Record<string, string>;
   nextFollowupMap: Record<string, string | null>;
   isLoading: boolean;
   onRowClick: (contact: ContactWithCompany) => void;
@@ -47,6 +49,8 @@ export function ContactsTable({
   contacts,
   companyNamesMap,
   assignmentsMap,
+  ownersMap,
+  ownerNamesMap,
   nextFollowupMap,
   isLoading,
   onRowClick,
@@ -55,14 +59,14 @@ export function ContactsTable({
 }: ContactsTableProps) {
   if (isLoading) {
     return (
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Full Name</TableHead>
               <TableHead>Company</TableHead>
-              <TableHead>Designation</TableHead>
-              <TableHead>Phone</TableHead>
+              <TableHead>Primary Owner</TableHead>
+              <TableHead>Secondary Owner</TableHead>
               <TableHead>Stage</TableHead>
               <TableHead>Next Follow-up</TableHead>
               <TableHead>Last Activity</TableHead>
@@ -75,7 +79,7 @@ export function ContactsTable({
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
@@ -96,13 +100,6 @@ export function ContactsTable({
     );
   }
 
-  const formatPhone = (contact: ContactWithCompany) => {
-    if (contact.phone) {
-      const code = contact.country_code ? `${contact.country_code} ` : '';
-      return `${code}${contact.phone}`;
-    }
-    return '-';
-  };
 
   const formatLastInteraction = (contact: ContactWithCompany) => {
     if (!contact.last_interaction_at) return null;
@@ -124,14 +121,14 @@ export function ContactsTable({
   };
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Full Name</TableHead>
             <TableHead>Company</TableHead>
-            <TableHead>Designation</TableHead>
-            <TableHead>Phone</TableHead>
+            <TableHead>Primary Owner</TableHead>
+            <TableHead>Secondary Owner</TableHead>
             <TableHead>Stage</TableHead>
             <TableHead>Next Follow-up</TableHead>
             <TableHead>Last Activity</TableHead>
@@ -145,6 +142,9 @@ export function ContactsTable({
             const lastInteraction = formatLastInteraction(contact);
             const nextFollowupDue = nextFollowupMap[contact.id] || null;
             const followupStatus = getFollowupStatusLabel(nextFollowupDue);
+            const owners = ownersMap[contact.id];
+            const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id;
+            const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id;
             
             return (
               <TableRow
@@ -158,8 +158,16 @@ export function ContactsTable({
                 <TableCell>
                   {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
                 </TableCell>
-                <TableCell>{contact.designation || '-'}</TableCell>
-                <TableCell>{formatPhone(contact)}</TableCell>
+                <TableCell className="text-sm">
+                  {primaryOwnerId 
+                    ? ownerNamesMap[primaryOwnerId] || 'Unknown'
+                    : <span className="text-muted-foreground">Unassigned</span>}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {secondaryOwnerId 
+                    ? ownerNamesMap[secondaryOwnerId] || 'Unknown'
+                    : <span className="text-muted-foreground/50">—</span>}
+                </TableCell>
                 <TableCell>
                   {currentStage ? (
                     <StageDropdown
