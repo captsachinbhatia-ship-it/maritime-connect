@@ -61,11 +61,15 @@ const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
   UPCOMING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
 };
 
+interface ContactWithRole extends ContactWithCompany {
+  userRole: 'PRIMARY' | 'SECONDARY';
+}
+
 export function MyContactsTab() {
   const { session, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [activeStage, setActiveStage] = useState<StageType>('ASPIRATION');
-  const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
+  const [contacts, setContacts] = useState<ContactWithRole[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -74,7 +78,7 @@ export function MyContactsTab() {
   const [search, setSearch] = useState('');
 
   // Drawer state
-  const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
+  const [selectedContact, setSelectedContact] = useState<ContactWithRole | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const loadContacts = useCallback(async () => {
@@ -98,30 +102,69 @@ export function MyContactsTab() {
         return;
       }
 
-      // Query contact_assignments for this user's active assignments (PRIMARY or SECONDARY) in the selected stage
-      const { data: assignments, error: assignmentError } = await supabase
+      // Step 1: Get all ACTIVE assignments where the current user is PRIMARY or SECONDARY
+      const { data: userAssignments, error: userAssignmentError } = await supabase
         .from('contact_assignments')
-        .select('contact_id, stage')
+        .select('contact_id, assignment_role')
         .eq('status', 'ACTIVE')
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .eq('stage', activeStage);
+        .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
-      if (assignmentError) {
-        setError(assignmentError.message);
+      if (userAssignmentError) {
+        setError(userAssignmentError.message);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      const contactIds = [...new Set((assignments || []).map(a => a.contact_id))];
+      // Build map of contact_id -> user's role
+      const userRoleMap: Record<string, 'PRIMARY' | 'SECONDARY'> = {};
+      (userAssignments || []).forEach(a => {
+        // If user is both PRIMARY and SECONDARY (shouldn't happen), prefer PRIMARY
+        if (!userRoleMap[a.contact_id] || a.assignment_role === 'PRIMARY') {
+          userRoleMap[a.contact_id] = a.assignment_role as 'PRIMARY' | 'SECONDARY';
+        }
+      });
 
-      if (contactIds.length === 0) {
+      const contactIdsWithUser = Object.keys(userRoleMap);
+
+      if (contactIdsWithUser.length === 0) {
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      // Fetch contacts
+      // Step 2: Get the PRIMARY assignments for these contacts to determine stage (source of truth)
+      const { data: primaryAssignments, error: primaryError } = await supabase
+        .from('contact_assignments')
+        .select('contact_id, stage')
+        .in('contact_id', contactIdsWithUser)
+        .eq('status', 'ACTIVE')
+        .eq('assignment_role', 'PRIMARY');
+
+      if (primaryError) {
+        setError(primaryError.message);
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Build map of contact_id -> stage from PRIMARY assignment
+      const stageMap: Record<string, string> = {};
+      (primaryAssignments || []).forEach(a => {
+        stageMap[a.contact_id] = a.stage;
+      });
+
+      // Filter contacts that are in the active stage
+      const contactIdsInStage = contactIdsWithUser.filter(id => stageMap[id] === activeStage);
+
+      if (contactIdsInStage.length === 0) {
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 3: Fetch contacts
       let contactsQuery = supabase
         .from('contacts')
         .select(`
@@ -139,7 +182,7 @@ export function MyContactsTab() {
           is_active,
           updated_at
         `)
-        .in('id', contactIds)
+        .in('id', contactIdsInStage)
         .order('full_name', { ascending: true });
 
       if (search.trim()) {
@@ -155,7 +198,11 @@ export function MyContactsTab() {
         return;
       }
 
-      let contactsList = (contactsData || []) as ContactWithCompany[];
+      // Add user role to each contact
+      let contactsList = (contactsData || []).map(c => ({
+        ...c,
+        userRole: userRoleMap[c.id],
+      })) as ContactWithRole[];
 
       // Fetch last interaction data
       if (contactsList.length > 0) {
@@ -339,7 +386,7 @@ export function MyContactsTab() {
     }
   };
 
-  const handleRowClick = (e: React.MouseEvent, contact: ContactWithCompany) => {
+  const handleRowClick = (e: React.MouseEvent, contact: ContactWithRole) => {
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('[role="menu"]')) {
       return;
@@ -348,7 +395,7 @@ export function MyContactsTab() {
     setDrawerOpen(true);
   };
 
-  const formatLastInteraction = (contact: ContactWithCompany) => {
+  const formatLastInteraction = (contact: ContactWithRole) => {
     if (!contact.last_interaction_at) return null;
     const type = contact.last_interaction_type || '';
     const timeAgo = formatDistanceToNow(new Date(contact.last_interaction_at), { addSuffix: true });
@@ -368,6 +415,7 @@ export function MyContactsTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Full Name</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Next Follow-up</TableHead>
                 <TableHead>Last Activity</TableHead>
@@ -378,6 +426,7 @@ export function MyContactsTab() {
               {Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
@@ -404,6 +453,7 @@ export function MyContactsTab() {
           <TableHeader>
             <TableRow>
               <TableHead>Full Name</TableHead>
+              <TableHead>Role</TableHead>
               <TableHead>Company</TableHead>
               <TableHead>Next Follow-up</TableHead>
               <TableHead>Last Activity</TableHead>
@@ -425,6 +475,14 @@ export function MyContactsTab() {
                 >
                   <TableCell className="font-medium">
                     {contact.full_name || '-'}
+                  </TableCell>
+                  <TableCell>
+                    <Badge 
+                      variant={contact.userRole === 'PRIMARY' ? 'default' : 'secondary'}
+                      className="text-xs"
+                    >
+                      {contact.userRole === 'PRIMARY' ? 'Primary' : 'Secondary'}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
