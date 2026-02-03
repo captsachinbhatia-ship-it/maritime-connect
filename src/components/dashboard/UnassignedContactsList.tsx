@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, UserPlus, RefreshCw, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { listCrmUsersForAssignment, CrmUserForAssignment, getCurrentCrmUserId } from '@/services/profiles';
+import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
 import { upsertAssignment } from '@/services/assignments';
 
 interface UnassignedContact {
@@ -95,13 +95,15 @@ export function UnassignedContactsList() {
         description: 'The contact has been assigned.',
       });
 
-      // Remove from local list
-      setContacts(prev => prev.filter(c => c.id !== contactId));
+      // Clear selection and refresh list from server
       setSelectedUsers(prev => {
         const updated = { ...prev };
         delete updated[contactId];
         return updated;
       });
+      
+      // Refresh the full list to ensure data integrity
+      await fetchData();
     } catch (error) {
       console.error('[UnassignedContactsList] Unexpected error:', error);
       toast({
