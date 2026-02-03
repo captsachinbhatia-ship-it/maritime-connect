@@ -23,6 +23,7 @@ export async function listCrmUsers(): Promise<{
     const { data, error } = await supabase
       .from('crm_users')
       .select('id, auth_user_id, full_name, email, role, region_focus, active, created_at, updated_at')
+      .eq('active', true)
       .order('full_name', { ascending: true });
 
     if (error) {
