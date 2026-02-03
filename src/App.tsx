@@ -20,6 +20,7 @@ import FollowupsOversight from "./pages/FollowupsOversight";
 import AdminUsers from "./pages/AdminUsers";
 import DailyWorkDone from "./pages/DailyWorkDone";
 import CompleteProfile from "./pages/CompleteProfile";
+import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/complete-profile" element={<CompleteProfile />} />
               <Route
                 path="/"
