@@ -38,14 +38,6 @@ export default function Contacts() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   
-  // Debug state
-  const [debugInfo, setDebugInfo] = useState<{
-    currentCrmUserId: string | null;
-    assignmentRows: number;
-    contactRows: number;
-    selectedStage: string;
-  } | null>(null);
-  
   // Drawer state
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -72,12 +64,6 @@ export default function Contacts() {
       if (crmError || !currentCrmUserId) {
         console.error('Failed to get CRM user ID:', crmError);
         setError(crmError || 'CRM user not found');
-        setDebugInfo({
-          currentCrmUserId: null,
-          assignmentRows: 0,
-          contactRows: 0,
-          selectedStage: activeStage,
-        });
         setContacts([]);
         setIsLoading(false);
         return;
@@ -94,12 +80,6 @@ export default function Contacts() {
       if (assignmentError) {
         console.error('Assignment query error:', assignmentError.message);
         setError(assignmentError.message);
-        setDebugInfo({
-          currentCrmUserId,
-          assignmentRows: 0,
-          contactRows: 0,
-          selectedStage: activeStage,
-        });
         setContacts([]);
         setIsLoading(false);
         return;
@@ -115,21 +95,7 @@ export default function Contacts() {
       });
       setAssignmentsMap(assignmentsById);
 
-      // Debug log
-      console.log('[Contacts Debug]', {
-        currentCrmUserId,
-        assignmentRows: assignmentsList.length,
-        selectedStage: activeStage,
-        contactIds,
-      });
-
       if (contactIds.length === 0) {
-        setDebugInfo({
-          currentCrmUserId,
-          assignmentRows: 0,
-          contactRows: 0,
-          selectedStage: activeStage,
-        });
         setContacts([]);
         setIsLoading(false);
         return;
@@ -166,28 +132,12 @@ export default function Contacts() {
       if (contactsError) {
         console.error('Contacts query error:', contactsError.message);
         setError(contactsError.message);
-        setDebugInfo({
-          currentCrmUserId,
-          assignmentRows: assignmentsList.length,
-          contactRows: 0,
-          selectedStage: activeStage,
-        });
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
       let contactsList = (contactsData || []) as ContactWithCompany[];
-
-      // Update debug info
-      setDebugInfo({
-        currentCrmUserId,
-        assignmentRows: assignmentsList.length,
-        contactRows: contactsList.length,
-        selectedStage: activeStage,
-      });
-
-      console.log('[Contacts Debug] Contacts fetched:', contactsList.length);
 
       // Step 4: Fetch last interaction data from view
       if (contactsList.length > 0) {
@@ -322,18 +272,6 @@ export default function Contacts() {
         <AddContactModal onSuccess={handleContactAdded} />
       </div>
 
-      {/* Temporary Debug Info */}
-      {debugInfo && (
-        <div className="rounded-md border border-amber-500 bg-amber-50 p-3 text-xs font-mono dark:bg-amber-950 dark:border-amber-700">
-          <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">🔍 Debug Info (temporary):</p>
-          <ul className="space-y-0.5 text-amber-700 dark:text-amber-400">
-            <li>currentCrmUserId: <span className="font-bold">{debugInfo.currentCrmUserId || 'null'}</span></li>
-            <li>selectedStage: <span className="font-bold">{debugInfo.selectedStage}</span></li>
-            <li>assignmentRows: <span className="font-bold">{debugInfo.assignmentRows}</span></li>
-            <li>contactRows: <span className="font-bold">{debugInfo.contactRows}</span></li>
-          </ul>
-        </div>
-      )}
 
       {error && (
         <Alert variant="destructive">
