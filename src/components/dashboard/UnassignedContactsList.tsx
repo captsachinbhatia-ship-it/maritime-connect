@@ -4,10 +4,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/lib/supabaseClient';
 import { Loader2, UserPlus, RefreshCw, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { listProfilesForAssignment, Profile } from '@/services/profiles';
+import { listCrmUsersForAssignment, CrmUserForAssignment, getCurrentCrmUserId } from '@/services/profiles';
+import { upsertAssignment } from '@/services/assignments';
 
 interface UnassignedContact {
   id: string;
@@ -20,7 +20,7 @@ interface UnassignedContact {
 
 export function UnassignedContactsList() {
   const [contacts, setContacts] = useState<UnassignedContact[]>([]);
-  const [users, setUsers] = useState<Profile[]>([]);
+  const [crmUsers, setCrmUsers] = useState<CrmUserForAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<Record<string, string>>({});
@@ -29,23 +29,28 @@ export function UnassignedContactsList() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch unassigned contacts from view
+      // Fetch unassigned contacts from view using dynamic import to avoid circular deps
+      const { supabase } = await import('@/lib/supabaseClient');
       const { data: contactsData, error: contactsError } = await supabase
         .from('v_unassigned_contacts')
         .select('*')
         .limit(50);
 
       if (contactsError) {
-        console.error('Error fetching unassigned contacts:', contactsError);
+        console.error('[UnassignedContactsList] Error fetching contacts:', contactsError);
       } else {
         setContacts(contactsData || []);
       }
 
-      // Fetch users for assignment dropdown
-      const { data: usersData } = await listProfilesForAssignment();
-      setUsers(usersData || []);
+      // Fetch CRM users for assignment dropdown
+      const { data: crmUsersData, error: crmError } = await listCrmUsersForAssignment();
+      if (crmError) {
+        console.error('[UnassignedContactsList] Error fetching CRM users:', crmError);
+      } else {
+        setCrmUsers(crmUsersData || []);
+      }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('[UnassignedContactsList] Failed to fetch data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -56,8 +61,8 @@ export function UnassignedContactsList() {
   }, []);
 
   const handleAssign = async (contactId: string) => {
-    const userId = selectedUsers[contactId];
-    if (!userId) {
+    const selectedCrmUserId = selectedUsers[contactId];
+    if (!selectedCrmUserId) {
       toast({
         title: 'Select a user',
         description: 'Please select a user to assign this contact to.',
@@ -68,30 +73,26 @@ export function UnassignedContactsList() {
 
     setAssigningId(contactId);
     try {
-      // Get current user for assigned_by
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('Not authenticated');
-      }
+      // Use upsertAssignment which handles CRM user resolution internally
+      const result = await upsertAssignment({
+        contact_id: contactId,
+        assigned_to_crm_user_id: selectedCrmUserId,
+        stage: 'COLD_CALLING',
+      });
 
-      // Insert new assignment with ACTIVE status
-      const { error } = await supabase
-        .from('contact_assignments')
-        .insert({
-          contact_id: contactId,
-          assigned_to: userId,
-          assigned_by: user.id,
-          stage: 'ASPIRATION',
-          status: 'ACTIVE',
+      if (result.error) {
+        console.error('[UnassignedContactsList] Assignment error:', result.error);
+        toast({
+          title: 'Assignment failed',
+          description: result.error,
+          variant: 'destructive',
         });
-
-      if (error) {
-        throw error;
+        return;
       }
 
       toast({
-        title: 'Contact assigned',
-        description: 'The contact has been assigned successfully.',
+        title: 'Assigned successfully',
+        description: 'The contact has been assigned.',
       });
 
       // Remove from local list
@@ -102,10 +103,10 @@ export function UnassignedContactsList() {
         return updated;
       });
     } catch (error) {
-      console.error('Assignment error:', error);
+      console.error('[UnassignedContactsList] Unexpected error:', error);
       toast({
         title: 'Assignment failed',
-        description: error instanceof Error ? error.message : 'Failed to assign contact.',
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
         variant: 'destructive',
       });
     } finally {
@@ -187,14 +188,9 @@ export function UnassignedContactsList() {
                           <SelectValue placeholder="Select user..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {users.map((user) => (
+                          {crmUsers.map((user) => (
                             <SelectItem key={user.id} value={user.id}>
-                              {user.full_name || 'Unknown User'}
-                              {user.role && (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                  ({user.role})
-                                </span>
-                              )}
+                              {user.full_name}{user.email ? ` (${user.email})` : ''}
                             </SelectItem>
                           ))}
                         </SelectContent>
