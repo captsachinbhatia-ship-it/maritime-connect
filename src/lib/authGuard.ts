@@ -35,6 +35,9 @@ export async function signInWithGoogleOnly(): Promise<{ error: string | null }> 
     provider: 'google',
     options: {
       redirectTo: window.location.origin,
+      queryParams: {
+        prompt: 'select_account',
+      },
     },
   });
 
