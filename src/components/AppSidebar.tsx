@@ -10,7 +10,8 @@ import {
   Anchor,
   CalendarClock,
   ClipboardCheck,
-  UserCog
+  UserCog,
+  UserX
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,6 +42,7 @@ const navItems = [
 const adminNavItems = [
   { title: 'Follow-ups Oversight', url: '/followups-oversight', icon: ClipboardCheck },
   { title: 'Admin – Users', url: '/admin-users', icon: UserCog },
+  { title: 'Unassigned Contacts', url: '/unassigned-contacts', icon: UserX },
 ];
 
 export function AppSidebar() {
