@@ -18,9 +18,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useAuth } from '@/contexts/AuthContext';
-import { listProfilesForAssignment, Profile } from '@/services/profiles';
+import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
 import { upsertAssignment, AssignmentStage, ContactAssignment } from '@/services/assignments';
+import { toast } from '@/hooks/use-toast';
 
 interface AssignContactModalProps {
   open: boolean;
@@ -46,50 +46,44 @@ export function AssignContactModal({
   currentAssignment,
   onSuccess,
 }: AssignContactModalProps) {
-  const { user } = useAuth();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [selectedStage, setSelectedStage] = useState<AssignmentStage>('ASPIRATION');
+  const [crmUsers, setCrmUsers] = useState<CrmUserForAssignment[]>([]);
+  const [selectedCrmUserId, setSelectedCrmUserId] = useState<string>('');
+  const [selectedStage, setSelectedStage] = useState<AssignmentStage>('COLD_CALLING');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      loadProfiles();
+      loadCrmUsers();
       // Pre-fill with current assignment if exists
       if (currentAssignment) {
-        setSelectedUserId(currentAssignment.assigned_to || '');
+        setSelectedCrmUserId(currentAssignment.assigned_to_crm_user_id || '');
         setSelectedStage(currentAssignment.stage);
       } else {
-        setSelectedUserId('');
-        setSelectedStage('ASPIRATION');
+        setSelectedCrmUserId('');
+        setSelectedStage('COLD_CALLING');
       }
     }
   }, [open, currentAssignment]);
 
-  const loadProfiles = async () => {
+  const loadCrmUsers = async () => {
     setIsLoading(true);
     setError(null);
     
-    const result = await listProfilesForAssignment();
+    const result = await listCrmUsersForAssignment();
     
     if (result.error) {
       setError(result.error);
     } else {
-      setProfiles(result.data || []);
+      setCrmUsers(result.data || []);
     }
     
     setIsLoading(false);
   };
 
   const handleSave = async () => {
-    if (!user) {
-      setError('You must be logged in to assign contacts');
-      return;
-    }
-
-    if (!selectedUserId) {
+    if (!selectedCrmUserId) {
       setError('Please select a user to assign');
       return;
     }
@@ -99,9 +93,8 @@ export function AssignContactModal({
 
     const result = await upsertAssignment({
       contact_id: contactId,
-      assigned_to: selectedUserId,
+      assigned_to_crm_user_id: selectedCrmUserId,
       stage: selectedStage,
-      currentUserId: user.id,
     });
 
     if (result.error) {
@@ -109,6 +102,11 @@ export function AssignContactModal({
       setIsSaving(false);
       return;
     }
+
+    toast({
+      title: 'Success',
+      description: 'Assigned successfully',
+    });
 
     setIsSaving(false);
     onOpenChange(false);
@@ -120,6 +118,14 @@ export function AssignContactModal({
       setError(null);
     }
     onOpenChange(newOpen);
+  };
+
+  // Format label: full_name (email)
+  const formatUserLabel = (user: CrmUserForAssignment): string => {
+    if (user.email) {
+      return `${user.full_name} (${user.email})`;
+    }
+    return user.full_name;
   };
 
   return (
@@ -150,17 +156,14 @@ export function AssignContactModal({
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Assign To *</Label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+              <Select value={selectedCrmUserId} onValueChange={setSelectedCrmUserId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select user..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {profiles.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.full_name || 'Unknown'} 
-                      {profile.role && (
-                        <span className="ml-2 text-muted-foreground">({profile.role})</span>
-                      )}
+                  {crmUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {formatUserLabel(user)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -194,7 +197,7 @@ export function AssignContactModal({
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSaving || isLoading || !selectedUserId}>
+          <Button onClick={handleSave} disabled={isSaving || isLoading || !selectedCrmUserId}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {currentAssignment ? 'Update Assignment' : 'Assign Contact'}
           </Button>
