@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -27,8 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Trash2, Loader2 } from 'lucide-react';
-import { CrmUser, updateCrmUser, deleteCrmUser, CRM_ROLES } from '@/services/users';
+import { UserX, UserCheck, Loader2 } from 'lucide-react';
+import { CrmUser, updateCrmUser, CRM_ROLES } from '@/services/users';
 import { useToast } from '@/hooks/use-toast';
 
 interface UsersTableProps {
@@ -40,15 +39,27 @@ interface UsersTableProps {
 export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
   const { toast } = useToast();
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; user: CrmUser | null }>({
+  const [statusConfirm, setStatusConfirm] = useState<{ 
+    open: boolean; 
+    user: CrmUser | null;
+    action: 'deactivate' | 'reactivate';
+  }>({
     open: false,
     user: null,
+    action: 'deactivate',
   });
 
-  const handleToggleActive = async (user: CrmUser) => {
-    setUpdatingUserId(user.id);
-    const { error } = await updateCrmUser(user.id, { active: !user.active });
+  const handleStatusChange = async () => {
+    if (!statusConfirm.user) return;
+
+    const newActive = statusConfirm.action === 'reactivate';
+    
+    setUpdatingUserId(statusConfirm.user.id);
+    const { error } = await updateCrmUser(statusConfirm.user.id, { 
+      active: newActive,
+    });
     setUpdatingUserId(null);
+    setStatusConfirm({ open: false, user: null, action: 'deactivate' });
 
     if (error) {
       toast({
@@ -61,7 +72,7 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
 
     toast({
       title: 'Success',
-      description: `User ${user.active ? 'deactivated' : 'activated'} successfully.`,
+      description: `User ${newActive ? 'reactivated' : 'deactivated'} successfully.`,
     });
     onRefresh();
   };
@@ -83,30 +94,6 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
     toast({
       title: 'Success',
       description: 'Role updated successfully.',
-    });
-    onRefresh();
-  };
-
-  const handleDelete = async () => {
-    if (!deleteConfirm.user) return;
-
-    setUpdatingUserId(deleteConfirm.user.id);
-    const { error } = await deleteCrmUser(deleteConfirm.user.id);
-    setUpdatingUserId(null);
-    setDeleteConfirm({ open: false, user: null });
-
-    if (error) {
-      toast({
-        title: 'Error',
-        description: error,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    toast({
-      title: 'Success',
-      description: 'User deleted successfully.',
     });
     onRefresh();
   };
@@ -152,13 +139,13 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Region Focus</TableHead>
-              <TableHead>Active</TableHead>
-              <TableHead className="w-[100px]">Actions</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-[140px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.map((user) => (
-              <TableRow key={user.id}>
+              <TableRow key={user.id} className={!user.active ? 'opacity-60' : ''}>
                 <TableCell className="font-medium">
                   {user.full_name || 'N/A'}
                 </TableCell>
@@ -167,7 +154,7 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
                   <Select
                     value={user.role || ''}
                     onValueChange={(value) => handleRoleChange(user, value)}
-                    disabled={updatingUserId === user.id}
+                    disabled={updatingUserId === user.id || !user.active}
                   >
                     <SelectTrigger className="w-[160px]">
                       <SelectValue>
@@ -189,27 +176,33 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
                   {user.region_focus || '—'}
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={user.active}
-                      onCheckedChange={() => handleToggleActive(user)}
-                      disabled={updatingUserId === user.id}
-                    />
-                    <span className={user.active ? 'text-green-600' : 'text-muted-foreground'}>
-                      {user.active ? 'Yes' : 'No'}
-                    </span>
-                  </div>
+                  <Badge variant={user.active ? 'default' : 'secondary'}>
+                    {user.active ? 'Active' : 'Inactive'}
+                  </Badge>
                 </TableCell>
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleteConfirm({ open: true, user })}
-                    disabled={updatingUserId === user.id}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {user.active ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setStatusConfirm({ open: true, user, action: 'deactivate' })}
+                      disabled={updatingUserId === user.id}
+                    >
+                      <UserX className="mr-1 h-4 w-4" />
+                      Deactivate
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStatusConfirm({ open: true, user, action: 'reactivate' })}
+                      disabled={updatingUserId === user.id}
+                    >
+                      <UserCheck className="mr-1 h-4 w-4" />
+                      Reactivate
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -218,21 +211,35 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
       </div>
 
       <AlertDialog
-        open={deleteConfirm.open}
-        onOpenChange={(open) => setDeleteConfirm({ open, user: open ? deleteConfirm.user : null })}
+        open={statusConfirm.open}
+        onOpenChange={(open) => setStatusConfirm({ open, user: open ? statusConfirm.user : null, action: statusConfirm.action })}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogTitle>
+              {statusConfirm.action === 'deactivate' ? 'Deactivate User' : 'Reactivate User'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {deleteConfirm.user?.full_name || 'this user'}? This
-              action cannot be undone.
+              {statusConfirm.action === 'deactivate' ? (
+                <>
+                  Deactivate <strong>{statusConfirm.user?.full_name || 'this user'}</strong>? 
+                  They will lose access and will not appear in assignment lists.
+                </>
+              ) : (
+                <>
+                  Reactivate <strong>{statusConfirm.user?.full_name || 'this user'}</strong>? 
+                  They will regain access and appear in assignment lists.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-              Delete
+            <AlertDialogAction 
+              onClick={handleStatusChange}
+              className={statusConfirm.action === 'deactivate' ? 'bg-destructive hover:bg-destructive/90' : ''}
+            >
+              {statusConfirm.action === 'deactivate' ? 'Deactivate' : 'Reactivate'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

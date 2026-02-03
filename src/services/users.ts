@@ -15,16 +15,21 @@ export interface CrmUser {
 export const CRM_ROLES = ['ShipBroker', 'Desk Manager', 'Operations', 'Accounts Executive'] as const;
 export type CrmRole = typeof CRM_ROLES[number];
 
-export async function listCrmUsers(): Promise<{
+export async function listCrmUsers(options?: { includeInactive?: boolean }): Promise<{
   data: CrmUser[] | null;
   error: string | null;
 }> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('crm_users')
-      .select('id, auth_user_id, full_name, email, role, region_focus, active, created_at, updated_at')
-      .eq('active', true)
-      .order('full_name', { ascending: true });
+      .select('id, auth_user_id, full_name, email, role, region_focus, active, created_at, updated_at');
+
+    // Only filter by active if not including inactive users
+    if (!options?.includeInactive) {
+      query = query.eq('active', true);
+    }
+
+    const { data, error } = await query.order('full_name', { ascending: true });
 
     if (error) {
       return { data: null, error: error.message };
