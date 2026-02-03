@@ -31,24 +31,26 @@ export function UnassignedContactsList() {
     try {
       const { supabase } = await import('@/lib/supabaseClient');
       
-      // Query: Get contacts where NO ACTIVE assignment exists with assigned_to_crm_user_id populated
-      // Step 1: Get all contact IDs that have an ACTIVE assignment with a non-null assigned_to_crm_user_id
-      const { data: activeAssignments, error: assignmentsError } = await supabase
+      // Query: Get contacts where NO ACTIVE PRIMARY assignment exists
+      // A contact is "unassigned" if it has no ACTIVE PRIMARY owner
+      // Step 1: Get all contact IDs that have an ACTIVE PRIMARY assignment with a non-null assigned_to_crm_user_id
+      const { data: activePrimaryAssignments, error: assignmentsError } = await supabase
         .from('contact_assignments')
         .select('contact_id')
         .eq('status', 'ACTIVE')
+        .eq('assignment_role', 'PRIMARY')
         .not('assigned_to_crm_user_id', 'is', null);
 
       if (assignmentsError) {
-        console.error('[UnassignedContactsList] Error fetching active assignments:', assignmentsError);
+        console.error('[UnassignedContactsList] Error fetching active PRIMARY assignments:', assignmentsError);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
       // Build a Set of assigned contact IDs for efficient lookup
-      const assignedContactIds = new Set((activeAssignments || []).map(a => a.contact_id));
-      console.log('[UnassignedContactsList] Contacts with ACTIVE+assigned_to:', assignedContactIds.size);
+      const assignedContactIds = new Set((activePrimaryAssignments || []).map(a => a.contact_id));
+      console.log('[UnassignedContactsList] Contacts with ACTIVE PRIMARY:', assignedContactIds.size);
 
       // Step 2: Get all active contacts
       const { data: allContacts, error: contactsError } = await supabase
