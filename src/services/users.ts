@@ -15,44 +15,6 @@ export interface CrmUser {
 export const CRM_ROLES = ['ShipBroker', 'Desk Manager', 'Operations', 'Accounts Executive'] as const;
 export type CrmRole = typeof CRM_ROLES[number];
 
-// Type guard for Supabase FunctionsHttpError
-type FnErrorPayload = { error?: string; details?: string };
-
-function isFunctionsHttpError(err: unknown): err is { context?: Response; message?: string } {
-  return !!err && typeof err === 'object' && 'context' in err;
-}
-
-// Extract the real error message from Edge Function responses
-async function readFnError(err: unknown): Promise<string> {
-  // True network / CORS / DNS type errors
-  if (err instanceof TypeError) {
-    return `Network error: ${err.message}`;
-  }
-
-  // Supabase FunctionsHttpError - extract response body
-  if (isFunctionsHttpError(err) && err.context) {
-    try {
-      const contentType = err.context.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const payload = (await err.context.json()) as FnErrorPayload;
-        return payload.details
-          ? `${payload.error ?? 'Function error'}: ${payload.details}`
-          : payload.error ?? err.message ?? 'Function error';
-      }
-      const text = await err.context.text();
-      return text || err.message || 'Function error';
-    } catch {
-      return err.message || 'Function error';
-    }
-  }
-
-  // Generic fallback
-  if (err instanceof Error) {
-    return err.message;
-  }
-  return typeof err === 'string' ? err : JSON.stringify(err);
-}
-
 export async function listCrmUsers(): Promise<{
   data: CrmUser[] | null;
   error: string | null;
@@ -93,26 +55,43 @@ export async function createCrmUserViaEdgeFunction(userData: {
     return { data: null, error: 'You must be logged in to create users' };
   }
 
-  const requestBody = {
+  const input = {
     full_name: userData.full_name,
     email: userData.email,
     role: userData.role,
     region_focus: userData.region_focus || null,
   };
 
-  console.log('[createCrmUserViaEdgeFunction] invoking admin-create-user with body:', requestBody);
+  console.log('[createCrmUserViaEdgeFunction] invoking admin-create-user with body:', input);
 
   try {
     const { data, error } = await supabase.functions.invoke('admin-create-user', {
-      body: requestBody,
+      body: input,
     });
 
-    console.log('[createCrmUserViaEdgeFunction] invoke result:', { data, error });
+    console.log('[createCrmUserViaEdgeFunction] invoke raw:', { data, error });
 
     if (error) {
-      const msg = await readFnError(error);
-      console.error('[createCrmUserViaEdgeFunction] error extracted:', msg);
-      return { data: null, error: msg };
+      // Supabase SDK wraps HTTP errors – unwrap them
+      if ((error as any).context instanceof Response) {
+        try {
+          const res = (error as any).context;
+          const contentType = res.headers.get('content-type') || '';
+
+          if (contentType.includes('application/json')) {
+            const payload = await res.json();
+            throw new Error(payload.details || payload.error || error.message);
+          } else {
+            const text = await res.text();
+            throw new Error(text || error.message);
+          }
+        } catch (e: any) {
+          throw new Error(e.message || error.message);
+        }
+      }
+
+      // True network / fetch failure only
+      throw new Error(error.message);
     }
 
     // Check if response indicates an error (some Edge Functions return {ok: false, error: ...})
@@ -123,10 +102,9 @@ export async function createCrmUserViaEdgeFunction(userData: {
 
     console.log('[createCrmUserViaEdgeFunction] success:', data);
     return { data, error: null };
-  } catch (err) {
-    const msg = await readFnError(err);
-    console.error('[createCrmUserViaEdgeFunction] exception:', err, 'extracted:', msg);
-    return { data: null, error: msg };
+  } catch (err: any) {
+    console.error('[createCrmUserViaEdgeFunction] exception:', err);
+    return { data: null, error: err.message || 'Unknown error occurred' };
   }
 }
 
