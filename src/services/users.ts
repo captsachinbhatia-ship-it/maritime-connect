@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabaseClient';
 
 export interface CrmUser {
   id: string;
@@ -38,73 +38,63 @@ export async function listCrmUsers(): Promise<{
   }
 }
 
-export async function createCrmUserViaEdgeFunction(userData: {
+export async function createCrmUserViaEdgeFunction(input: {
   full_name: string;
   email: string;
   role: string;
   region_focus?: string;
 }): Promise<{ data: unknown; error: string | null }> {
-  console.log('[createCrmUserViaEdgeFunction] input:', userData);
+  console.log('[createCrmUserViaEdgeFunction] input:', input);
 
-  // Verify session before invoking
-  const { data: { user } } = await supabase.auth.getUser();
-  console.log('[createCrmUserViaEdgeFunction] session user:', user);
+  const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
+  console.log('[createCrmUserViaEdgeFunction] session:', sessionData?.session, 'sessErr:', sessErr);
 
-  if (!user) {
-    console.error('No authenticated user found');
-    return { data: null, error: 'You must be logged in to create users' };
+  const token = sessionData?.session?.access_token;
+  if (!token) {
+    return { data: null, error: 'No active session. Please log in again.' };
   }
 
-  const input = {
-    full_name: userData.full_name,
-    email: userData.email,
-    role: userData.role,
-    region_focus: userData.region_focus || null,
-  };
-
-  console.log('[createCrmUserViaEdgeFunction] invoking admin-create-user with body:', input);
+  const url = `${SUPABASE_URL}/functions/v1/admin-create-user`;
 
   try {
-    const { data, error } = await supabase.functions.invoke('admin-create-user', {
-      body: input,
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(input),
     });
 
-    console.log('[createCrmUserViaEdgeFunction] invoke raw:', { data, error });
+    const contentType = res.headers.get('content-type') || '';
+    const bodyText = await res.text();
 
-    if (error) {
-      // Supabase SDK wraps HTTP errors – unwrap them
-      if ((error as any).context instanceof Response) {
-        try {
-          const res = (error as any).context;
-          const contentType = res.headers.get('content-type') || '';
+    console.log('[createCrmUserViaEdgeFunction] status:', res.status);
+    console.log('[createCrmUserViaEdgeFunction] raw body:', bodyText);
 
-          if (contentType.includes('application/json')) {
-            const payload = await res.json();
-            throw new Error(payload.details || payload.error || error.message);
-          } else {
-            const text = await res.text();
-            throw new Error(text || error.message);
-          }
-        } catch (e: any) {
-          throw new Error(e.message || error.message);
-        }
+    let parsed: any = null;
+    if (contentType.includes('application/json')) {
+      try {
+        parsed = JSON.parse(bodyText);
+      } catch {
+        // Not valid JSON, keep parsed as null
       }
-
-      // True network / fetch failure only
-      throw new Error(error.message);
     }
 
-    // Check if response indicates an error (some Edge Functions return {ok: false, error: ...})
-    if (data && data.ok === false && data.error) {
-      console.error('[createCrmUserViaEdgeFunction] error in data:', data.error);
-      return { data: null, error: data.error };
+    if (!res.ok) {
+      const msg =
+        parsed?.details ||
+        parsed?.error ||
+        bodyText ||
+        `Edge Function failed (${res.status})`;
+      return { data: null, error: msg };
     }
 
-    console.log('[createCrmUserViaEdgeFunction] success:', data);
-    return { data, error: null };
+    return { data: parsed ?? bodyText, error: null };
   } catch (err: any) {
-    console.error('[createCrmUserViaEdgeFunction] exception:', err);
-    return { data: null, error: err.message || 'Unknown error occurred' };
+    console.error('[createCrmUserViaEdgeFunction] fetch exception:', err);
+    return { data: null, error: err.message || 'Network error occurred' };
   }
 }
 
