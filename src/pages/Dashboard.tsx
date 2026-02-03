@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { CEODashboard } from '@/components/dashboard/CEODashboard';
 import { CallerDashboard } from '@/components/dashboard/CallerDashboard';
+import { NewAssignmentsModal } from '@/components/notifications/NewAssignmentsModal';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -59,9 +60,14 @@ export default function Dashboard() {
     );
   }
 
-  return isCEO ? (
-    <CEODashboard isAdmin={isAdmin} isCEO={isCEO} />
-  ) : (
-    <CallerDashboard isAdmin={isAdmin} isCEO={isCEO ?? false} />
+  return (
+    <>
+      <NewAssignmentsModal />
+      {isCEO ? (
+        <CEODashboard isAdmin={isAdmin} isCEO={isCEO} />
+      ) : (
+        <CallerDashboard isAdmin={isAdmin} isCEO={isCEO ?? false} />
+      )}
+    </>
   );
 }
