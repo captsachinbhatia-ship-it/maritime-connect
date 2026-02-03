@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
@@ -19,7 +19,6 @@ import Reporting from "./pages/Reporting";
 import MyFollowups from "./pages/MyFollowups";
 import FollowupsOversight from "./pages/FollowupsOversight";
 import AdminUsers from "./pages/AdminUsers";
-import UnassignedContacts from "./pages/UnassignedContacts";
 import CompleteProfile from "./pages/CompleteProfile";
 import NotFound from "./pages/NotFound";
 
@@ -55,7 +54,7 @@ const App = () => {
                 <Route path="followups" element={<MyFollowups />} />
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="admin-users" element={<AdminUsers />} />
-                <Route path="unassigned-contacts" element={<UnassignedContacts />} />
+                <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="reporting" element={<Reporting />} />
                 <Route path="account/security" element={<AccountSecurity />} />
