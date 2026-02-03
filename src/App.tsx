@@ -19,6 +19,7 @@ import Reporting from "./pages/Reporting";
 import MyFollowups from "./pages/MyFollowups";
 import FollowupsOversight from "./pages/FollowupsOversight";
 import AdminUsers from "./pages/AdminUsers";
+import DailyWorkDone from "./pages/DailyWorkDone";
 import CompleteProfile from "./pages/CompleteProfile";
 import NotFound from "./pages/NotFound";
 
@@ -54,6 +55,7 @@ const App = () => {
                 <Route path="followups" element={<MyFollowups />} />
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="admin-users" element={<AdminUsers />} />
+                <Route path="daily-work-done" element={<DailyWorkDone />} />
                 <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="reporting" element={<Reporting />} />
