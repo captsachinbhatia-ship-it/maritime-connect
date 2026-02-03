@@ -36,10 +36,22 @@ export function StageSnapshot() {
       setIsLoading(true);
 
       try {
+        // First get the current user's CRM ID
+        const { data: crmUser } = await supabase
+          .from('crm_users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        if (!crmUser) {
+          setIsLoading(false);
+          return;
+        }
+
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id, stage')
-          .eq('assigned_to', user.id)
+          .eq('assigned_to_crm_user_id', crmUser.id)
           .eq('status', 'ACTIVE');
 
         // Get unique contact per stage (latest assignment)

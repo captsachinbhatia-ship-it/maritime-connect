@@ -90,7 +90,9 @@ export interface ContactAssignment {
   contact_id: string;
   stage: string;
   status: string;
-  assigned_to: string;
-  created_at: string | null;
-  updated_at: string | null;
+  assigned_to_crm_user_id: string | null;
+  assigned_by_crm_user_id: string | null;
+  stage_changed_by_crm_user_id: string | null;
+  assigned_at: string | null;
+  stage_changed_at: string | null;
 }

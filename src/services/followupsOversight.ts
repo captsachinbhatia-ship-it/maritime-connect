@@ -140,10 +140,10 @@ export async function getOverdueByCaller(): Promise<{
       return { data: [], error: null };
     }
 
-    // Fetch assignments to get assigned_to (caller)
+    // Fetch assignments to get assigned_to_crm_user_id (caller)
     const { data: assignments, error: assignmentsError } = await supabase
       .from('contact_assignments')
-      .select('id, assigned_to')
+      .select('id, assigned_to_crm_user_id')
       .in('id', assignmentIds);
 
     if (assignmentsError) {
@@ -153,8 +153,8 @@ export async function getOverdueByCaller(): Promise<{
     // Build assignment -> caller map
     const assignmentCallerMap: Record<string, string> = {};
     (assignments || []).forEach((a) => {
-      if (a.assigned_to) {
-        assignmentCallerMap[a.id] = a.assigned_to;
+      if (a.assigned_to_crm_user_id) {
+        assignmentCallerMap[a.id] = a.assigned_to_crm_user_id;
       }
     });
 
@@ -174,14 +174,14 @@ export async function getOverdueByCaller(): Promise<{
       }
     });
 
-    // Fetch caller names from profiles
+    // Fetch caller names from crm_users
     const callerIds = Object.keys(callerStats);
     if (callerIds.length === 0) {
       return { data: [], error: null };
     }
 
     const { data: users, error: usersError } = await supabase
-      .from('profiles')
+      .from('crm_users')
       .select('id, full_name, email')
       .in('id', callerIds);
 
@@ -232,11 +232,11 @@ export async function getOverdueByCallerId(callerId: string): Promise<{
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Get assignments for this caller
+    // Get assignments for this caller (callerId is now crm_users.id)
     const { data: assignments, error: assignmentsError } = await supabase
       .from('contact_assignments')
       .select('id, contact_id')
-      .eq('assigned_to', callerId);
+      .eq('assigned_to_crm_user_id', callerId);
 
     if (assignmentsError) {
       return { data: null, error: assignmentsError.message };
@@ -418,7 +418,7 @@ export async function getSlippingContacts(): Promise<{
       });
     }
 
-    // Fetch assignment info (assigned_to)
+    // Fetch assignment info (assigned_to_crm_user_id)
     const assignmentIds = [...new Set(
       slippingContactIds
         .map((cid) => contactStats[cid].assignmentId)
@@ -429,22 +429,22 @@ export async function getSlippingContacts(): Promise<{
     if (assignmentIds.length > 0) {
       const { data: assignments } = await supabase
         .from('contact_assignments')
-        .select('id, assigned_to')
+        .select('id, assigned_to_crm_user_id')
         .in('id', assignmentIds);
 
       (assignments || []).forEach((a) => {
-        if (a.assigned_to) {
-          assignmentUserMap[a.id] = a.assigned_to;
+        if (a.assigned_to_crm_user_id) {
+          assignmentUserMap[a.id] = a.assigned_to_crm_user_id;
         }
       });
     }
 
-    // Fetch user names from profiles
+    // Fetch user names from crm_users
     const userIds = [...new Set(Object.values(assignmentUserMap))];
     let userNameMap: Record<string, string> = {};
     if (userIds.length > 0) {
       const { data: users } = await supabase
-        .from('profiles')
+        .from('crm_users')
         .select('id, full_name, email')
         .in('id', userIds);
 

@@ -25,11 +25,24 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
       setIsLoading(true);
 
       try {
-        // Get contacts assigned to user
+        // First get the current user's CRM ID
+        const { data: crmUser } = await supabase
+          .from('crm_users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        if (!crmUser) {
+          setContacts([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Get contacts assigned to user via CRM ID
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
-          .eq('assigned_to', user.id)
+          .eq('assigned_to_crm_user_id', crmUser.id)
           .eq('status', 'ACTIVE');
 
         const contactIds = assignments?.map(a => a.contact_id) || [];

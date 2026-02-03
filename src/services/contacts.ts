@@ -200,6 +200,17 @@ export async function createContact(
   error: string | null;
 }> {
   try {
+    // First get the current user's CRM ID
+    const { data: crmUser } = await supabase
+      .from('crm_users')
+      .select('id')
+      .eq('auth_user_id', userId)
+      .maybeSingle();
+
+    if (!crmUser) {
+      return { data: null, error: 'CRM user not found for current auth user' };
+    }
+
     // Insert contact
     const { data: contact, error: contactError } = await supabase
       .from('contacts')
@@ -223,14 +234,20 @@ export async function createContact(
       return { data: null, error: contactError.message };
     }
 
-    // Create contact assignment with default ASPIRATION stage
+    const now = new Date().toISOString();
+
+    // Create contact assignment with CRM user columns
     const { error: assignmentError } = await supabase
       .from('contact_assignments')
       .insert({
         contact_id: contact.id,
         stage: 'ASPIRATION',
         status: 'ACTIVE',
-        assigned_to: userId,
+        assigned_to_crm_user_id: crmUser.id,
+        assigned_by_crm_user_id: crmUser.id,
+        assigned_at: now,
+        stage_changed_at: now,
+        stage_changed_by_crm_user_id: crmUser.id,
       });
 
     if (assignmentError) {
