@@ -84,7 +84,7 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
       full_name: formData.full_name.trim(),
       email: formData.email.trim(),
       role: formData.role,
-      region_focus: formData.region_focus.trim() || undefined,
+      region_focus: formData.region_focus.trim() || null,
     });
 
     setIsSubmitting(false);
