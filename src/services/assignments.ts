@@ -223,77 +223,77 @@ export async function upsertOwners(params: {
 
     console.log('[upsertOwners] Closed assignments:', closedRows?.length || 0);
 
-    // ========== STEP 2: INSERT NEW PRIMARY ==========
-    const primaryPayload = {
+    // ========== STEP 2: BUILD ALL INSERT PAYLOADS ==========
+    const insertPayloads: Array<{
+      contact_id: string;
+      assigned_to_crm_user_id: string;
+      assigned_by_crm_user_id: string;
+      assignment_role: 'PRIMARY' | 'SECONDARY';
+      stage: AssignmentStage;
+      status: 'ACTIVE';
+      assigned_at: string;
+      stage_changed_at: string;
+      stage_changed_by_crm_user_id: string;
+    }> = [];
+
+    // Always add PRIMARY
+    insertPayloads.push({
       contact_id,
       assigned_to_crm_user_id: primary_owner_id,
       assigned_by_crm_user_id: currentCrmUserId,
-      assignment_role: 'PRIMARY' as const,
+      assignment_role: 'PRIMARY',
       stage: finalStage,
-      status: 'ACTIVE' as const,
+      status: 'ACTIVE',
       assigned_at: now,
       stage_changed_at: now,
       stage_changed_by_crm_user_id: currentCrmUserId,
-    };
+    });
 
-    console.log('[upsertOwners] Inserting PRIMARY:', primaryPayload);
-
-    const { data: primaryData, error: primaryError } = await supabase
-      .from('contact_assignments')
-      .insert(primaryPayload)
-      .select()
-      .single();
-
-    if (primaryError) {
-      console.error('[upsertOwners] PRIMARY insert error:', primaryError);
-      if (primaryError.message.includes('row-level security')) {
-        return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
-      }
-      if (primaryError.message.includes('one_active_assignment') || primaryError.message.includes('duplicate key')) {
-        return { data: null, error: `Constraint error: ${primaryError.message}. Please refresh and try again.` };
-      }
-      return { data: null, error: primaryError.message };
-    }
-
-    // ========== STEP 3: INSERT NEW SECONDARY (if provided) ==========
-    let secondaryData: ContactAssignment | null = null;
-    
+    // Add SECONDARY if provided
     if (secondary_owner_id) {
-      const secondaryPayload = {
+      insertPayloads.push({
         contact_id,
         assigned_to_crm_user_id: secondary_owner_id,
         assigned_by_crm_user_id: currentCrmUserId,
-        assignment_role: 'SECONDARY' as const,
+        assignment_role: 'SECONDARY',
         stage: finalStage,
-        status: 'ACTIVE' as const,
+        status: 'ACTIVE',
         assigned_at: now,
         stage_changed_at: now,
         stage_changed_by_crm_user_id: currentCrmUserId,
-      };
-
-      console.log('[upsertOwners] Inserting SECONDARY:', secondaryPayload);
-
-      const { data: secData, error: secondaryError } = await supabase
-        .from('contact_assignments')
-        .insert(secondaryPayload)
-        .select()
-        .single();
-
-      if (secondaryError) {
-        console.error('[upsertOwners] SECONDARY insert error:', secondaryError);
-        // Primary succeeded, log but don't fail the entire operation
-        if (secondaryError.message.includes('one_active_assignment') || secondaryError.message.includes('duplicate key')) {
-          console.warn('[upsertOwners] Secondary constraint violation - primary succeeded but secondary failed');
-        }
-      } else {
-        secondaryData = secData as ContactAssignment;
-      }
+      });
     }
+
+    console.log('[upsertOwners] Inserting payloads:', JSON.stringify(insertPayloads, null, 2));
+
+    // ========== STEP 3: INSERT ALL IN A SINGLE BATCH ==========
+    const { data: insertedData, error: insertError } = await supabase
+      .from('contact_assignments')
+      .insert(insertPayloads)
+      .select();
+
+    if (insertError) {
+      console.error('[upsertOwners] Insert error:', insertError);
+      if (insertError.message.includes('row-level security')) {
+        return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
+      }
+      if (insertError.message.includes('one_active_assignment') || insertError.message.includes('duplicate key')) {
+        return { data: null, error: `Constraint error: ${insertError.message}. Please refresh and try again.` };
+      }
+      return { data: null, error: insertError.message };
+    }
+
+    // Parse results
+    const primaryData = insertedData?.find(a => a.assignment_role === 'PRIMARY') || null;
+    const secondaryData = insertedData?.find(a => a.assignment_role === 'SECONDARY') || null;
+
+    console.log('[upsertOwners] Inserted PRIMARY:', primaryData?.id);
+    console.log('[upsertOwners] Inserted SECONDARY:', secondaryData?.id);
 
     return {
       data: {
         primary: primaryData as ContactAssignment,
-        secondary: secondaryData,
+        secondary: secondaryData as ContactAssignment | null,
       },
       error: null,
     };
