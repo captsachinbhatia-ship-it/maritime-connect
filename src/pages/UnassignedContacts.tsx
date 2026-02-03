@@ -1,6 +1,52 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UnassignedContactsList } from '@/components/dashboard/UnassignedContactsList';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabaseClient';
+import { Loader2 } from 'lucide-react';
 
 export default function UnassignedContacts() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkRole = async () => {
+      if (!user) {
+        navigate('/');
+        return;
+      }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const hasAccess = data?.role === 'ADMIN' || data?.role === 'CEO';
+      setIsAdmin(hasAccess);
+
+      if (!hasAccess) {
+        console.log('[UnassignedContacts] Access denied - redirecting to dashboard');
+        navigate('/');
+      }
+    };
+
+    checkRole();
+  }, [user, navigate]);
+
+  if (isAdmin === null) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}

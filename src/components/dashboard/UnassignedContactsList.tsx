@@ -31,6 +31,7 @@ export function UnassignedContactsList() {
     try {
       const { supabase } = await import('@/lib/supabaseClient');
       
+      // Query: Get contacts where NO ACTIVE assignment exists with assigned_to_crm_user_id populated
       // Step 1: Get all contact IDs that have an ACTIVE assignment with a non-null assigned_to_crm_user_id
       const { data: activeAssignments, error: assignmentsError } = await supabase
         .from('contact_assignments')
@@ -45,12 +46,12 @@ export function UnassignedContactsList() {
         return;
       }
 
-      // Extract assigned contact IDs
-      const assignedContactIds = (activeAssignments || []).map(a => a.contact_id);
-      console.log('[UnassignedContactsList] Found', assignedContactIds.length, 'contacts with ACTIVE assignments');
+      // Build a Set of assigned contact IDs for efficient lookup
+      const assignedContactIds = new Set((activeAssignments || []).map(a => a.contact_id));
+      console.log('[UnassignedContactsList] Contacts with ACTIVE+assigned_to:', assignedContactIds.size);
 
-      // Step 2: Get all contacts, then filter out assigned ones
-      let query = supabase
+      // Step 2: Get all active contacts
+      const { data: allContacts, error: contactsError } = await supabase
         .from('contacts')
         .select(`
           id,
@@ -63,21 +64,19 @@ export function UnassignedContactsList() {
         `)
         .eq('is_active', true)
         .order('full_name')
-        .limit(100);
-
-      // If there are assigned contacts, exclude them
-      if (assignedContactIds.length > 0) {
-        query = query.not('id', 'in', `(${assignedContactIds.join(',')})`);
-      }
-
-      const { data: contactsData, error: contactsError } = await query;
+        .limit(500);
 
       if (contactsError) {
         console.error('[UnassignedContactsList] Error fetching contacts:', contactsError);
         setContacts([]);
       } else {
+        // Filter: NOT EXISTS (ACTIVE assignment with assigned_to_crm_user_id IS NOT NULL)
+        const unassignedContacts = (allContacts || []).filter(
+          (c: any) => !assignedContactIds.has(c.id)
+        );
+
         // Map to expected format
-        const mappedContacts: UnassignedContact[] = (contactsData || []).map((c: any) => ({
+        const mappedContacts: UnassignedContact[] = unassignedContacts.map((c: any) => ({
           id: c.id,
           full_name: c.full_name,
           company_name: c.companies?.company_name || null,
@@ -85,11 +84,12 @@ export function UnassignedContactsList() {
           email: c.email,
           phone: c.phone,
         }));
-        console.log('[UnassignedContactsList] Found', mappedContacts.length, 'unassigned contacts');
+
+        console.log('[UnassignedContactsList] Unassigned contacts (NOT EXISTS pattern):', mappedContacts.length);
         setContacts(mappedContacts);
       }
 
-      // Fetch CRM users for assignment dropdown
+      // Fetch CRM users for assignment dropdown (only active users)
       const { data: crmUsersData, error: crmError } = await listCrmUsersForAssignment();
       if (crmError) {
         console.error('[UnassignedContactsList] Error fetching CRM users:', crmError);
