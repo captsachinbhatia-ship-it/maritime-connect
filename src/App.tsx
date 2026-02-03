@@ -55,7 +55,7 @@ const App = () => {
                 <Route path="followups" element={<MyFollowups />} />
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="admin-users" element={<AdminUsers />} />
-                <Route path="daily-work-done" element={<DailyWorkDone />} />
+                <Route path="admin/daily-work-done" element={<DailyWorkDone />} />
                 <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="reporting" element={<Reporting />} />
