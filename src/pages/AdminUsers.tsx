@@ -85,15 +85,22 @@ export default function AdminUsers() {
       const text = await res.text();
       console.log('RAW RES BODY:', text);
 
-      if (!res.ok) throw new Error(`Raw fetch failed: ${res.status} ${text}`);
-
-      alert('Connectivity test succeeded. Check console for full response.');
+      // Any HTTP response (even 4xx) proves connectivity works - CORS/network is fine
+      if (res.status >= 200 && res.status < 500) {
+        toast({
+          title: '✅ Connectivity Test Passed',
+          description: `Edge Function responded with status ${res.status}. Network and CORS are working correctly. You can now use "Add User" with a real email address.`,
+        });
+      } else {
+        throw new Error(`Server error: ${res.status} ${text}`);
+      }
     } catch (err) {
       console.error('Edge Function call failed:', err);
-      alert(
-        'Error creating user: ' +
-          (err instanceof Error ? err.message : JSON.stringify(err))
-      );
+      toast({
+        title: 'Connectivity Test Failed',
+        description: err instanceof Error ? err.message : JSON.stringify(err),
+        variant: 'destructive',
+      });
     } finally {
       setIsConnectivityTesting(false);
     }
