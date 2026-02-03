@@ -9,18 +9,18 @@ import { toast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function CompleteProfile() {
-  const { user } = useAuth();
+  const { user, crmUser } = useAuth();
   const navigate = useNavigate();
   
   // Auto-fill from user metadata if available
-  const defaultFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+  const defaultFullName = user?.user_metadata?.full_name || user?.user_metadata?.name || crmUser?.full_name || '';
   
   const [fullName, setFullName] = useState(defaultFullName);
   const [regionFocus, setRegionFocus] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Email is read-only, always from current user
-  const email = user?.email || '';
+  const email = user?.email || crmUser?.email || '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

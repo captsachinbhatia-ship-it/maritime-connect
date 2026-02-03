@@ -9,7 +9,6 @@ import { AppLayout } from "@/components/AppLayout";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { ConfigError } from "@/components/ConfigError";
 import Login from "./pages/Login";
-import ResetPassword from "./pages/ResetPassword";
 import AccountSecurity from "./pages/AccountSecurity";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
@@ -39,7 +38,6 @@ const App = () => {
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/auth/reset" element={<ResetPassword />} />
               <Route path="/complete-profile" element={<CompleteProfile />} />
               <Route
                 path="/"

@@ -11,14 +11,14 @@ import { Loader2 } from 'lucide-react';
 type TabType = 'unassigned' | 'assigned' | 'my-contacts';
 
 export default function Contacts() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, crmUser, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('my-contacts');
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const checkRole = async () => {
-      if (!user) {
+      if (!crmUser || !user) {
         setIsAdmin(false);
         return;
       }
@@ -33,12 +33,12 @@ export default function Contacts() {
       setIsAdmin(hasAdminAccess);
     };
 
-    if (!authLoading && user) {
+    if (!authLoading && crmUser) {
       checkRole();
     } else if (!authLoading) {
       setIsAdmin(false);
     }
-  }, [user, authLoading]);
+  }, [user, crmUser, authLoading]);
 
   const handleContactAdded = () => {
     // Trigger refresh by updating key

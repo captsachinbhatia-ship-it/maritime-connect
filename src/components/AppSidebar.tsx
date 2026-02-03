@@ -46,24 +46,25 @@ const adminNavItems = [
 ];
 
 export function AppSidebar() {
-  const { user, signOut } = useAuth();
+  const { user, crmUser, signOut } = useAuth();
   const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     checkAdminRole();
-  }, [user]);
+  }, [crmUser]);
 
   const checkAdminRole = async () => {
-    if (!user) {
+    if (!crmUser) {
       setIsAdmin(false);
       return;
     }
 
+    // Check profiles table for system role (ADMIN, CEO)
     const { data } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', user.id)
+      .eq('id', user?.id)
       .maybeSingle();
 
     setIsAdmin(data?.role === 'ADMIN' || data?.role === 'CEO');

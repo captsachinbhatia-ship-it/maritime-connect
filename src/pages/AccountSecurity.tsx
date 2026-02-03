@@ -11,7 +11,7 @@ import { toast } from '@/hooks/use-toast';
 
 export default function AccountSecurity() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { crmUser } = useAuth();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -100,7 +100,7 @@ export default function AccountSecurity() {
           <div className="rounded-lg border bg-muted/50 p-4">
             <p className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">Signed in as:</span>{' '}
-              {user?.email}
+              {crmUser?.email}
             </p>
           </div>
 
