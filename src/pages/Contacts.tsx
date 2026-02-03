@@ -7,6 +7,7 @@ import { AssignContactModal } from '@/components/contacts/AssignContactModal';
 import { ContactsSearch } from '@/components/contacts/ContactsSearch';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { ContactAssignment } from '@/services/assignments';
+import { getCurrentCrmUserId } from '@/services/profiles';
 import { getNextFollowupDueMap } from '@/services/followups';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactWithCompany } from '@/types';
@@ -34,6 +35,14 @@ export default function Contacts() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   
+  // Debug state
+  const [debugInfo, setDebugInfo] = useState<{
+    currentCrmUserId: string | null;
+    assignmentRows: number;
+    contactRows: number;
+    selectedStage: string;
+  } | null>(null);
+  
   // Drawer state
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -54,7 +63,76 @@ export default function Contacts() {
     setError(null);
 
     try {
-      // Step 1: Fetch contacts directly - RLS enforces visibility
+      // Step 1: Resolve current user's CRM ID
+      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+      
+      if (crmError || !currentCrmUserId) {
+        console.error('Failed to get CRM user ID:', crmError);
+        setError(crmError || 'CRM user not found');
+        setDebugInfo({
+          currentCrmUserId: null,
+          assignmentRows: 0,
+          contactRows: 0,
+          selectedStage: activeStage,
+        });
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 2: Query contact_assignments for this user's active assignments in the selected stage
+      const { data: assignments, error: assignmentError } = await supabase
+        .from('contact_assignments')
+        .select('id, contact_id, stage, status, assigned_to_crm_user_id, assigned_by_crm_user_id, stage_changed_by_crm_user_id, assigned_at, stage_changed_at, notes')
+        .eq('status', 'ACTIVE')
+        .eq('assigned_to_crm_user_id', currentCrmUserId)
+        .eq('stage', activeStage);
+
+      if (assignmentError) {
+        console.error('Assignment query error:', assignmentError.message);
+        setError(assignmentError.message);
+        setDebugInfo({
+          currentCrmUserId,
+          assignmentRows: 0,
+          contactRows: 0,
+          selectedStage: activeStage,
+        });
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const assignmentsList = assignments || [];
+      const contactIds = assignmentsList.map(a => a.contact_id);
+
+      // Build assignments map
+      const assignmentsById: Record<string, ContactAssignment> = {};
+      assignmentsList.forEach(a => {
+        assignmentsById[a.contact_id] = a as ContactAssignment;
+      });
+      setAssignmentsMap(assignmentsById);
+
+      // Debug log
+      console.log('[Contacts Debug]', {
+        currentCrmUserId,
+        assignmentRows: assignmentsList.length,
+        selectedStage: activeStage,
+        contactIds,
+      });
+
+      if (contactIds.length === 0) {
+        setDebugInfo({
+          currentCrmUserId,
+          assignmentRows: 0,
+          contactRows: 0,
+          selectedStage: activeStage,
+        });
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 3: Fetch contacts for those contact_ids
       let contactsQuery = supabase
         .from('contacts')
         .select(`
@@ -72,6 +150,7 @@ export default function Contacts() {
           is_active,
           updated_at
         `)
+        .in('id', contactIds)
         .order('full_name', { ascending: true });
 
       // Apply search filter
@@ -82,7 +161,14 @@ export default function Contacts() {
       const { data: contactsData, error: contactsError } = await contactsQuery;
 
       if (contactsError) {
+        console.error('Contacts query error:', contactsError.message);
         setError(contactsError.message);
+        setDebugInfo({
+          currentCrmUserId,
+          assignmentRows: assignmentsList.length,
+          contactRows: 0,
+          selectedStage: activeStage,
+        });
         setContacts([]);
         setIsLoading(false);
         return;
@@ -90,46 +176,19 @@ export default function Contacts() {
 
       let contactsList = (contactsData || []) as ContactWithCompany[];
 
-      if (contactsList.length === 0) {
-        setContacts([]);
-        setAssignmentsMap({});
-        setIsLoading(false);
-        return;
-      }
-
-      const allContactIds = contactsList.map(c => c.id);
-
-      // Step 2: Fetch active assignments for these contacts - RLS enforces visibility
-      const { data: allAssignments, error: assignmentError } = await supabase
-        .from('contact_assignments')
-        .select('*')
-        .eq('status', 'ACTIVE')
-        .in('contact_id', allContactIds)
-        .order('assigned_at', { ascending: false });
-
-      if (assignmentError) {
-        console.error('Assignment fetch error:', assignmentError.message);
-      }
-
-      // Build assignments map (contact_id -> assignment with stage)
-      const assignmentsById: Record<string, ContactAssignment> = {};
-      (allAssignments || []).forEach(a => {
-        // Only keep the latest assignment per contact
-        if (!assignmentsById[a.contact_id]) {
-          assignmentsById[a.contact_id] = a as ContactAssignment;
-        }
+      // Update debug info
+      setDebugInfo({
+        currentCrmUserId,
+        assignmentRows: assignmentsList.length,
+        contactRows: contactsList.length,
+        selectedStage: activeStage,
       });
-      setAssignmentsMap(assignmentsById);
 
-      // Step 3: Filter contacts by active stage tab
-      const filteredContacts = contactsList.filter(c => {
-        const assignment = assignmentsById[c.id];
-        return assignment?.stage === activeStage;
-      });
+      console.log('[Contacts Debug] Contacts fetched:', contactsList.length);
 
       // Step 4: Fetch last interaction data from view
-      if (filteredContacts.length > 0) {
-        const contactIdsForInteraction = filteredContacts.map(c => c.id);
+      if (contactsList.length > 0) {
+        const contactIdsForInteraction = contactsList.map(c => c.id);
         const { data: lastInteractionData } = await supabase
           .from('v_contacts_last_interaction')
           .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
@@ -145,15 +204,11 @@ export default function Contacts() {
               last_interaction_outcome: li.last_interaction_outcome,
             };
           });
-          contactsList = filteredContacts.map(c => ({
+          contactsList = contactsList.map(c => ({
             ...c,
             ...liMap[c.id],
           }));
-        } else {
-          contactsList = filteredContacts;
         }
-      } else {
-        contactsList = filteredContacts;
       }
 
       setContacts(contactsList);
@@ -179,6 +234,7 @@ export default function Contacts() {
         }
       }
     } catch (err) {
+      console.error('Unexpected error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load contacts');
     } finally {
       setIsLoading(false);
@@ -235,6 +291,19 @@ export default function Contacts() {
         </div>
         <AddContactModal onSuccess={handleContactAdded} />
       </div>
+
+      {/* Temporary Debug Info */}
+      {debugInfo && (
+        <div className="rounded-md border border-amber-500 bg-amber-50 p-3 text-xs font-mono dark:bg-amber-950 dark:border-amber-700">
+          <p className="font-semibold text-amber-800 dark:text-amber-300 mb-1">🔍 Debug Info (temporary):</p>
+          <ul className="space-y-0.5 text-amber-700 dark:text-amber-400">
+            <li>currentCrmUserId: <span className="font-bold">{debugInfo.currentCrmUserId || 'null'}</span></li>
+            <li>selectedStage: <span className="font-bold">{debugInfo.selectedStage}</span></li>
+            <li>assignmentRows: <span className="font-bold">{debugInfo.assignmentRows}</span></li>
+            <li>contactRows: <span className="font-bold">{debugInfo.contactRows}</span></li>
+          </ul>
+        </div>
+      )}
 
       {error && (
         <Alert variant="destructive">
