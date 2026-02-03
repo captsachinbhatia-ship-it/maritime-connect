@@ -17,9 +17,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createCrmUserViaEdgeFunction, CRM_ROLES } from '@/services/users';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { createCrmUserViaEdgeFunction, CRM_ROLES, updateCrmUser } from '@/services/users';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+
+// Configurable allowed email domains
+const ALLOWED_EMAIL_DOMAINS = ['aqmaritime.com'];
+
+// Standard email regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface AddUserModalProps {
   open: boolean;
@@ -27,9 +35,19 @@ interface AddUserModalProps {
   onUserCreated: () => void;
 }
 
+interface ExistingUser {
+  id: string;
+  email: string;
+  full_name: string;
+  active: boolean;
+}
+
 export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModalProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [existingInactiveUser, setExistingInactiveUser] = useState<ExistingUser | null>(null);
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -37,10 +55,90 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
     region_focus: '',
   });
 
+  // Validate email format
+  const validateEmailFormat = (email: string): { valid: boolean; error?: string } => {
+    const trimmed = email.trim().toLowerCase();
+    
+    if (!trimmed) {
+      return { valid: false, error: 'Email is required.' };
+    }
+
+    if (!EMAIL_REGEX.test(trimmed)) {
+      return { valid: false, error: 'Please enter a valid email address.' };
+    }
+
+    // Check domain
+    const domain = trimmed.split('@')[1];
+    if (!ALLOWED_EMAIL_DOMAINS.includes(domain)) {
+      return { valid: false, error: `Only @${ALLOWED_EMAIL_DOMAINS.join(', @')} emails allowed.` };
+    }
+
+    return { valid: true };
+  };
+
+  // Pre-check for existing user in crm_users
+  const preCheckEmail = async (email: string): Promise<{ exists: boolean; user?: ExistingUser }> => {
+    const normalizedEmail = email.trim().toLowerCase();
+    console.log('[PreCheck] Checking for existing user with email:', normalizedEmail);
+
+    const { data, error } = await supabase
+      .from('crm_users')
+      .select('id, email, full_name, active')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[PreCheck] Query error:', error);
+      return { exists: false };
+    }
+
+    if (data) {
+      console.log('[PreCheck] Found existing user:', { id: data.id, active: data.active, full_name: data.full_name });
+      return { exists: true, user: data as ExistingUser };
+    }
+
+    console.log('[PreCheck] No existing user found');
+    return { exists: false };
+  };
+
+  // Handle reactivating an inactive user
+  const handleReactivate = async () => {
+    if (!existingInactiveUser) return;
+
+    console.log('[Reactivate] Reactivating user:', existingInactiveUser.id);
+    setIsReactivating(true);
+
+    const { error } = await updateCrmUser(existingInactiveUser.id, { active: true });
+
+    setIsReactivating(false);
+
+    if (error) {
+      console.error('[Reactivate] Error:', error);
+      toast({
+        title: 'Reactivation Failed',
+        description: error,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    console.log('[Reactivate] Success');
+    toast({
+      title: 'Success',
+      description: `${existingInactiveUser.full_name} has been reactivated.`,
+    });
+
+    resetForm();
+    onUserCreated();
+    onOpenChange(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+    setExistingInactiveUser(null);
     
-    // PART 4: Block UI if session is missing
+    // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast({
@@ -48,41 +146,57 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
         description: 'You must be logged in as Admin to create users.',
         variant: 'destructive',
       });
-      console.error('Session missing: supabase.auth.getUser() returned null');
+      console.error('[Submit] Session missing');
       return;
     }
 
+    // Validate full name
     if (!formData.full_name.trim()) {
-      toast({
-        title: 'Validation Error',
-        description: 'Full Name is required.',
-        variant: 'destructive',
-      });
+      setValidationError('Full Name is required.');
       return;
     }
 
-    if (!formData.email.trim()) {
-      toast({
-        title: 'Validation Error',
-        description: 'Email is required.',
-        variant: 'destructive',
-      });
+    // Validate email format and domain
+    const normalizedEmail = formData.email.trim().toLowerCase();
+    const emailValidation = validateEmailFormat(normalizedEmail);
+    if (!emailValidation.valid) {
+      console.log('[Submit] Email validation failed:', emailValidation.error);
+      setValidationError(emailValidation.error || 'Invalid email.');
       return;
     }
 
+    // Validate role
     if (!formData.role) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select a role.',
-        variant: 'destructive',
-      });
+      setValidationError('Please select a role.');
       return;
     }
 
+    console.log('[Submit] All client validations passed, running pre-check...');
+
+    // Pre-check for existing user
     setIsSubmitting(true);
+    const preCheck = await preCheckEmail(normalizedEmail);
+
+    if (preCheck.exists && preCheck.user) {
+      if (preCheck.user.active) {
+        console.log('[Submit] Blocked: Active user already exists');
+        setValidationError('User already exists.');
+        setIsSubmitting(false);
+        return;
+      } else {
+        console.log('[Submit] Found inactive user, offering reactivation');
+        setExistingInactiveUser(preCheck.user);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    console.log('[Submit] Pre-check passed, calling Edge Function...');
+
+    // Call Edge Function
     const { data, error } = await createCrmUserViaEdgeFunction({
       full_name: formData.full_name.trim(),
-      email: formData.email.trim(),
+      email: normalizedEmail,
       role: formData.role,
       region_focus: formData.region_focus.trim() || null,
     });
@@ -90,7 +204,15 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
     setIsSubmitting(false);
 
     if (error) {
-      console.error('Edge Function error:', error);
+      console.error('[Submit] Edge Function error:', error);
+      
+      // Check for "already registered" type errors
+      const errorLower = error.toLowerCase();
+      if (errorLower.includes('already registered') || errorLower.includes('already exists')) {
+        setValidationError('This email is already registered in Auth. Consider linking or reactivating in CRM.');
+        return;
+      }
+      
       toast({
         title: 'Failed to Create User',
         description: error,
@@ -99,7 +221,7 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
       return;
     }
 
-    console.log('User created successfully:', data);
+    console.log('[Submit] User created successfully:', data);
 
     // Show mode-specific success message
     const mode = (data as any)?.mode;
@@ -117,14 +239,20 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
       description: successMessage,
     });
 
-    setFormData({ full_name: '', email: '', role: '', region_focus: '' });
+    resetForm();
     onUserCreated();
     onOpenChange(false);
   };
 
+  const resetForm = () => {
+    setFormData({ full_name: '', email: '', role: '', region_focus: '' });
+    setValidationError(null);
+    setExistingInactiveUser(null);
+  };
+
   const handleClose = (open: boolean) => {
     if (!open) {
-      setFormData({ full_name: '', email: '', role: '', region_focus: '' });
+      resetForm();
     }
     onOpenChange(open);
   };
@@ -138,6 +266,35 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
             Send an invitation to a new CRM user. They will receive an email to set up their account.
           </DialogDescription>
         </DialogHeader>
+
+        {validationError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{validationError}</AlertDescription>
+          </Alert>
+        )}
+
+        {existingInactiveUser && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex flex-col gap-2">
+              <span>
+                <strong>{existingInactiveUser.full_name}</strong> ({existingInactiveUser.email}) exists but is inactive.
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleReactivate}
+                disabled={isReactivating}
+                className="w-fit"
+              >
+                {isReactivating && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                Reactivate Instead
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -155,9 +312,16 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="Enter email address"
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  setValidationError(null);
+                  setExistingInactiveUser(null);
+                }}
+                placeholder="user@aqmaritime.com"
               />
+              <p className="text-xs text-muted-foreground">
+                Only @{ALLOWED_EMAIL_DOMAINS.join(', @')} emails allowed
+              </p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="role">Role *</Label>
@@ -191,8 +355,8 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
             <Button type="button" variant="outline" onClick={() => handleClose(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Sending Invite...' : 'Create User'}
+            <Button type="submit" disabled={isSubmitting || !!existingInactiveUser}>
+              {isSubmitting ? 'Checking...' : 'Create User'}
             </Button>
           </DialogFooter>
         </form>
