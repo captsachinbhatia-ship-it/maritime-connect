@@ -4,7 +4,7 @@ import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { RequestStageMoveModal } from './RequestStageMoveModal';
 import {
   Table,
   TableBody,
@@ -81,6 +81,10 @@ export function MyContactsTab() {
   // Drawer state
   const [selectedContact, setSelectedContact] = useState<ContactWithRole | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Stage request modal state
+  const [stageRequestContact, setStageRequestContact] = useState<ContactWithRole | null>(null);
+  const [stageRequestModalOpen, setStageRequestModalOpen] = useState(false);
 
   const loadContacts = useCallback(async () => {
     if (!session) {
@@ -554,26 +558,19 @@ export function MyContactsTab() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span tabIndex={0}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled
-                                className="h-7 pointer-events-none"
-                              >
-                                Move to
-                                <ArrowRight className="ml-1 h-3 w-3" />
-                              </Button>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Only Primary owner can move stage</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStageRequestContact(contact);
+                          setStageRequestModalOpen(true);
+                        }}
+                      >
+                        Request Move
+                        <ArrowRight className="ml-1 h-3 w-3" />
+                      </Button>
                     )}
                   </TableCell>
                 </TableRow>
@@ -626,6 +623,18 @@ export function MyContactsTab() {
           setSelectedContact(null);
         }}
         onOwnersChange={loadContacts}
+      />
+
+      <RequestStageMoveModal
+        contactId={stageRequestContact?.id || ''}
+        contactName={stageRequestContact?.full_name || 'Unknown'}
+        currentStage={activeStage}
+        isOpen={stageRequestModalOpen}
+        onClose={() => {
+          setStageRequestModalOpen(false);
+          setStageRequestContact(null);
+        }}
+        onSuccess={loadContacts}
       />
     </div>
   );
