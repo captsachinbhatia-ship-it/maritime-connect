@@ -28,6 +28,7 @@ interface NewAssignment {
   assignment_role: 'PRIMARY' | 'SECONDARY';
   stage: string;
   assigned_at: string;
+  assigned_by: string;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -73,7 +74,7 @@ export function NewAssignmentsModal() {
         // Query for recent ACTIVE assignments for this user
         const { data: recentAssignments, error: assignmentError } = await supabase
           .from('contact_assignments')
-          .select('id, contact_id, assignment_role, stage, assigned_at')
+          .select('id, contact_id, assignment_role, stage, assigned_at, assigned_by_crm_user_id')
           .eq('status', 'ACTIVE')
           .eq('assigned_to_crm_user_id', currentCrmUserId)
           .in('assignment_role', ['PRIMARY', 'SECONDARY'])
@@ -112,6 +113,21 @@ export function NewAssignmentsModal() {
           contactNameMap[c.id] = c.full_name || 'Unknown Contact';
         });
 
+        // Fetch assigner names (crm_users)
+        const assignerIds = [...new Set(recentAssignments.map(a => a.assigned_by_crm_user_id).filter(Boolean))];
+        const assignerNameMap: Record<string, string> = {};
+        
+        if (assignerIds.length > 0) {
+          const { data: assigners } = await supabase
+            .from('crm_users')
+            .select('id, full_name, email')
+            .in('id', assignerIds);
+          
+          (assigners || []).forEach(u => {
+            assignerNameMap[u.id] = u.full_name || u.email || 'Admin';
+          });
+        }
+
         // Build display list
         const displayAssignments: NewAssignment[] = recentAssignments.map(a => ({
           id: a.id,
@@ -120,6 +136,7 @@ export function NewAssignmentsModal() {
           assignment_role: a.assignment_role as 'PRIMARY' | 'SECONDARY',
           stage: a.stage,
           assigned_at: a.assigned_at,
+          assigned_by: a.assigned_by_crm_user_id ? (assignerNameMap[a.assigned_by_crm_user_id] || 'Admin') : 'Admin',
         }));
 
         setAssignments(displayAssignments);
@@ -185,6 +202,8 @@ export function NewAssignmentsModal() {
                     </Badge>
                     <span>·</span>
                     <span>{formatDistanceToNow(new Date(assignment.assigned_at), { addSuffix: true })}</span>
+                    <span>·</span>
+                    <span>by {assignment.assigned_by}</span>
                   </div>
                 </div>
               </div>
