@@ -46,21 +46,25 @@ export function UnassignedContactsTab() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Get all contact IDs that have an ACTIVE assignment with a non-null assigned_to_crm_user_id
-      const { data: activeAssignments, error: assignmentsError } = await supabase
+      // Get all contact IDs that have an ACTIVE PRIMARY assignment with a non-null assigned_to_crm_user_id
+      // A contact is considered "assigned" only if it has an ACTIVE PRIMARY owner
+      const { data: activePrimaryAssignments, error: assignmentsError } = await supabase
         .from('contact_assignments')
         .select('contact_id')
         .eq('status', 'ACTIVE')
+        .eq('assignment_role', 'PRIMARY')
         .not('assigned_to_crm_user_id', 'is', null);
 
       if (assignmentsError) {
-        console.error('[UnassignedContactsTab] Error fetching active assignments:', assignmentsError);
+        console.error('[UnassignedContactsTab] Error fetching active PRIMARY assignments:', assignmentsError);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      const assignedContactIds = new Set((activeAssignments || []).map(a => a.contact_id));
+      // Only contacts with ACTIVE PRIMARY are considered assigned
+      const assignedContactIds = new Set((activePrimaryAssignments || []).map(a => a.contact_id));
+      console.log('[UnassignedContactsTab] Contacts with ACTIVE PRIMARY:', assignedContactIds.size);
 
       // Get all active contacts
       const { data: allContacts, error: contactsError } = await supabase
