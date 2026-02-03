@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
 import { updateStage, AssignmentStage } from '@/services/assignments';
 
 interface StageDropdownProps {
@@ -38,19 +37,17 @@ export function StageDropdown({
   onStageChange,
   disabled = false 
 }: StageDropdownProps) {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleStageSelect = async (newStage: AssignmentStage) => {
-    if (newStage === currentStage || !user) return;
+    if (newStage === currentStage) return;
 
     setIsUpdating(true);
 
     const result = await updateStage({
       contact_id: contactId,
       stage: newStage,
-      currentUserId: user.id,
     });
 
     if (result.error) {

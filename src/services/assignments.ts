@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { getCurrentCrmUserId } from './profiles';
 
 export type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
@@ -7,6 +8,11 @@ export interface ContactAssignment {
   contact_id: string;
   stage: AssignmentStage;
   status: string;
+  // New CRM user columns
+  assigned_to_crm_user_id: string | null;
+  assigned_by_crm_user_id: string | null;
+  stage_changed_by_crm_user_id: string | null;
+  // Legacy columns (read-only, may still exist)
   assigned_to: string | null;
   assigned_by: string | null;
   assigned_at: string | null;
@@ -51,15 +57,21 @@ export async function getAssignmentsForContacts(contactIds: string[]): Promise<{
 
 export async function upsertAssignment(params: {
   contact_id: string;
-  assigned_to: string;
+  assigned_to_crm_user_id: string;
   stage: AssignmentStage;
-  currentUserId: string;
+  notes?: string | null;
 }): Promise<{
   data: ContactAssignment | null;
   error: string | null;
 }> {
   try {
-    const { contact_id, assigned_to, stage, currentUserId } = params;
+    const { contact_id, assigned_to_crm_user_id, stage, notes } = params;
+
+    // Get current CRM user ID for assigner
+    const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+    if (crmError || !currentCrmUserId) {
+      return { data: null, error: crmError || 'Could not resolve current CRM user' };
+    }
 
     // Close all existing ACTIVE rows for this contact
     const { error: closeError } = await supabase
@@ -75,21 +87,32 @@ export async function upsertAssignment(params: {
       return { data: null, error: closeError.message };
     }
 
+    const now = new Date().toISOString();
+
+    // Build insert payload with NEW CRM columns only
+    const insertPayload = {
+      contact_id,
+      assigned_to_crm_user_id,
+      assigned_by_crm_user_id: currentCrmUserId,
+      stage,
+      status: 'ACTIVE',
+      assigned_at: now,
+      stage_changed_at: now,
+      stage_changed_by_crm_user_id: currentCrmUserId,
+      notes: notes || null,
+    };
+
+    console.log('[upsertAssignment] Insert payload:', insertPayload);
+
     // Insert new ACTIVE assignment
     const { data, error } = await supabase
       .from('contact_assignments')
-      .insert({
-        contact_id,
-        assigned_to,
-        stage,
-        status: 'ACTIVE',
-        assigned_by: currentUserId,
-        assigned_at: new Date().toISOString(),
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (error) {
+      console.error('[upsertAssignment] Insert error:', error);
       if (error.message.includes('row-level security')) {
         return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
       }
@@ -108,18 +131,23 @@ export async function upsertAssignment(params: {
 export async function updateStage(params: {
   contact_id: string;
   stage: AssignmentStage;
-  currentUserId: string;
 }): Promise<{
   data: ContactAssignment | null;
   error: string | null;
 }> {
   try {
-    const { contact_id, stage, currentUserId } = params;
+    const { contact_id, stage } = params;
 
-    // Get current ACTIVE assignment to preserve assigned_to
+    // Get current CRM user ID
+    const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+    if (crmError || !currentCrmUserId) {
+      return { data: null, error: crmError || 'Could not resolve current CRM user' };
+    }
+
+    // Get current ACTIVE assignment to preserve assigned_to_crm_user_id
     const { data: currentAssignment, error: fetchError } = await supabase
       .from('contact_assignments')
-      .select('assigned_to')
+      .select('assigned_to_crm_user_id')
       .eq('contact_id', contact_id)
       .eq('status', 'ACTIVE')
       .maybeSingle();
@@ -146,23 +174,30 @@ export async function updateStage(params: {
       return { data: null, error: closeError.message };
     }
 
-    // Insert new ACTIVE row with new stage
+    const now = new Date().toISOString();
+
+    // Insert new ACTIVE row with new stage using NEW CRM columns
+    const insertPayload = {
+      contact_id,
+      assigned_to_crm_user_id: currentAssignment.assigned_to_crm_user_id,
+      assigned_by_crm_user_id: currentCrmUserId,
+      stage,
+      status: 'ACTIVE',
+      assigned_at: now,
+      stage_changed_at: now,
+      stage_changed_by_crm_user_id: currentCrmUserId,
+    };
+
+    console.log('[updateStage] Insert payload:', insertPayload);
+
     const { data, error } = await supabase
       .from('contact_assignments')
-      .insert({
-        contact_id,
-        assigned_to: currentAssignment.assigned_to,
-        stage,
-        status: 'ACTIVE',
-        assigned_by: currentUserId,
-        assigned_at: new Date().toISOString(),
-        stage_changed_at: new Date().toISOString(),
-        stage_changed_by: currentUserId,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (error) {
+      console.error('[updateStage] Insert error:', error);
       if (error.message.includes('row-level security')) {
         return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
       }
