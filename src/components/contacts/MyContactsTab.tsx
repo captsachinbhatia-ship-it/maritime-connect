@@ -4,6 +4,7 @@ import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -519,38 +520,61 @@ export function MyContactsTab() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={isUpdatingStage === contact.id}
-                          className="h-7"
-                        >
-                          {isUpdatingStage === contact.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <>
-                              Move to
-                              <ArrowRight className="ml-1 h-3 w-3" />
-                            </>
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {availableStages.map((stage) => (
-                          <DropdownMenuItem
-                            key={stage.value}
-                            onClick={() => handleStageUpdate(contact.id, stage.value)}
+                    {contact.userRole === 'PRIMARY' ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isUpdatingStage === contact.id}
+                            className="h-7"
                           >
-                            <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
-                              {stage.label}
-                            </Badge>
-                            Move to {stage.label}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                            {isUpdatingStage === contact.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                Move to
+                                <ArrowRight className="ml-1 h-3 w-3" />
+                              </>
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {availableStages.map((stage) => (
+                            <DropdownMenuItem
+                              key={stage.value}
+                              onClick={() => handleStageUpdate(contact.id, stage.value)}
+                            >
+                              <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
+                                {stage.label}
+                              </Badge>
+                              Move to {stage.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span tabIndex={0}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled
+                                className="h-7 pointer-events-none"
+                              >
+                                Move to
+                                <ArrowRight className="ml-1 h-3 w-3" />
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Only Primary owner can move stage</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </TableCell>
                 </TableRow>
               );
