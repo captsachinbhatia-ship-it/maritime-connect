@@ -507,6 +507,56 @@ export function ContactDetailsDrawer({
 
             {/* Assignments Tab */}
             <TabsContent value="assignments" className="m-0 p-6">
+              {/* Current Owners Section */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Current Owners
+                  </h4>
+                  {isAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsAssignOwnersOpen(true)}
+                    >
+                      <Users className="mr-1 h-3 w-3" />
+                      Assign Owners
+                    </Button>
+                  )}
+                </div>
+                {isLoadingOwners ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading owners...
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-primary/50 bg-primary/5 p-4">
+                    <div className="grid gap-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Primary Owner</span>
+                        <span className="font-medium">
+                          {owners?.primary?.assigned_to_crm_user_id
+                            ? ownerNames[owners.primary.assigned_to_crm_user_id] || 'Unknown User'
+                            : <span className="text-muted-foreground italic">Unassigned</span>}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Secondary Owner</span>
+                        <span className="font-medium">
+                          {owners?.secondary?.assigned_to_crm_user_id
+                            ? ownerNames[owners.secondary.assigned_to_crm_user_id] || 'Unknown User'
+                            : <span className="text-muted-foreground italic">None</span>}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="my-4" />
+
+              {/* Assignment History */}
               {isLoadingAssignments ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -523,37 +573,45 @@ export function ContactDetailsDrawer({
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Current Assignment (ACTIVE) */}
+                  {/* Current Active Assignments */}
                   {(() => {
-                    const currentAssignment = assignments.find(a => a.status === 'ACTIVE');
+                    const activeAssignments = assignments.filter(a => a.status === 'ACTIVE');
                     const historyAssignments = assignments.filter(a => a.status === 'CLOSED' || a.status === 'PAUSED');
                     
                     return (
                       <>
-                        {currentAssignment && (
+                        {activeAssignments.length > 0 && (
                           <div>
-                            <h4 className="text-sm font-medium text-muted-foreground mb-3">Current Assignment</h4>
-                            <div className="rounded-lg border border-primary/50 bg-primary/5 p-4">
-                              <div className="grid gap-3 text-sm">
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Stage</span>
-                                  <Badge className={STAGE_COLORS[currentAssignment.stage] || STAGE_COLORS.INACTIVE}>
-                                    {currentAssignment.stage.replace('_', ' ')}
-                                  </Badge>
+                            <h4 className="text-sm font-medium text-muted-foreground mb-3">Active Assignments ({activeAssignments.length})</h4>
+                            <div className="space-y-3">
+                              {activeAssignments.map((assignment) => (
+                                <div key={assignment.id} className="rounded-lg border border-primary/50 bg-primary/5 p-4">
+                                  <div className="grid gap-3 text-sm">
+                                    <div className="flex justify-between items-center">
+                                      <Badge className={STAGE_COLORS[assignment.stage] || STAGE_COLORS.INACTIVE}>
+                                        {assignment.stage.replace('_', ' ')}
+                                      </Badge>
+                                      {assignment.assignment_role && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {assignment.assignment_role}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Assigned To</span>
+                                      <span>{getUserName(assignment.assigned_to_crm_user_id, assigneeNames)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Assigned By</span>
+                                      <span>{getUserName(assignment.assigned_by_crm_user_id, assigneeNames)}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Assigned At</span>
+                                      <span>{formatDate(assignment.assigned_at)}</span>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Assigned To</span>
-                                  <span>{getUserName(currentAssignment.assigned_to_crm_user_id, assigneeNames)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Assigned By</span>
-                                  <span>{getUserName(currentAssignment.assigned_by_crm_user_id, assigneeNames)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Assigned At</span>
-                                  <span>{formatDate(currentAssignment.assigned_at)}</span>
-                                </div>
-                              </div>
+                              ))}
                             </div>
                           </div>
                         )}
@@ -569,9 +627,16 @@ export function ContactDetailsDrawer({
                                 <div key={assignment.id} className="rounded-lg border p-4">
                                   <div className="grid gap-2 text-sm">
                                     <div className="flex justify-between items-center">
-                                      <Badge className={STAGE_COLORS[assignment.stage] || STAGE_COLORS.INACTIVE}>
-                                        {assignment.stage.replace('_', ' ')}
-                                      </Badge>
+                                      <div className="flex items-center gap-2">
+                                        <Badge className={STAGE_COLORS[assignment.stage] || STAGE_COLORS.INACTIVE}>
+                                          {assignment.stage.replace('_', ' ')}
+                                        </Badge>
+                                        {assignment.assignment_role && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            {assignment.assignment_role}
+                                          </Badge>
+                                        )}
+                                      </div>
                                       <Badge variant="outline" className="text-xs">
                                         {assignment.status}
                                       </Badge>
@@ -595,7 +660,7 @@ export function ContactDetailsDrawer({
                           </div>
                         )}
 
-                        {!currentAssignment && historyAssignments.length === 0 && (
+                        {activeAssignments.length === 0 && historyAssignments.length === 0 && (
                           <div className="text-center py-12 text-muted-foreground">
                             <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
                             <p>No assignment records</p>
