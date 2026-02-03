@@ -32,6 +32,21 @@ export default function Login() {
     }
   };
 
+  const handleSwitchAccount = async () => {
+    clearAuthError();
+    // Force account selection by using select_account prompt
+    const { supabase } = await import('@/lib/supabaseClient');
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          prompt: 'select_account',
+        },
+      },
+    });
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
       <Card className="w-full max-w-md border-border/50 shadow-xl">
@@ -83,6 +98,14 @@ export default function Login() {
           <p className="text-center text-xs text-muted-foreground">
             Only @aqmaritime.com accounts are permitted.
           </p>
+
+          <button
+            type="button"
+            onClick={handleSwitchAccount}
+            className="w-full text-center text-xs text-primary hover:underline"
+          >
+            Switch Google account
+          </button>
         </CardContent>
       </Card>
     </div>
