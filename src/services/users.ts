@@ -126,21 +126,4 @@ export async function updateCrmUser(
   }
 }
 
-export async function deleteCrmUser(userId: string): Promise<{ error: string | null }> {
-  try {
-    const { error } = await supabase
-      .from('crm_users')
-      .delete()
-      .eq('id', userId);
-
-    if (error) {
-      return { error: error.message };
-    }
-
-    return { error: null };
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : 'Unknown error occurred'
-    };
-  }
-}
+// Note: deleteCrmUser removed - CRM users cannot be deleted (only deactivated) to preserve audit history
