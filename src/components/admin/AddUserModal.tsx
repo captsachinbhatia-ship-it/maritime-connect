@@ -89,7 +89,6 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
 
     setIsSubmitting(false);
 
-    // PART 5: Show friendly error from Edge Function
     if (error) {
       console.error('Edge Function error:', error);
       toast({
@@ -101,9 +100,21 @@ export function AddUserModal({ open, onOpenChange, onUserCreated }: AddUserModal
     }
 
     console.log('User created successfully:', data);
+
+    // Show mode-specific success message
+    const mode = (data as any)?.mode;
+    let successMessage = 'User created successfully';
+    if (mode === 'invited') {
+      successMessage = 'User invited successfully';
+    } else if (mode === 'created') {
+      successMessage = 'User created successfully';
+    } else if (mode === 'linked_existing_auth_user') {
+      successMessage = 'Existing Auth user linked into CRM successfully';
+    }
+
     toast({
       title: 'Success',
-      description: 'User invited successfully',
+      description: successMessage,
     });
 
     setFormData({ full_name: '', email: '', role: '', region_focus: '' });
