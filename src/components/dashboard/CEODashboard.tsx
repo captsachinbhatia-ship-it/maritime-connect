@@ -3,7 +3,6 @@ import { PipelineHealth } from './PipelineHealth';
 import { TeamActivitySnapshot } from './TeamActivitySnapshot';
 import { RiskNeglectList } from './RiskNeglectList';
 import { RecentCompanies } from './RecentCompanies';
-import { UnassignedContactsList } from './UnassignedContactsList';
 import { ModeIndicator } from './ModeIndicator';
 
 interface CEODashboardProps {
@@ -36,9 +35,6 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
         <TeamActivitySnapshot />
         <RiskNeglectList />
       </div>
-
-      {/* Unassigned Contacts - Full Width */}
-      <UnassignedContactsList />
 
       {/* Recent Companies */}
       <RecentCompanies />
