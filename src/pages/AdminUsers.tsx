@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { UserPlus, RefreshCw } from 'lucide-react';
 import { UsersTable } from '@/components/admin/UsersTable';
 import { AddUserModal } from '@/components/admin/AddUserModal';
@@ -12,10 +14,11 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<CrmUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
   const fetchUsers = async () => {
     setIsLoading(true);
-    const { data, error } = await listCrmUsers();
+    const { data, error } = await listCrmUsers({ includeInactive: showInactive });
     setIsLoading(false);
 
     if (error) {
@@ -32,7 +35,7 @@ export default function AdminUsers() {
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [showInactive]);
 
   return (
     <div className="space-y-6">
@@ -58,10 +61,24 @@ export default function AdminUsers() {
       {/* Users Table */}
       <Card>
         <CardHeader>
-          <CardTitle>CRM Users</CardTitle>
-          <CardDescription>
-            {users.length} user{users.length !== 1 ? 's' : ''} registered
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>CRM Users</CardTitle>
+              <CardDescription>
+                {users.length} user{users.length !== 1 ? 's' : ''} {showInactive ? 'total' : 'active'}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-inactive"
+                checked={showInactive}
+                onCheckedChange={setShowInactive}
+              />
+              <Label htmlFor="show-inactive" className="text-sm text-muted-foreground">
+                Show inactive users
+              </Label>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <UsersTable users={users} isLoading={isLoading} onRefresh={fetchUsers} />
