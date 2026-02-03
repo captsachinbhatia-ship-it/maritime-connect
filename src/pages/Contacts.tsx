@@ -6,9 +6,10 @@ import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { AssignContactModal } from '@/components/contacts/AssignContactModal';
 import { ContactsSearch } from '@/components/contacts/ContactsSearch';
 import { getCompanyNamesMap } from '@/services/contacts';
-import { ContactAssignment } from '@/services/assignments';
+import { ContactAssignment, ContactOwners, getOwnersForContacts } from '@/services/assignments';
 import { getCurrentCrmUserId } from '@/services/profiles';
 import { getNextFollowupDueMap } from '@/services/followups';
+import { getUserNames } from '@/services/interactions';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactWithCompany } from '@/types';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -30,6 +31,8 @@ export default function Contacts() {
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [assignmentsMap, setAssignmentsMap] = useState<Record<string, ContactAssignment>>({});
+  const [ownersMap, setOwnersMap] = useState<Record<string, ContactOwners>>({});
+  const [ownerNamesMap, setOwnerNamesMap] = useState<Record<string, string>>({});
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -233,6 +236,33 @@ export default function Contacts() {
           setNextFollowupMap(followupResult.data);
         }
       }
+
+      // Step 7: Fetch owners (Primary/Secondary) for all contacts
+      const contactIdsForOwners = contactsList.map(c => c.id);
+      if (contactIdsForOwners.length > 0) {
+        const ownersResult = await getOwnersForContacts(contactIdsForOwners);
+        if (ownersResult.data) {
+          setOwnersMap(ownersResult.data);
+          
+          // Collect all unique owner user IDs for name resolution
+          const ownerUserIds = new Set<string>();
+          Object.values(ownersResult.data).forEach(owners => {
+            if (owners.primary?.assigned_to_crm_user_id) {
+              ownerUserIds.add(owners.primary.assigned_to_crm_user_id);
+            }
+            if (owners.secondary?.assigned_to_crm_user_id) {
+              ownerUserIds.add(owners.secondary.assigned_to_crm_user_id);
+            }
+          });
+          
+          if (ownerUserIds.size > 0) {
+            const ownerNamesResult = await getUserNames(Array.from(ownerUserIds));
+            if (ownerNamesResult.data) {
+              setOwnerNamesMap(ownerNamesResult.data);
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('Unexpected error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load contacts');
@@ -330,6 +360,8 @@ export default function Contacts() {
               contacts={contacts}
               companyNamesMap={companyNamesMap}
               assignmentsMap={assignmentsMap}
+              ownersMap={ownersMap}
+              ownerNamesMap={ownerNamesMap}
               nextFollowupMap={nextFollowupMap}
               isLoading={isLoading}
               onRowClick={handleRowClick}
@@ -346,6 +378,7 @@ export default function Contacts() {
         currentStage={selectedContact ? assignmentsMap[selectedContact.id]?.stage || null : null}
         isOpen={drawerOpen}
         onClose={handleDrawerClose}
+        onOwnersChange={loadContacts}
       />
 
       {contactToAssign && (

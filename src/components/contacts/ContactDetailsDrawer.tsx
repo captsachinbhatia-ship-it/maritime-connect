@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { 
   User, Building2, Phone, Mail, MessageSquare, FileText, 
   MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
-  FileEdit, Loader2, AlertCircle, Plus, CalendarClock
+  FileEdit, Loader2, AlertCircle, Plus, CalendarClock, Users
 } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -18,13 +18,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { getAssignmentsByContact, ContactAssignment } from '@/services/assignments';
+import { getAssignmentsByContact, getContactOwners, ContactAssignment, ContactOwners } from '@/services/assignments';
 import { getInteractionsByContact, getUserNames, ContactInteraction, InteractionFilters } from '@/services/interactions';
 import { getFollowupsByContact, ContactFollowup } from '@/services/followups';
 import { AddInteractionModal } from './AddInteractionModal';
 import { InteractionsFilters, InteractionsFiltersState } from './InteractionsFilters';
 import { FollowupsTab } from './FollowupsTab';
 import { AddFollowupModal } from './AddFollowupModal';
+import { AssignOwnersModal } from './AssignOwnersModal';
+import { supabase } from '@/lib/supabaseClient';
 
 
 interface ContactDetailsDrawerProps {
@@ -33,6 +35,7 @@ interface ContactDetailsDrawerProps {
   currentStage: string | null;
   isOpen: boolean;
   onClose: () => void;
+  onOwnersChange?: () => void;
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -64,6 +67,7 @@ export function ContactDetailsDrawer({
   currentStage,
   isOpen,
   onClose,
+  onOwnersChange,
 }: ContactDetailsDrawerProps) {
   const [activeTab, setActiveTab] = useState('details');
   const [assignments, setAssignments] = useState<ContactAssignment[]>([]);
@@ -80,6 +84,15 @@ export function ContactDetailsDrawer({
   const [isAddFollowupOpen, setIsAddFollowupOpen] = useState(false);
   const [followups, setFollowups] = useState<ContactFollowup[]>([]);
   
+  // Owners state
+  const [owners, setOwners] = useState<ContactOwners | null>(null);
+  const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
+  const [isLoadingOwners, setIsLoadingOwners] = useState(false);
+  const [isAssignOwnersOpen, setIsAssignOwnersOpen] = useState(false);
+  
+  // Admin check
+  const [isAdmin, setIsAdmin] = useState(false);
+  
   // Interactions filters state
   const [interactionsFilters, setInteractionsFilters] = useState<InteractionsFiltersState>({
     type: 'all',
@@ -88,6 +101,62 @@ export function ContactDetailsDrawer({
     search: '',
   });
 
+  // Check admin status on mount
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      setIsAdmin(data?.role === 'ADMIN' || data?.role === 'CEO');
+    };
+    
+    checkAdmin();
+  }, []);
+
+  // Load owners when drawer opens
+  const loadOwners = useCallback(async () => {
+    if (!contact) return;
+    
+    setIsLoadingOwners(true);
+    
+    const result = await getContactOwners(contact.id);
+    
+    if (result.data) {
+      setOwners(result.data);
+      
+      // Get user names for owners
+      const userIds: string[] = [];
+      if (result.data.primary?.assigned_to_crm_user_id) {
+        userIds.push(result.data.primary.assigned_to_crm_user_id);
+      }
+      if (result.data.secondary?.assigned_to_crm_user_id) {
+        userIds.push(result.data.secondary.assigned_to_crm_user_id);
+      }
+      
+      if (userIds.length > 0) {
+        const namesResult = await getUserNames(userIds);
+        if (namesResult.data) {
+          setOwnerNames(namesResult.data);
+        }
+      }
+    }
+    
+    setIsLoadingOwners(false);
+  }, [contact]);
+
+  // Load owners when drawer opens
+  useEffect(() => {
+    if (isOpen && contact) {
+      loadOwners();
+    }
+  }, [isOpen, contact?.id, loadOwners]);
+
   // Reset state when drawer closes
   useEffect(() => {
     if (!isOpen) {
@@ -95,6 +164,8 @@ export function ContactDetailsDrawer({
       setAssignments([]);
       setInteractions([]);
       setFollowups([]);
+      setOwners(null);
+      setOwnerNames({});
       setAssignmentsError(null);
       setInteractionsError(null);
       setFollowupsError(null);
@@ -311,6 +382,53 @@ export function ContactDetailsDrawer({
                     Company
                   </h4>
                   <p className="text-foreground">{companyName || 'Not assigned'}</p>
+                </div>
+
+                <Separator />
+
+                {/* Ownership */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      Ownership
+                    </h4>
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsAssignOwnersOpen(true)}
+                      >
+                        <Users className="mr-1 h-3 w-3" />
+                        Assign Owners
+                      </Button>
+                    )}
+                  </div>
+                  {isLoadingOwners ? (
+                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </div>
+                  ) : (
+                    <div className="grid gap-3">
+                      <div>
+                        <span className="text-xs text-muted-foreground">Primary Owner</span>
+                        <p className="text-foreground">
+                          {owners?.primary?.assigned_to_crm_user_id
+                            ? ownerNames[owners.primary.assigned_to_crm_user_id] || 'Unknown User'
+                            : <span className="text-muted-foreground">Unassigned</span>}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted-foreground">Secondary Owner</span>
+                        <p className="text-foreground">
+                          {owners?.secondary?.assigned_to_crm_user_id
+                            ? ownerNames[owners.secondary.assigned_to_crm_user_id] || 'Unknown User'
+                            : <span className="text-muted-foreground">None</span>}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
@@ -602,6 +720,21 @@ export function ContactDetailsDrawer({
             isOpen={isAddFollowupOpen}
             onClose={() => setIsAddFollowupOpen(false)}
             onSuccess={loadFollowups}
+          />
+        )}
+
+        {/* Assign Owners Modal (Admin only) */}
+        {contact && (
+          <AssignOwnersModal
+            open={isAssignOwnersOpen}
+            onOpenChange={setIsAssignOwnersOpen}
+            contactId={contact.id}
+            contactName={contact.full_name || 'Unknown'}
+            currentOwners={owners}
+            onSuccess={() => {
+              loadOwners();
+              onOwnersChange?.();
+            }}
           />
         )}
       </SheetContent>
