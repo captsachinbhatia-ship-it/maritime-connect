@@ -143,9 +143,9 @@ export function ContactDetailsDrawer({
     } else if (result.data) {
       setAssignments(result.data);
       
-      // Get user names for assigned_to and assigned_by
+      // Get user names for assigned_to_crm_user_id and assigned_by_crm_user_id
       const userIds = result.data
-        .flatMap(a => [a.assigned_to, a.assigned_by])
+        .flatMap(a => [a.assigned_to_crm_user_id, a.assigned_by_crm_user_id])
         .filter((id): id is string => id !== null);
       
       if (userIds.length > 0) {
@@ -425,11 +425,11 @@ export function ContactDetailsDrawer({
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Assigned To</span>
-                                  <span>{getUserName(currentAssignment.assigned_to, assigneeNames)}</span>
+                                  <span>{getUserName(currentAssignment.assigned_to_crm_user_id, assigneeNames)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Assigned By</span>
-                                  <span>{getUserName(currentAssignment.assigned_by, assigneeNames)}</span>
+                                  <span>{getUserName(currentAssignment.assigned_by_crm_user_id, assigneeNames)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Assigned At</span>
@@ -460,11 +460,11 @@ export function ContactDetailsDrawer({
                                     </div>
                                     <div className="flex justify-between">
                                       <span className="text-muted-foreground">Assigned To</span>
-                                      <span>{getUserName(assignment.assigned_to, assigneeNames)}</span>
+                                      <span>{getUserName(assignment.assigned_to_crm_user_id, assigneeNames)}</span>
                                     </div>
                                     <div className="flex justify-between">
                                       <span className="text-muted-foreground">Assigned By</span>
-                                      <span>{getUserName(assignment.assigned_by, assigneeNames)}</span>
+                                      <span>{getUserName(assignment.assigned_by_crm_user_id, assigneeNames)}</span>
                                     </div>
                                     <div className="flex justify-between">
                                       <span className="text-muted-foreground">Assigned At</span>

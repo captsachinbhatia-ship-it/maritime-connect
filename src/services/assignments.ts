@@ -8,16 +8,13 @@ export interface ContactAssignment {
   contact_id: string;
   stage: AssignmentStage;
   status: string;
-  // New CRM user columns
+  // CRM user columns (primary)
   assigned_to_crm_user_id: string | null;
   assigned_by_crm_user_id: string | null;
   stage_changed_by_crm_user_id: string | null;
-  // Legacy columns (read-only, may still exist)
-  assigned_to: string | null;
-  assigned_by: string | null;
+  // Timestamps
   assigned_at: string | null;
   stage_changed_at: string | null;
-  stage_changed_by: string | null;
   notes: string | null;
 }
 

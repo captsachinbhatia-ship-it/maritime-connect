@@ -28,18 +28,30 @@ export function KPIRow() {
       setIsLoading(true);
 
       try {
+        // First get the current user's CRM ID
+        const { data: crmUser } = await supabase
+          .from('crm_users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        if (!crmUser) {
+          setIsLoading(false);
+          return;
+        }
+
         // Get active contacts count
         const { count: activeCount } = await supabase
           .from('contact_assignments')
           .select('*', { count: 'exact', head: true })
-          .eq('assigned_to', user.id)
+          .eq('assigned_to_crm_user_id', crmUser.id)
           .eq('status', 'ACTIVE');
 
         // Get contact IDs assigned to user
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
-          .eq('assigned_to', user.id)
+          .eq('assigned_to_crm_user_id', crmUser.id)
           .eq('status', 'ACTIVE');
 
         const contactIds = assignments?.map(a => a.contact_id) || [];

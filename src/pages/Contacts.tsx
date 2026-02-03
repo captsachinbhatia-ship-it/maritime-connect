@@ -98,8 +98,21 @@ export default function Contacts() {
         });
         assignments = Array.from(latestByContact.values());
       } else {
-        // Non-admin or "My Contacts": filter by assigned_to = current user
+        // Non-admin or "My Contacts": filter by assigned_to_crm_user_id = current user's CRM ID
         if (!user?.id) {
+          setContacts([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // First get the current user's CRM ID
+        const { data: crmUser } = await supabase
+          .from('crm_users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+
+        if (!crmUser) {
           setContacts([]);
           setIsLoading(false);
           return;
@@ -109,7 +122,7 @@ export default function Contacts() {
           .from('contact_assignments')
           .select('*')
           .eq('status', 'ACTIVE')
-          .eq('assigned_to', user.id)
+          .eq('assigned_to_crm_user_id', crmUser.id)
           .order('assigned_at', { ascending: false });
 
         if (assignmentError) {

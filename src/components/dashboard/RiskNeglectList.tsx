@@ -26,7 +26,7 @@ export function RiskNeglectList() {
         // Get all active assignments
         const { data: assignments } = await supabase
           .from('contact_assignments')
-          .select('contact_id, assigned_to')
+          .select('contact_id, assigned_to_crm_user_id')
           .eq('status', 'ACTIVE');
 
         if (!assignments || assignments.length === 0) {
@@ -38,8 +38,8 @@ export function RiskNeglectList() {
         // Deduplicate by contact_id
         const contactAssignmentMap = new Map<string, string>();
         assignments.forEach(a => {
-          if (!contactAssignmentMap.has(a.contact_id)) {
-            contactAssignmentMap.set(a.contact_id, a.assigned_to);
+          if (!contactAssignmentMap.has(a.contact_id) && a.assigned_to_crm_user_id) {
+            contactAssignmentMap.set(a.contact_id, a.assigned_to_crm_user_id);
           }
         });
 
@@ -94,15 +94,15 @@ export function RiskNeglectList() {
           );
         }
 
-        // Fetch assignee profiles
-        const assigneeIds = [...new Set(neglectedIds.map(id => contactAssignmentMap.get(id)!))];
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name')
+        // Fetch assignee names from crm_users
+        const assigneeIds = [...new Set(neglectedIds.map(id => contactAssignmentMap.get(id)!))].filter(Boolean);
+        const { data: crmUsers } = await supabase
+          .from('crm_users')
+          .select('id, full_name, email')
           .in('id', assigneeIds);
 
-        const profileMap = new Map(
-          profiles?.map(p => [p.id, p.full_name || 'Unknown']) || []
+        const crmUserMap = new Map(
+          crmUsers?.map(u => [u.id, u.full_name || u.email || 'Unknown']) || []
         );
 
         // Build result
@@ -110,7 +110,7 @@ export function RiskNeglectList() {
           id: c.id,
           fullName: c.full_name || 'Unknown',
           companyName: c.company_id ? companyMap[c.company_id] || null : null,
-          assignedTo: profileMap.get(contactAssignmentMap.get(c.id)!) || 'Unassigned',
+          assignedTo: crmUserMap.get(contactAssignmentMap.get(c.id)!) || 'Unassigned',
           lastInteractionAt: interactionMap.get(c.id) || null,
         }));
 
