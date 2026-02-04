@@ -4,6 +4,7 @@ import { TeamActivitySnapshot } from './TeamActivitySnapshot';
 import { RiskNeglectList } from './RiskNeglectList';
 import { RecentCompanies } from './RecentCompanies';
 import { ModeIndicator } from './ModeIndicator';
+import { PendingStageRequests } from './PendingStageRequests';
 
 interface CEODashboardProps {
   isAdmin: boolean;
@@ -26,6 +27,9 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
 
       {/* Global KPI Row */}
       <CEOKPIRow />
+
+      {/* Pending Stage Requests */}
+      <PendingStageRequests />
 
       {/* Pipeline Health - Full Width */}
       <PipelineHealth />
