@@ -623,6 +623,11 @@ export function MyContactsTab() {
           setSelectedContact(null);
         }}
         onOwnersChange={loadContacts}
+        onCompanyChange={(newCompanyId, newCompanyName) => {
+          // Update local company names map and refetch contacts
+          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
+          loadContacts();
+        }}
       />
 
       <StageRequestModal

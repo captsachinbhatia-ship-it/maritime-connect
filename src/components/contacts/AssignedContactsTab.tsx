@@ -370,6 +370,10 @@ export function AssignedContactsTab() {
           setDrawerContact(null);
         }}
         onOwnersChange={fetchData}
+        onCompanyChange={(newCompanyId, newCompanyName) => {
+          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
+          fetchData();
+        }}
       />
     </>
   );
