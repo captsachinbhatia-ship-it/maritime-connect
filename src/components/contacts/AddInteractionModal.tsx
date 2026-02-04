@@ -65,6 +65,7 @@ export function AddInteractionModal({
     setSubject('');
     setNotes('');
     setInteractionAt('');
+    setValidationMessage('');
   };
 
   const handleClose = () => {
@@ -72,8 +73,11 @@ export function AddInteractionModal({
     onClose();
   };
 
+  const [validationMessage, setValidationMessage] = useState('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationMessage('');
 
     if (!interactionType) {
       toast({
@@ -84,12 +88,14 @@ export function AddInteractionModal({
       return;
     }
 
-    if (!notes.trim()) {
-      toast({
-        title: 'Validation Error',
-        description: 'Notes are required.',
-        variant: 'destructive',
-      });
+    // Validation: If outcome is NOT_INTERESTED, subject and notes are optional
+    // Otherwise, require at least one of subject or notes
+    const isNotInterested = outcome === 'NOT_INTERESTED';
+    const hasSubject = subject.trim().length > 0;
+    const hasNotes = notes.trim().length > 0;
+
+    if (!isNotInterested && !hasSubject && !hasNotes) {
+      setValidationMessage('Please enter a Subject or Notes');
       return;
     }
 
@@ -174,25 +180,35 @@ export function AddInteractionModal({
             <Input
               id="subject"
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                if (validationMessage) setValidationMessage('');
+              }}
               placeholder="Optional subject"
               maxLength={200}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="notes">
-              Notes <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="notes">Notes</Label>
             <Textarea
               id="notes"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                if (validationMessage) setValidationMessage('');
+              }}
               placeholder="Enter interaction notes..."
               rows={4}
               maxLength={2000}
             />
           </div>
+
+          {validationMessage && (
+            <p className="text-sm text-muted-foreground">
+              {validationMessage}
+            </p>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="interaction-at">Date & Time</Label>
