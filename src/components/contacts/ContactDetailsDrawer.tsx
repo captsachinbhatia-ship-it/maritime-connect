@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { 
   User, Building2, Phone, Mail, MessageSquare, FileText, 
   MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
   FileEdit, Loader2, AlertCircle, Plus, CalendarClock, Users,
-  ArrowUpRight, UserPlus
+  ArrowUpRight, UserPlus, Pencil
 } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,7 @@ import { AssignOwnersModal } from './AssignOwnersModal';
 import { StageRequestModal } from './StageRequestModal';
 import { StageHistoryPanel } from './StageHistoryPanel';
 import { AddAssignmentModal } from './AddAssignmentModal';
+import { EditCompanyModal } from './EditCompanyModal';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -41,6 +42,7 @@ interface ContactDetailsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onOwnersChange?: () => void;
+  onCompanyChange?: (newCompanyId: string, newCompanyName: string) => void;
 }
 
 const STAGE_COLORS: Record<string, string> = {
@@ -73,6 +75,7 @@ export function ContactDetailsDrawer({
   isOpen,
   onClose,
   onOwnersChange,
+  onCompanyChange,
 }: ContactDetailsDrawerProps) {
   const { crmUser } = useAuth();
   const [activeTab, setActiveTab] = useState('details');
@@ -101,6 +104,10 @@ export function ContactDetailsDrawer({
   
   // Add assignment modal state
   const [isAddAssignmentOpen, setIsAddAssignmentOpen] = useState(false);
+  
+  // Edit company modal state
+  const [isEditCompanyOpen, setIsEditCompanyOpen] = useState(false);
+  const [displayedCompanyName, setDisplayedCompanyName] = useState<string | null>(companyName);
 
   // Admin check
   const [isAdmin, setIsAdmin] = useState(false);
@@ -112,6 +119,22 @@ export function ContactDetailsDrawer({
     dateRange: 'all',
     search: '',
   });
+
+  // Update displayed company name when prop changes
+  useEffect(() => {
+    setDisplayedCompanyName(companyName);
+  }, [companyName]);
+
+  // Permission check: can edit company if Admin/CEO or PRIMARY/SECONDARY assignee
+  const canEditCompany = useMemo(() => {
+    if (isAdmin) return true;
+    if (!crmUser?.id || !owners) return false;
+    
+    const isPrimaryOwner = owners.primary?.assigned_to_crm_user_id === crmUser.id;
+    const isSecondaryOwner = owners.secondary?.assigned_to_crm_user_id === crmUser.id;
+    
+    return isPrimaryOwner || isSecondaryOwner;
+  }, [isAdmin, crmUser?.id, owners]);
 
   // Check admin status on mount
   useEffect(() => {
@@ -395,11 +418,24 @@ export function ContactDetailsDrawer({
 
                 {/* Company */}
                 <div className="space-y-3">
-                  <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <Building2 className="h-4 w-4" />
-                    Company
-                  </h4>
-                  <p className="text-foreground">{companyName || 'Not assigned'}</p>
+                  <div className="flex items-center justify-between">
+                    <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <Building2 className="h-4 w-4" />
+                      Company
+                    </h4>
+                    {canEditCompany && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => setIsEditCompanyOpen(true)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                        <span className="sr-only">Edit company</span>
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-foreground">{displayedCompanyName || 'Not assigned'}</p>
                 </div>
 
                 <Separator />
@@ -892,6 +928,22 @@ export function ContactDetailsDrawer({
               loadOwners();
               loadAssignments();
               onOwnersChange?.();
+            }}
+          />
+        )}
+
+        {/* Edit Company Modal */}
+        {contact && (
+          <EditCompanyModal
+            contactId={contact.id}
+            contactName={contact.full_name || 'Unknown'}
+            currentCompanyId={contact.company_id}
+            currentCompanyName={displayedCompanyName}
+            isOpen={isEditCompanyOpen}
+            onClose={() => setIsEditCompanyOpen(false)}
+            onSuccess={(newCompanyId, newCompanyName) => {
+              setDisplayedCompanyName(newCompanyName);
+              onCompanyChange?.(newCompanyId, newCompanyName);
             }}
           />
         )}

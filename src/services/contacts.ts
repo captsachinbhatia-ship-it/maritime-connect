@@ -286,3 +286,32 @@ export async function getAllCompaniesForDropdown(): Promise<{
     };
   }
 }
+
+/**
+ * Update a contact's company_id
+ */
+export async function updateContactCompany(
+  contactId: string,
+  companyId: string
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from('contacts')
+      .update({ company_id: companyId })
+      .eq('id', contactId);
+
+    if (error) {
+      if (error.message.includes('row-level security')) {
+        return { success: false, error: 'Permission denied. You may not have access to update this contact.' };
+      }
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error occurred'
+    };
+  }
+}
