@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,8 +18,10 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabaseClient';
+import { createStageRequest } from '@/services/stageRequests';
+import { useAuth } from '@/contexts/AuthContext';
 
 type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
@@ -30,89 +32,96 @@ const STAGES: { value: StageType; label: string }[] = [
   { value: 'INACTIVE', label: 'Inactive' },
 ];
 
-interface RequestStageMoveModalProps {
+const STAGE_COLORS: Record<string, string> = {
+  COLD_CALLING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  ASPIRATION: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+  ACHIEVEMENT: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  INACTIVE: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
+};
+
+interface StageRequestModalProps {
   contactId: string;
   contactName: string;
-  currentStage: StageType;
+  currentStage: string;
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 }
 
-export function RequestStageMoveModal({
+export function StageRequestModal({
   contactId,
   contactName,
   currentStage,
   isOpen,
   onClose,
   onSuccess,
-}: RequestStageMoveModalProps) {
+}: StageRequestModalProps) {
   const { toast } = useToast();
-  const [proposedStage, setProposedStage] = useState<StageType | ''>('');
-  const [notes, setNotes] = useState('');
+  const { crmUser } = useAuth();
+  const [requestedStage, setRequestedStage] = useState<StageType | ''>('');
+  const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const availableStages = STAGES.filter(s => s.value !== currentStage);
 
   const handleSubmit = async () => {
-    if (!proposedStage || !notes.trim()) {
+    if (!requestedStage) {
       toast({
         variant: 'destructive',
         title: 'Validation error',
-        description: 'Please select a stage and provide notes.',
+        description: 'Please select a stage.',
+      });
+      return;
+    }
+
+    if (!crmUser?.id) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'User not authenticated.',
       });
       return;
     }
 
     setIsSubmitting(true);
 
-    try {
-      const proposedStageLabel = STAGES.find(s => s.value === proposedStage)?.label || proposedStage;
-      
-      // Create an interaction as a stage move request
-      const { error } = await supabase
-        .from('interactions')
-        .insert({
-          contact_id: contactId,
-          interaction_type: 'NOTE',
-          outcome: 'FOLLOW_UP',
-          subject: `Stage Move Request: ${proposedStageLabel}`,
-          notes: notes.trim(),
-          interaction_at: new Date().toISOString(),
-        });
+    const result = await createStageRequest(
+      contactId,
+      requestedStage,
+      crmUser.id,
+      note.trim() || undefined
+    );
 
-      if (error) {
-        throw error;
-      }
-
+    if (result.success) {
       toast({
-        title: 'Request sent',
-        description: 'Primary owner will review.',
+        title: 'Request sent for approval',
+        description: 'The Primary owner will review your stage move request.',
       });
 
-      // Reset form
-      setProposedStage('');
-      setNotes('');
+      setRequestedStage('');
+      setNote('');
       onClose();
       onSuccess?.();
-    } catch (err) {
+    } else {
       toast({
         variant: 'destructive',
         title: 'Failed to submit request',
-        description: err instanceof Error ? err.message : 'Unknown error',
+        description: result.error || 'Unknown error',
       });
-    } finally {
-      setIsSubmitting(false);
     }
+
+    setIsSubmitting(false);
   };
 
   const handleClose = () => {
     if (!isSubmitting) {
-      setProposedStage('');
-      setNotes('');
+      setRequestedStage('');
+      setNote('');
       onClose();
     }
   };
+
+  const currentStageLabel = STAGES.find(s => s.value === currentStage)?.label || currentStage;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -120,18 +129,34 @@ export function RequestStageMoveModal({
         <DialogHeader>
           <DialogTitle>Request Stage Move</DialogTitle>
           <DialogDescription>
-            Request the Primary owner to move <strong>{contactName}</strong> to a different stage.
+            Request approval to move <strong>{contactName}</strong> to a different stage.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Current Stage Display */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+            <div className="text-sm text-muted-foreground">Current:</div>
+            <Badge className={STAGE_COLORS[currentStage] || STAGE_COLORS.INACTIVE}>
+              {currentStageLabel}
+            </Badge>
+            {requestedStage && (
+              <>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                <Badge className={STAGE_COLORS[requestedStage] || STAGE_COLORS.INACTIVE}>
+                  {STAGES.find(s => s.value === requestedStage)?.label || requestedStage}
+                </Badge>
+              </>
+            )}
+          </div>
+
           <div className="space-y-2">
-            <Label htmlFor="proposed-stage">Proposed Stage *</Label>
+            <Label htmlFor="requested-stage">Requested Stage *</Label>
             <Select
-              value={proposedStage}
-              onValueChange={(val) => setProposedStage(val as StageType)}
+              value={requestedStage}
+              onValueChange={(val) => setRequestedStage(val as StageType)}
             >
-              <SelectTrigger id="proposed-stage">
+              <SelectTrigger id="requested-stage">
                 <SelectValue placeholder="Select a stage" />
               </SelectTrigger>
               <SelectContent>
@@ -145,17 +170,17 @@ export function RequestStageMoveModal({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="notes">Notes *</Label>
+            <Label htmlFor="note">Note (optional)</Label>
             <Textarea
-              id="notes"
+              id="note"
               placeholder="Explain why this contact should be moved..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
               rows={3}
               maxLength={500}
             />
             <p className="text-xs text-muted-foreground">
-              {notes.length}/500 characters
+              {note.length}/500 characters
             </p>
           </div>
         </div>
@@ -166,15 +191,15 @@ export function RequestStageMoveModal({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isSubmitting || !proposedStage || !notes.trim()}
+            disabled={isSubmitting || !requestedStage}
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Submitting...
+                Sending...
               </>
             ) : (
-              'Submit Request'
+              'Send Request'
             )}
           </Button>
         </DialogFooter>

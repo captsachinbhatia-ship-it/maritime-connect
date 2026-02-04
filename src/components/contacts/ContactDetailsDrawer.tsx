@@ -3,7 +3,8 @@ import { format } from 'date-fns';
 import { 
   User, Building2, Phone, Mail, MessageSquare, FileText, 
   MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
-  FileEdit, Loader2, AlertCircle, Plus, CalendarClock, Users
+  FileEdit, Loader2, AlertCircle, Plus, CalendarClock, Users,
+  ArrowUpRight
 } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +27,10 @@ import { InteractionsFilters, InteractionsFiltersState } from './InteractionsFil
 import { FollowupsTab } from './FollowupsTab';
 import { AddFollowupModal } from './AddFollowupModal';
 import { AssignOwnersModal } from './AssignOwnersModal';
+import { StageRequestModal } from './StageRequestModal';
+import { StageHistoryPanel } from './StageHistoryPanel';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext';
 
 
 interface ContactDetailsDrawerProps {
@@ -69,6 +73,7 @@ export function ContactDetailsDrawer({
   onClose,
   onOwnersChange,
 }: ContactDetailsDrawerProps) {
+  const { crmUser } = useAuth();
   const [activeTab, setActiveTab] = useState('details');
   const [assignments, setAssignments] = useState<ContactAssignment[]>([]);
   const [interactions, setInteractions] = useState<ContactInteraction[]>([]);
@@ -89,6 +94,9 @@ export function ContactDetailsDrawer({
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
   const [isLoadingOwners, setIsLoadingOwners] = useState(false);
   const [isAssignOwnersOpen, setIsAssignOwnersOpen] = useState(false);
+  
+  // Stage request modal state
+  const [isStageRequestOpen, setIsStageRequestOpen] = useState(false);
   
   // Admin check
   const [isAdmin, setIsAdmin] = useState(false);
@@ -488,6 +496,37 @@ export function ContactDetailsDrawer({
                   </>
                 )}
 
+                {/* Request Stage Move (for non-primary owners) */}
+                {currentStage && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                          <ArrowUpRight className="h-4 w-4" />
+                          Stage Actions
+                        </h4>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsStageRequestOpen(true)}
+                        >
+                          <ArrowUpRight className="mr-1 h-3 w-3" />
+                          Request Stage Move
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Stage History (visible to admins, optional for others) */}
+                {isAdmin && contact && (
+                  <>
+                    <Separator />
+                    <StageHistoryPanel contactId={contact.id} isVisible={true} />
+                  </>
+                )}
+
                 {/* Meta */}
                 <Separator />
                 <div className="space-y-3">
@@ -805,6 +844,20 @@ export function ContactDetailsDrawer({
             onSuccess={() => {
               loadOwners();
               onOwnersChange?.();
+            }}
+          />
+        )}
+
+        {/* Stage Request Modal */}
+        {contact && currentStage && (
+          <StageRequestModal
+            contactId={contact.id}
+            contactName={contact.full_name || 'Unknown'}
+            currentStage={currentStage}
+            isOpen={isStageRequestOpen}
+            onClose={() => setIsStageRequestOpen(false)}
+            onSuccess={() => {
+              // Could refresh stage requests list here if needed
             }}
           />
         )}

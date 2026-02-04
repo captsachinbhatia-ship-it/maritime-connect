@@ -4,7 +4,7 @@ import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RequestStageMoveModal } from './RequestStageMoveModal';
+import { StageRequestModal } from './StageRequestModal';
 import {
   Table,
   TableBody,
@@ -625,7 +625,7 @@ export function MyContactsTab() {
         onOwnersChange={loadContacts}
       />
 
-      <RequestStageMoveModal
+      <StageRequestModal
         contactId={stageRequestContact?.id || ''}
         contactName={stageRequestContact?.full_name || 'Unknown'}
         currentStage={activeStage}
