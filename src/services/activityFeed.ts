@@ -92,7 +92,7 @@ export function calculatePerformanceSummary(data: ActivityFeedItem[]): Performan
 
   data.forEach(item => {
     const userId = item.actor_crm_user_id;
-    const userName = item.actor_name || item.actor_email || 'Unknown User';
+    const userName = item.actor_name || item.actor_email || 'System / Admin';
 
     if (!userMap.has(userId)) {
       userMap.set(userId, {

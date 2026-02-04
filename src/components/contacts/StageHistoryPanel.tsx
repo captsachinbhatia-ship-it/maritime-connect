@@ -102,7 +102,7 @@ export function StageHistoryPanel({ contactId, isVisible }: StageHistoryPanelPro
                 </Badge>
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>By: {event.actor_name || 'Unknown'}</span>
+                <span>By: {event.actor_name || 'System / Admin'}</span>
                 <span>{formatDate(event.occurred_at)}</span>
               </div>
               {event.note && (

@@ -84,7 +84,7 @@ export async function getInteractionsByContact(
 }
 
 // Get user names from crm_users table
-// Fallback: crm_users.full_name → "Unknown User"
+// Fallback: crm_users.full_name → "System / Admin"
 export async function getUserNames(userIds: string[]): Promise<{
   data: Record<string, string> | null;
   error: string | null;
@@ -110,13 +110,13 @@ export async function getUserNames(userIds: string[]): Promise<{
     
     // Map all found users
     data?.forEach(user => {
-      nameMap[user.id] = user.full_name || 'Unknown User';
+      nameMap[user.id] = user.full_name || 'System / Admin';
     });
 
-    // For any ID not found in crm_users, set "Unknown User"
+    // For any ID not found in crm_users, set "System / Admin"
     uniqueIds.forEach(id => {
       if (!nameMap[id]) {
-        nameMap[id] = 'Unknown User';
+        nameMap[id] = 'System / Admin';
       }
     });
 

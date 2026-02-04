@@ -128,13 +128,13 @@ export async function getPendingStageRequests(): Promise<{
 
   if (contactsResult.data) {
     contactsResult.data.forEach(c => {
-      contactMap[c.id] = c.full_name || 'Unknown';
+      contactMap[c.id] = c.full_name || 'Unknown Contact';
     });
   }
 
   if (usersResult.data) {
     usersResult.data.forEach(u => {
-      userMap[u.id] = u.full_name || 'Unknown';
+      userMap[u.id] = u.full_name || 'System / Admin';
     });
   }
 
@@ -146,9 +146,9 @@ export async function getPendingStageRequests(): Promise<{
 
   const enrichedRequests: StageRequestWithDetails[] = requests.map(r => ({
     ...r,
-    contact_name: contactMap[r.contact_id] || 'Unknown',
+    contact_name: contactMap[r.contact_id] || 'Unknown Contact',
     current_stage: stageMap[r.contact_id] || 'Unknown',
-    requester_name: userMap[r.requested_by_crm_user_id] || 'Unknown',
+    requester_name: userMap[r.requested_by_crm_user_id] || 'System / Admin',
   }));
 
   return { data: enrichedRequests };
@@ -209,14 +209,14 @@ export async function getStageEventsByContact(
     const userMap: Record<string, string> = {};
     if (users) {
       users.forEach(u => {
-        userMap[u.id] = u.full_name || 'Unknown';
+        userMap[u.id] = u.full_name || 'System / Admin';
       });
     }
 
     return {
       data: events.map(e => ({
         ...e,
-        actor_name: e.changed_by_crm_user_id ? userMap[e.changed_by_crm_user_id] || 'Unknown' : 'System',
+        actor_name: e.changed_by_crm_user_id ? userMap[e.changed_by_crm_user_id] || 'System / Admin' : 'System',
       })),
     };
   }
