@@ -498,3 +498,93 @@ export async function getAssignmentsByContact(contactId: string): Promise<{
     };
   }
 }
+
+// Add a single assignment (for Admin add assignment modal)
+// This inserts a new ACTIVE assignment without closing existing ones
+// Used when adding a new owner to a contact that may already have owners
+export async function addAssignment(params: {
+  contact_id: string;
+  assigned_to_crm_user_id: string;
+  assignment_role: AssignmentRole;
+  stage: AssignmentStage;
+}): Promise<{
+  data: ContactAssignment | null;
+  error: string | null;
+}> {
+  try {
+    const { contact_id, assigned_to_crm_user_id, assignment_role, stage } = params;
+
+    // Get current CRM user ID for assigner
+    const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+    if (crmError || !currentCrmUserId) {
+      return { data: null, error: crmError || 'Could not resolve current CRM user' };
+    }
+
+    // Check if there's already an ACTIVE assignment with the same role
+    const { data: existingRoleAssignment } = await supabase
+      .from('contact_assignments')
+      .select('id, assigned_to_crm_user_id')
+      .eq('contact_id', contact_id)
+      .eq('status', 'ACTIVE')
+      .eq('assignment_role', assignment_role)
+      .maybeSingle();
+
+    // If there's an existing assignment with the same role, close it first
+    if (existingRoleAssignment) {
+      console.log(`[addAssignment] Closing existing ${assignment_role} assignment:`, existingRoleAssignment.id);
+      const { error: closeError } = await supabase
+        .from('contact_assignments')
+        .update({ status: 'CLOSED' })
+        .eq('id', existingRoleAssignment.id);
+
+      if (closeError) {
+        console.error('[addAssignment] Close error:', closeError);
+        if (closeError.message.includes('row-level security')) {
+          return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
+        }
+        return { data: null, error: closeError.message };
+      }
+    }
+
+    const now = new Date().toISOString();
+
+    const insertPayload = {
+      contact_id,
+      assigned_to_crm_user_id,
+      assigned_by_crm_user_id: currentCrmUserId,
+      assignment_role,
+      stage,
+      status: 'ACTIVE',
+      assigned_at: now,
+      stage_changed_at: now,
+      stage_changed_by_crm_user_id: currentCrmUserId,
+    };
+
+    console.log('[addAssignment] Insert payload:', insertPayload);
+
+    const { data, error } = await supabase
+      .from('contact_assignments')
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[addAssignment] Insert error:', error);
+      if (error.message.includes('row-level security')) {
+        return { data: null, error: 'Permission blocked by RLS policy on contact_assignments.' };
+      }
+      if (error.message.includes('one_active_assignment') || error.message.includes('duplicate key')) {
+        return { data: null, error: 'An active assignment with this role already exists. Please refresh and try again.' };
+      }
+      return { data: null, error: error.message };
+    }
+
+    return { data: data as ContactAssignment, error: null };
+  } catch (err) {
+    console.error('[addAssignment] Unexpected error:', err);
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Unknown error occurred'
+    };
+  }
+}

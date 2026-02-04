@@ -4,7 +4,7 @@ import {
   User, Building2, Phone, Mail, MessageSquare, FileText, 
   MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
   FileEdit, Loader2, AlertCircle, Plus, CalendarClock, Users,
-  ArrowUpRight
+  ArrowUpRight, UserPlus
 } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +29,7 @@ import { AddFollowupModal } from './AddFollowupModal';
 import { AssignOwnersModal } from './AssignOwnersModal';
 import { StageRequestModal } from './StageRequestModal';
 import { StageHistoryPanel } from './StageHistoryPanel';
+import { AddAssignmentModal } from './AddAssignmentModal';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -98,6 +99,9 @@ export function ContactDetailsDrawer({
   // Stage request modal state
   const [isStageRequestOpen, setIsStageRequestOpen] = useState(false);
   
+  // Add assignment modal state
+  const [isAddAssignmentOpen, setIsAddAssignmentOpen] = useState(false);
+
   // Admin check
   const [isAdmin, setIsAdmin] = useState(false);
   
@@ -317,8 +321,8 @@ export function ContactDetailsDrawer({
   };
 
   const getUserName = (userId: string | null, nameMap: Record<string, string>) => {
-    if (!userId) return '-';
-    return nameMap[userId] || 'Unknown User';
+    if (!userId) return 'System / Admin';
+    return nameMap[userId] || 'System / Admin';
   };
 
   return (
@@ -429,7 +433,7 @@ export function ContactDetailsDrawer({
                         <span className="text-xs text-muted-foreground">Primary Owner</span>
                         <p className="text-foreground">
                           {owners?.primary?.assigned_to_crm_user_id
-                            ? ownerNames[owners.primary.assigned_to_crm_user_id] || 'Unknown User'
+                            ? ownerNames[owners.primary.assigned_to_crm_user_id] || 'System / Admin'
                             : <span className="text-muted-foreground">Unassigned</span>}
                         </p>
                       </div>
@@ -437,7 +441,7 @@ export function ContactDetailsDrawer({
                         <span className="text-xs text-muted-foreground">Secondary Owner</span>
                         <p className="text-foreground">
                           {owners?.secondary?.assigned_to_crm_user_id
-                            ? ownerNames[owners.secondary.assigned_to_crm_user_id] || 'Unknown User'
+                            ? ownerNames[owners.secondary.assigned_to_crm_user_id] || 'System / Admin'
                             : <span className="text-muted-foreground">None</span>}
                         </p>
                       </div>
@@ -560,14 +564,24 @@ export function ContactDetailsDrawer({
                     Current Owners
                   </h4>
                   {isAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsAssignOwnersOpen(true)}
-                    >
-                      <Users className="mr-1 h-3 w-3" />
-                      Assign Owners
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsAddAssignmentOpen(true)}
+                      >
+                        <UserPlus className="mr-1 h-3 w-3" />
+                        Add Assignment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsAssignOwnersOpen(true)}
+                      >
+                        <Users className="mr-1 h-3 w-3" />
+                        Assign Owners
+                      </Button>
+                    </div>
                   )}
                 </div>
                 {isLoadingOwners ? (
@@ -582,7 +596,7 @@ export function ContactDetailsDrawer({
                         <span className="text-muted-foreground">Primary Owner</span>
                         <span className="font-medium">
                           {owners?.primary?.assigned_to_crm_user_id
-                            ? ownerNames[owners.primary.assigned_to_crm_user_id] || 'Unknown User'
+                            ? ownerNames[owners.primary.assigned_to_crm_user_id] || 'System / Admin'
                             : <span className="text-muted-foreground italic">Unassigned</span>}
                         </span>
                       </div>
@@ -590,7 +604,7 @@ export function ContactDetailsDrawer({
                         <span className="text-muted-foreground">Secondary Owner</span>
                         <span className="font-medium">
                           {owners?.secondary?.assigned_to_crm_user_id
-                            ? ownerNames[owners.secondary.assigned_to_crm_user_id] || 'Unknown User'
+                            ? ownerNames[owners.secondary.assigned_to_crm_user_id] || 'System / Admin'
                             : <span className="text-muted-foreground italic">None</span>}
                         </span>
                       </div>
@@ -789,7 +803,7 @@ export function ContactDetailsDrawer({
                             </div>
                           )}
                           <div className="text-xs text-muted-foreground mt-2">
-                            By: {interaction.creator_full_name || interaction.creator_email || 'Unknown User'}
+                            By: {interaction.creator_full_name || interaction.creator_email || 'System / Admin'}
                           </div>
                         </div>
                       </div>
@@ -858,6 +872,26 @@ export function ContactDetailsDrawer({
             onClose={() => setIsStageRequestOpen(false)}
             onSuccess={() => {
               // Could refresh stage requests list here if needed
+            }}
+          />
+        )}
+
+        {/* Add Assignment Modal (Admin only) */}
+        {contact && currentStage && (
+          <AddAssignmentModal
+            contactId={contact.id}
+            contactName={contact.full_name || 'Unknown'}
+            currentStage={currentStage}
+            existingAssigneeIds={[
+              ...(owners?.primary?.assigned_to_crm_user_id ? [owners.primary.assigned_to_crm_user_id] : []),
+              ...(owners?.secondary?.assigned_to_crm_user_id ? [owners.secondary.assigned_to_crm_user_id] : []),
+            ]}
+            isOpen={isAddAssignmentOpen}
+            onClose={() => setIsAddAssignmentOpen(false)}
+            onSuccess={() => {
+              loadOwners();
+              loadAssignments();
+              onOwnersChange?.();
             }}
           />
         )}
