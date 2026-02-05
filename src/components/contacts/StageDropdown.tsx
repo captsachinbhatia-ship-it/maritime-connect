@@ -8,9 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { updateStage, AssignmentStage } from '@/services/assignments';
-import { createStageRequest } from '@/services/stageRequests';
-import { useAuth } from '@/contexts/AuthContext';
+import { changeContactStage, AssignmentStage } from '@/services/assignments';
 
 interface StageDropdownProps {
   contactId: string;
@@ -27,10 +25,10 @@ const STAGES: { value: AssignmentStage; label: string }[] = [
 ];
 
 const STAGE_COLORS: Record<AssignmentStage, string> = {
-  COLD_CALLING: 'bg-blue-100 text-blue-800 hover:bg-blue-200',
-  ASPIRATION: 'bg-amber-100 text-amber-800 hover:bg-amber-200',
-  ACHIEVEMENT: 'bg-green-100 text-green-800 hover:bg-green-200',
-  INACTIVE: 'bg-gray-100 text-gray-800 hover:bg-gray-200',
+  COLD_CALLING: 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300',
+  ASPIRATION: 'bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300',
+  ACHIEVEMENT: 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300',
+  INACTIVE: 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800/50 dark:text-gray-300',
 };
 
 export function StageDropdown({ 
@@ -40,7 +38,6 @@ export function StageDropdown({
   disabled = false 
 }: StageDropdownProps) {
   const { toast } = useToast();
-  const { crmUser } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleStageSelect = async (newStage: AssignmentStage) => {
@@ -48,46 +45,10 @@ export function StageDropdown({
 
     setIsUpdating(true);
 
-    // INACTIVE requires admin approval - create a request instead of direct update
-    if (newStage === 'INACTIVE') {
-      if (!crmUser?.id) {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'User not authenticated.',
-        });
-        setIsUpdating(false);
-        return;
-      }
-
-      const result = await createStageRequest(
-        contactId,
-        'INACTIVE',
-        crmUser.id
-      );
-
-      if (result.success) {
-        toast({
-          title: 'Inactive request sent for admin approval',
-          description: 'An administrator will review this request.',
-        });
-        onStageChange();
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Failed to submit request',
-          description: result.error || 'Unknown error',
-        });
-      }
-
-      setIsUpdating(false);
-      return;
-    }
-
-    // Other stages - direct update
-    const result = await updateStage({
+    // Call RPC for all stage changes - it handles INACTIVE requests internally
+    const result = await changeContactStage({
       contact_id: contactId,
-      stage: newStage,
+      to_stage: newStage,
     });
 
     if (result.error) {
@@ -96,11 +57,20 @@ export function StageDropdown({
         title: 'Failed to update stage',
         description: result.error,
       });
-    } else {
-      toast({
-        title: 'Stage updated',
-        description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}`,
-      });
+    } else if (result.data) {
+      if (result.data.action === 'REQUESTED') {
+        // INACTIVE transition created a request for admin approval
+        toast({
+          title: 'Inactive request sent for admin approval',
+          description: 'An administrator will review this request.',
+        });
+      } else {
+        // Direct update succeeded
+        toast({
+          title: 'Stage updated',
+          description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}`,
+        });
+      }
       onStageChange();
     }
 
