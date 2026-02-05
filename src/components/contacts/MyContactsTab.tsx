@@ -23,7 +23,7 @@ import { AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { getCurrentCrmUserId } from '@/services/profiles';
+import { getCurrentCrmUserId } from '@/services/profiles'; // Used for loadContacts
 import { getCompanyNamesMap } from '@/services/contacts';
 import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
@@ -233,111 +233,47 @@ export function MyContactsTab() {
     setIsUpdatingStage(contactId);
 
     try {
-      // Get current CRM user ID
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-      if (crmError || !currentCrmUserId) {
-        toast({
-          variant: 'destructive',
-          title: 'Failed to update stage',
-          description: crmError || 'CRM user not found',
-        });
-        setIsUpdatingStage(null);
-        return;
-      }
-
-      // Get all ACTIVE assignments for this contact (could have PRIMARY and SECONDARY)
-      const { data: currentAssignments, error: fetchError } = await supabase
-        .from('contact_assignments')
-        .select('id, assigned_to_crm_user_id, assignment_role')
-        .eq('contact_id', contactId)
-        .eq('status', 'ACTIVE');
-
-      if (fetchError) {
-        toast({
-          variant: 'destructive',
-          title: 'Failed to update stage',
-          description: fetchError.message,
-        });
-        setIsUpdatingStage(null);
-        return;
-      }
-
-      if (!currentAssignments || currentAssignments.length === 0) {
-        toast({
-          variant: 'destructive',
-          title: 'Failed to update stage',
-          description: 'No active assignment found for this contact.',
-        });
-        setIsUpdatingStage(null);
-        return;
-      }
-
-      // Close all existing ACTIVE rows
-      const { error: closeError } = await supabase
-        .from('contact_assignments')
-        .update({ status: 'CLOSED' })
-        .eq('contact_id', contactId)
-        .eq('status', 'ACTIVE');
-
-      if (closeError) {
-        if (closeError.message.includes('row-level security')) {
-          toast({
-            variant: 'destructive',
-            title: 'Permission denied',
-            description: 'You do not have permission to update this contact\'s stage.',
-          });
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Failed to update stage',
-            description: closeError.message,
-          });
-        }
-        setIsUpdatingStage(null);
-        return;
-      }
-
-      const now = new Date().toISOString();
-
-      // Insert new ACTIVE rows for each assignment (preserving owners)
-      const insertPayloads = currentAssignments.map(assignment => ({
-        contact_id: contactId,
-        assigned_to_crm_user_id: assignment.assigned_to_crm_user_id,
-        assigned_by_crm_user_id: currentCrmUserId,
-        assignment_role: assignment.assignment_role,
-        stage: newStage,
-        status: 'ACTIVE',
-        assigned_at: now,
-        stage_changed_at: now,
-        stage_changed_by_crm_user_id: currentCrmUserId,
-      }));
-
-      const { error: insertError } = await supabase
-        .from('contact_assignments')
-        .insert(insertPayloads);
-
-      if (insertError) {
-        if (insertError.message.includes('row-level security')) {
-          toast({
-            variant: 'destructive',
-            title: 'Permission denied',
-            description: 'You do not have permission to update this contact\'s stage.',
-          });
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Failed to update stage',
-            description: insertError.message,
-          });
-        }
-        setIsUpdatingStage(null);
-        return;
-      }
-
-      toast({
-        title: 'Stage updated',
-        description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}`,
+      // Call the RPC for stage changes
+      const { data, error } = await supabase.rpc('change_contact_stage', {
+        p_contact_id: contactId,
+        p_to_stage: newStage,
+        p_note: null,
       });
+
+      if (error) {
+        if (error.message.includes('row-level security')) {
+          toast({
+            variant: 'destructive',
+            title: 'Permission denied',
+            description: 'You do not have permission to update this contact\'s stage.',
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Failed to update stage',
+            description: error.message,
+          });
+        }
+        setIsUpdatingStage(null);
+        return;
+      }
+
+      // Handle response based on action type
+      const action = (data as { action: string })?.action;
+      
+      if (action === 'REQUESTED') {
+        // INACTIVE transition created a request for admin approval
+        toast({
+          title: 'Inactive request sent for admin approval',
+          description: 'An administrator will review this request.',
+        });
+      } else {
+        // Direct update succeeded
+        toast({
+          title: 'Stage updated',
+          description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}`,
+        });
+      }
 
       // Refresh the list
       loadContacts();
