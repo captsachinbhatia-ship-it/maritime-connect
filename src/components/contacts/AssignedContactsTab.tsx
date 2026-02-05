@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { Loader2, RefreshCw, Users, PhoneCall, Mail, Video, MessageSquare, FileEdit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +45,8 @@ const STAGE_COLORS: Record<string, string> = {
 
 interface AssignedContact extends ContactWithCompany {
   stage: string | null;
+  created_at?: string | null;
+  created_by_crm_user_id?: string | null;
 }
 
 export function AssignedContactsTab() {
@@ -107,7 +109,9 @@ export function AssignedContactsTab() {
           preferred_channel,
           notes,
           is_active,
-          updated_at
+          updated_at,
+          created_at,
+          created_by_crm_user_id
         `)
         .in('id', contactIds)
         .eq('is_active', true)
@@ -186,6 +190,18 @@ export function AssignedContactsTab() {
               setOwnerNamesMap(ownerNamesResult.data);
             }
           }
+        }
+      }
+
+      // Also resolve creator names
+      const creatorIds = contactsList
+        .map(c => c.created_by_crm_user_id)
+        .filter((id): id is string => id !== null);
+
+      if (creatorIds.length > 0) {
+        const creatorNamesResult = await getUserNames(creatorIds);
+        if (creatorNamesResult.data) {
+          setOwnerNamesMap(prev => ({ ...prev, ...creatorNamesResult.data }));
         }
       }
     } catch (error) {
@@ -282,10 +298,12 @@ export function AssignedContactsTab() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Company</TableHead>
-                    <TableHead>Stage</TableHead>
+                    <TableHead>Added By</TableHead>
                     <TableHead>Primary Owner</TableHead>
                     <TableHead>Secondary Owner</TableHead>
-                    <TableHead>Last Activity</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead>Stage</TableHead>
+                    <TableHead>Status</TableHead>
                     {isAdmin && <TableHead className="text-right">Action</TableHead>}
                   </TableRow>
                 </TableHeader>
@@ -294,7 +312,16 @@ export function AssignedContactsTab() {
                     const owners = ownersMap[contact.id];
                     const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id;
                     const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id;
-                    const lastInteraction = formatLastInteraction(contact);
+                    const creatorId = contact.created_by_crm_user_id;
+
+                    const formatCreatedDate = (dateStr: string | null | undefined) => {
+                      if (!dateStr) return '—';
+                      try {
+                        return format(new Date(dateStr), 'dd MMM yyyy, HH:mm');
+                      } catch {
+                        return '—';
+                      }
+                    };
 
                     return (
                       <TableRow key={contact.id}>
@@ -310,14 +337,10 @@ export function AssignedContactsTab() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          {contact.stage ? (
-                            <Badge className={STAGE_COLORS[contact.stage] || ''}>
-                              {STAGE_LABELS[contact.stage] || contact.stage}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
+                        <TableCell className="text-sm text-muted-foreground">
+                          {creatorId
+                            ? ownerNamesMap[creatorId] || 'Unknown'
+                            : <span className="text-muted-foreground/50">Unknown</span>}
                         </TableCell>
                         <TableCell className="text-sm">
                           {primaryOwnerId
@@ -329,19 +352,22 @@ export function AssignedContactsTab() {
                             ? ownerNamesMap[secondaryOwnerId] || 'Unknown'
                             : <span className="text-muted-foreground/50">—</span>}
                         </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {formatCreatedDate(contact.created_at)}
+                        </TableCell>
                         <TableCell>
-                          {lastInteraction ? (
-                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                {INTERACTION_TYPE_ICONS[lastInteraction.type] || null}
-                                <span>{lastInteraction.type}</span>
-                              </span>
-                              <span>·</span>
-                              <span>{lastInteraction.timeAgo}</span>
-                            </div>
+                          {contact.stage ? (
+                            <Badge className={STAGE_COLORS[contact.stage] || ''}>
+                              {STAGE_LABELS[contact.stage] || contact.stage}
+                            </Badge>
                           ) : (
-                            <span className="text-xs text-muted-foreground/50">—</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={contact.is_active ? 'default' : 'secondary'} className={contact.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-800'}>
+                            {contact.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
                         </TableCell>
                         {isAdmin && (
                           <TableCell className="text-right">

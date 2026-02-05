@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { KPICard } from './KPICard';
-import { Users, MessageSquare, Clock, Bell } from 'lucide-react';
+import { Users, UserPlus, UserCheck, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 interface CEOKPIData {
-  totalActiveContacts: number;
-  contactsTouchedToday: number;
-  staleContacts: number;
-  followUpsOverdue: number;
+  totalContacts: number;
+  unassignedContacts: number;
+  recentlyAdded: number;
+  recentlyAssigned: number;
 }
 
 export function CEOKPIRow() {
   const [data, setData] = useState<CEOKPIData>({
-    totalActiveContacts: 0,
-    contactsTouchedToday: 0,
-    staleContacts: 0,
-    followUpsOverdue: 0,
+    totalContacts: 0,
+    unassignedContacts: 0,
+    recentlyAdded: 0,
+    recentlyAssigned: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -24,62 +24,62 @@ export function CEOKPIRow() {
       setIsLoading(true);
 
       try {
-        // Get all active assignments count
-        const { count: activeCount } = await supabase
-          .from('contact_assignments')
+        // 1. Total Contacts (all active contacts)
+        const { count: totalCount } = await supabase
+          .from('contacts')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'ACTIVE');
+          .eq('is_active', true);
 
-        // Get all contact IDs with active assignments
-        const { data: assignments } = await supabase
+        // 2. Unassigned Contacts (contacts without an ACTIVE PRIMARY assignment)
+        // First get all contact IDs with ACTIVE PRIMARY assignments
+        const { data: activePrimaryAssignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
-          .eq('status', 'ACTIVE');
+          .eq('status', 'ACTIVE')
+          .eq('assignment_role', 'PRIMARY')
+          .not('assigned_to_crm_user_id', 'is', null);
 
-        const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
+        const assignedContactIds = new Set(
+          (activePrimaryAssignments || []).map(a => a.contact_id)
+        );
 
-        // Contacts touched today
-        let contactsTouchedToday = 0;
-        if (contactIds.length > 0) {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          const { data: todayInteractions } = await supabase
-            .from('contact_interactions')
-            .select('contact_id')
-            .in('contact_id', contactIds)
-            .gte('interaction_at', today.toISOString());
-          
-          contactsTouchedToday = new Set(todayInteractions?.map(i => i.contact_id) || []).size;
-        }
+        // Get all active contacts and count unassigned
+        const { data: allContacts } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('is_active', true);
 
-        // Stale contacts (no activity in 14 days)
-        let staleCount = 0;
-        if (contactIds.length > 0) {
-          const fourteenDaysAgo = new Date();
-          fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+        const unassignedCount = (allContacts || []).filter(
+          c => !assignedContactIds.has(c.id)
+        ).length;
 
-          const { data: lastInteractions } = await supabase
-            .from('v_contacts_last_interaction')
-            .select('contact_id, last_interaction_at')
-            .in('contact_id', contactIds);
+        // 3. Recently Added Contacts (last 7 days)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-          const interactionMap = new Map(
-            lastInteractions?.map(li => [li.contact_id, li.last_interaction_at]) || []
-          );
+        const { count: recentlyAddedCount } = await supabase
+          .from('contacts')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_active', true)
+          .gte('created_at', sevenDaysAgo.toISOString());
 
-          staleCount = contactIds.filter(id => {
-            const lastAt = interactionMap.get(id);
-            if (!lastAt) return true;
-            return new Date(lastAt) < fourteenDaysAgo;
-          }).length;
-        }
+        // 4. Recently Assigned Contacts (assignments created in last 7 days)
+        const { data: recentAssignments } = await supabase
+          .from('contact_assignments')
+          .select('contact_id')
+          .eq('status', 'ACTIVE')
+          .eq('assignment_role', 'PRIMARY')
+          .gte('assigned_at', sevenDaysAgo.toISOString());
+
+        const recentlyAssignedCount = new Set(
+          (recentAssignments || []).map(a => a.contact_id)
+        ).size;
 
         setData({
-          totalActiveContacts: activeCount || 0,
-          contactsTouchedToday,
-          staleContacts: staleCount,
-          followUpsOverdue: 0, // Placeholder
+          totalContacts: totalCount || 0,
+          unassignedContacts: unassignedCount,
+          recentlyAdded: recentlyAddedCount || 0,
+          recentlyAssigned: recentlyAssignedCount,
         });
       } catch (error) {
         console.error('Failed to fetch CEO KPIs:', error);
@@ -94,31 +94,31 @@ export function CEOKPIRow() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <KPICard
-        title="Total Active Contacts"
-        value={data.totalActiveContacts}
+        title="Total Contacts"
+        value={data.totalContacts}
         icon={Users}
         variant="default"
         isLoading={isLoading}
       />
       <KPICard
-        title="Contacts Touched Today"
-        value={data.contactsTouchedToday}
-        icon={MessageSquare}
-        variant="success"
-        isLoading={isLoading}
-      />
-      <KPICard
-        title="Stale Contacts (>14 Days)"
-        value={data.staleContacts}
+        title="Unassigned Contacts"
+        value={data.unassignedContacts}
         icon={Clock}
-        variant={data.staleContacts > 0 ? 'warning' : 'muted'}
+        variant={data.unassignedContacts > 0 ? 'warning' : 'success'}
         isLoading={isLoading}
       />
       <KPICard
-        title="Follow-ups Overdue"
-        value={data.followUpsOverdue}
-        icon={Bell}
-        variant="muted"
+        title="Recently Added (7d)"
+        value={data.recentlyAdded}
+        icon={UserPlus}
+        variant="default"
+        isLoading={isLoading}
+      />
+      <KPICard
+        title="Recently Assigned (7d)"
+        value={data.recentlyAssigned}
+        icon={UserCheck}
+        variant="success"
         isLoading={isLoading}
       />
     </div>

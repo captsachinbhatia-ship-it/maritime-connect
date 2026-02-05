@@ -573,22 +573,65 @@ export function ContactDetailsDrawer({
                       Loading...
                     </div>
                   ) : (
-                    <div className="grid gap-3">
-                      <div>
-                        <span className="text-xs text-muted-foreground">Primary Owner</span>
+                    <div className="grid gap-4">
+                      {/* Primary Owner */}
+                      <div className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Primary Owner</span>
                         <p className="text-foreground">
                           {owners?.primary?.assigned_to_crm_user_id
                             ? ownerNames[owners.primary.assigned_to_crm_user_id] || 'System / Admin'
                             : <span className="text-muted-foreground">Unassigned</span>}
                         </p>
+                        {owners?.primary && (
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mt-1">
+                            <div>
+                              <span className="block text-muted-foreground/70">Assigned By</span>
+                              <span>
+                                {owners.primary.assigned_by_crm_user_id
+                                  ? ownerNames[owners.primary.assigned_by_crm_user_id] || 'System / Admin'
+                                  : 'System / Admin'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-muted-foreground/70">Assigned At</span>
+                              <span>
+                                {owners.primary.assigned_at
+                                  ? formatDate(owners.primary.assigned_at)
+                                  : '—'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div>
-                        <span className="text-xs text-muted-foreground">Secondary Owner</span>
+
+                      {/* Secondary Owner */}
+                      <div className="space-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">Secondary Owner</span>
                         <p className="text-foreground">
                           {owners?.secondary?.assigned_to_crm_user_id
                             ? ownerNames[owners.secondary.assigned_to_crm_user_id] || 'System / Admin'
                             : <span className="text-muted-foreground">None</span>}
                         </p>
+                        {owners?.secondary && (
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mt-1">
+                            <div>
+                              <span className="block text-muted-foreground/70">Assigned By</span>
+                              <span>
+                                {owners.secondary.assigned_by_crm_user_id
+                                  ? ownerNames[owners.secondary.assigned_by_crm_user_id] || 'System / Admin'
+                                  : 'System / Admin'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-muted-foreground/70">Assigned At</span>
+                              <span>
+                                {owners.secondary.assigned_at
+                                  ? formatDate(owners.secondary.assigned_at)
+                                  : '—'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
