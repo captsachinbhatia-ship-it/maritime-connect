@@ -9,32 +9,32 @@ import {
   attachAuthStateListener,
 } from '@/lib/authGuard';
 
- // Preview mode detection
- function isPreviewDomain(): boolean {
-   const hostname = window.location.hostname;
-   return hostname.endsWith('lovable.dev') || hostname.endsWith('lovableproject.com');
- }
+// Preview mode detection
+function isPreviewDomain(): boolean {
+  const hostname = window.location.hostname;
+  return hostname.endsWith('lovable.dev') || hostname.endsWith('lovableproject.com');
+}
 
- const PREVIEW_ROLE_KEY = 'preview_role';
+const PREVIEW_ROLE_KEY = 'preview_role';
 
- type PreviewRole = 'Admin' | 'User';
+type PreviewRole = 'admin' | 'user';
 
- const MOCK_USERS: Record<PreviewRole, CrmUser> = {
-   Admin: {
-     id: '00000000-0000-0000-0000-000000000001',
-     full_name: 'Preview Admin',
-     email: 'admin@aqmaritime.com',
-     role: 'ADMIN',
-     active: true,
-   },
-   User: {
-     id: '00000000-0000-0000-0000-000000000002',
-     full_name: 'Preview User',
-     email: 'user@aqmaritime.com',
-     role: 'OPS',
-     active: true,
-   },
- };
+const MOCK_USERS: Record<PreviewRole, CrmUser> = {
+  admin: {
+    id: '00000000-0000-0000-0000-000000000001',
+    full_name: 'Preview Admin',
+    email: 'admin@aqmaritime.com',
+    role: 'Admin',
+    active: true,
+  },
+  user: {
+    id: '00000000-0000-0000-0000-000000000002',
+    full_name: 'Preview User',
+    email: 'user@aqmaritime.com',
+    role: 'Operations',
+    active: true,
+  },
+};
 
 interface AuthContextType {
   user: User | null; // Supabase auth user (for backward compatibility)
@@ -49,6 +49,8 @@ interface AuthContextType {
   isPreviewMode: boolean;
   previewRole: PreviewRole;
   setPreviewRole: (role: PreviewRole) => void;
+  // Computed admin status (works in both preview and production)
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -57,15 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isPreviewMode = isPreviewDomain();
   
   const [previewRole, setPreviewRoleState] = useState<PreviewRole>(() => {
-    if (!isPreviewMode) return 'User';
+    if (!isPreviewMode) return 'user';
     const stored = localStorage.getItem(PREVIEW_ROLE_KEY);
-    return (stored === 'Admin' || stored === 'User') ? stored : 'User';
+    return (stored === 'admin' || stored === 'user') ? stored : 'user';
   });
 
   const [session, setSession] = useState<Session | null>(null);
   const [crmUser, setCrmUser] = useState<CrmUser | null>(null);
   const [loading, setLoading] = useState(!isPreviewMode);
   const [authError, setAuthError] = useState<{ code: string; message: string } | null>(null);
+  const [dbIsAdmin, setDbIsAdmin] = useState(false);
 
   const setPreviewRole = (role: PreviewRole) => {
     setPreviewRoleState(role);
@@ -75,6 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // In preview mode, use mock user; otherwise derive from session
   const user = isPreviewMode ? null : (session?.user ?? null);
   const effectiveCrmUser = isPreviewMode ? MOCK_USERS[previewRole] : crmUser;
+  
+  // Compute isAdmin: in preview mode use previewRole, otherwise use DB check
+  const isAdmin = isPreviewMode ? previewRole === 'admin' : dbIsAdmin;
 
   const runBootstrap = useCallback(async (currentSession: Session | null) => {
     // Skip bootstrap in preview mode
@@ -89,9 +95,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(currentSession);
       setCrmUser(result.crmUser);
       setAuthError(null);
+      
+      // Check admin status from profiles table
+      if (currentSession?.user?.id) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', currentSession.user.id)
+          .maybeSingle();
+        setDbIsAdmin(data?.role === 'ADMIN' || data?.role === 'CEO');
+      }
     } else {
       setSession(null);
       setCrmUser(null);
+      setDbIsAdmin(false);
       if (result.error && result.error.code !== 'NO_SESSION') {
         setAuthError(result.error);
       }
@@ -139,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOutUser();
     setSession(null);
     setCrmUser(null);
+    setDbIsAdmin(false);
     setAuthError(null);
   };
 
@@ -160,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isPreviewMode,
         previewRole,
         setPreviewRole,
+        isAdmin,
       }}
     >
       {children}
