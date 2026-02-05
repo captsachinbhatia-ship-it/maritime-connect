@@ -34,6 +34,9 @@ import { EditCompanyModal } from './EditCompanyModal';
 import { getContactPhones, ContactPhone } from '@/services/contactPhones';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { EditContactModal } from './EditContactModal';
+import { DeleteContactDialog } from './DeleteContactDialog';
+import { Trash2 } from 'lucide-react';
 
 
 interface ContactDetailsDrawerProps {
@@ -113,6 +116,10 @@ export function ContactDetailsDrawer({
   // Phone numbers state
   const [contactPhones, setContactPhones] = useState<ContactPhone[]>([]);
   const [isLoadingPhones, setIsLoadingPhones] = useState(false);
+
+  // Edit/Delete contact state (admin only)
+  const [isEditContactOpen, setIsEditContactOpen] = useState(false);
+  const [isDeleteContactOpen, setIsDeleteContactOpen] = useState(false);
 
   // Admin check
   const [isAdmin, setIsAdmin] = useState(false);
@@ -400,6 +407,26 @@ export function ContactDetailsDrawer({
               <Badge className={`shrink-0 ${STAGE_COLORS[currentStage] || STAGE_COLORS.INACTIVE}`}>
                 {currentStage.replace('_', ' ')}
               </Badge>
+            )}
+            {isAdmin && (
+              <div className="flex gap-2 shrink-0 ml-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditContactOpen(true)}
+                >
+                  <Pencil className="mr-1 h-3 w-3" />
+                  Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setIsDeleteContactOpen(true)}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Delete
+                </Button>
+              </div>
             )}
           </div>
         </SheetHeader>
@@ -1003,6 +1030,32 @@ export function ContactDetailsDrawer({
             onSuccess={(newCompanyId, newCompanyName) => {
               setDisplayedCompanyName(newCompanyName);
               onCompanyChange?.(newCompanyId, newCompanyName);
+            }}
+          />
+        )}
+
+        {/* Edit Contact Modal (Admin only) */}
+        {isAdmin && (
+          <EditContactModal
+            contact={contact}
+            open={isEditContactOpen}
+            onOpenChange={setIsEditContactOpen}
+            onSuccess={() => {
+              onOwnersChange?.();
+              onClose();
+            }}
+          />
+        )}
+
+        {/* Delete Contact Dialog (Admin only) */}
+        {isAdmin && (
+          <DeleteContactDialog
+            contact={contact}
+            open={isDeleteContactOpen}
+            onOpenChange={setIsDeleteContactOpen}
+            onSuccess={() => {
+              onOwnersChange?.();
+              onClose();
             }}
           />
         )}

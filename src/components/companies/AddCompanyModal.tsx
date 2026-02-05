@@ -57,7 +57,7 @@ const companySchema = z.object({
   country: z.string().max(100).optional().or(z.literal('')),
   city: z.string().max(100).optional().or(z.literal('')),
   region: z.string().max(100).optional().or(z.literal('')),
-  website: z.string().url('Invalid URL').optional().or(z.literal('')),
+  website: z.string().max(255).optional().or(z.literal('')),
   email_general: z.string().email('Invalid email').optional().or(z.literal('')),
   phone_general: z.string().max(50).optional().or(z.literal('')),
   status: z.string().optional().or(z.literal('')),
@@ -111,6 +111,10 @@ export function AddCompanyModal({
   });
 
   const watchedCompanyType = form.watch('company_type');
+  const watchedCompanyTypeOther = form.watch('company_type_other_text');
+  
+  // Disable button if Other is selected but describe type is empty
+  const isOtherInvalid = watchedCompanyType === 'Other' && (!watchedCompanyTypeOther || !watchedCompanyTypeOther.trim());
 
   const handleSubmit = async (values: CompanyFormValues) => {
     setIsSubmitting(true);
@@ -154,6 +158,16 @@ export function AddCompanyModal({
       });
 
       if (result.error) {
+        // Handle DB constraint error with friendly message
+        if (result.error.includes('companies_company_type_other_text_check')) {
+          toast({
+            title: 'Validation Error',
+            description: "Please describe the company type when 'Other' is selected.",
+            variant: 'destructive',
+          });
+          setIsSubmitting(false);
+          return;
+        }
         toast({
           title: 'Error creating company',
           description: result.error,
@@ -439,7 +453,7 @@ export function AddCompanyModal({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || isOtherInvalid}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Add Company
               </Button>

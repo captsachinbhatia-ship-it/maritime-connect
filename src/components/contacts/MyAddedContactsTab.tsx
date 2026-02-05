@@ -1,5 +1,5 @@
- import { useState, useEffect, useCallback } from 'react';
- import { formatDistanceToNow } from 'date-fns';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { formatDistanceToNow, format } from 'date-fns';
  import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit } from 'lucide-react';
  import { Badge } from '@/components/ui/badge';
  import {
@@ -170,6 +170,31 @@
      return { type, timeAgo, outcome };
    };
  
+  const formatCreatedDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    try {
+      return format(new Date(dateStr), 'dd MMM yyyy, HH:mm');
+    } catch {
+      return '-';
+    }
+  };
+
+  // Enhanced search: filter by name, company, email, phone
+  const filteredContacts = useMemo(() => {
+    if (!search.trim()) return contacts;
+    const searchLower = search.toLowerCase().trim();
+    return contacts.filter(contact => {
+      const fullName = (contact.full_name || '').toLowerCase();
+      const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
+      const email = (contact.email || '').toLowerCase();
+      const phone = (contact.phone || '').toLowerCase();
+      return fullName.includes(searchLower) || 
+             companyName.includes(searchLower) || 
+             email.includes(searchLower) || 
+             phone.includes(searchLower);
+    });
+  }, [contacts, search, companyNamesMap]);
+
    if (isLoading) {
      return (
        <div className="space-y-4">
@@ -183,6 +208,7 @@
                  <TableHead>Full Name</TableHead>
                  <TableHead>Company</TableHead>
                  <TableHead>Email</TableHead>
+                  <TableHead>Created</TableHead>
                  <TableHead>Last Activity</TableHead>
                </TableRow>
              </TableHeader>
@@ -213,14 +239,14 @@
  
        <div className="flex items-center justify-between gap-4">
          <p className="text-sm text-muted-foreground">
-           Showing {contacts.length} contact{contacts.length !== 1 ? 's' : ''} you added
+            Showing {filteredContacts.length} contact{filteredContacts.length !== 1 ? 's' : ''} you added
          </p>
          <ContactsSearch value={search} onChange={setSearch} />
        </div>
  
-       {contacts.length === 0 ? (
+        {filteredContacts.length === 0 ? (
          <div className="rounded-md border p-8 text-center">
-           <p className="text-muted-foreground">No contacts found that you added.</p>
+            <p className="text-muted-foreground">{search.trim() ? 'No contacts match your search.' : 'No contacts found that you added.'}</p>
          </div>
        ) : (
          <div className="rounded-md border overflow-x-auto">
@@ -234,7 +260,7 @@
                </TableRow>
              </TableHeader>
              <TableBody>
-               {contacts.map((contact) => {
+                {filteredContacts.map((contact) => {
                  const lastInteraction = formatLastInteraction(contact);
  
                  return (
@@ -252,6 +278,9 @@
                      <TableCell>
                        {contact.email || '-'}
                      </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatCreatedDate(contact.created_at)}
+                    </TableCell>
                      <TableCell>
                        {lastInteraction ? (
                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

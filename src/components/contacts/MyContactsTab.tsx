@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -191,7 +191,7 @@ export function MyContactsTab() {
         .order('full_name', { ascending: true });
 
       if (search.trim()) {
-        contactsQuery = contactsQuery.ilike('full_name', `%${search.trim()}%`);
+        // Removed DB-side filter, will do client-side for multi-field search
       }
 
       const { data: contactsData, error: contactsError } = await contactsQuery;
@@ -261,6 +261,22 @@ export function MyContactsTab() {
       setIsLoading(false);
     }
   }, [activeStage, search, session]);
+
+  // Client-side search filter for multi-field search
+  const filteredContacts = useMemo(() => {
+    if (!search.trim()) return contacts;
+    const searchLower = search.toLowerCase().trim();
+    return contacts.filter(contact => {
+      const fullName = (contact.full_name || '').toLowerCase();
+      const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
+      const email = (contact.email || '').toLowerCase();
+      const phone = (contact.phone || '').toLowerCase();
+      return fullName.includes(searchLower) || 
+             companyName.includes(searchLower) || 
+             email.includes(searchLower) || 
+             phone.includes(searchLower);
+    });
+  }, [contacts, search, companyNamesMap]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -444,10 +460,10 @@ export function MyContactsTab() {
       );
     }
 
-    if (contacts.length === 0) {
+    if (filteredContacts.length === 0) {
       return (
         <div className="rounded-md border p-8 text-center">
-          <p className="text-muted-foreground">No contacts found for this stage.</p>
+          <p className="text-muted-foreground">{search.trim() ? 'No contacts match your search.' : 'No contacts found for this stage.'}</p>
         </div>
       );
     }
@@ -466,7 +482,7 @@ export function MyContactsTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {contacts.map((contact) => {
+            {filteredContacts.map((contact) => {
               const lastInteraction = formatLastInteraction(contact);
               const nextFollowupDue = nextFollowupMap[contact.id] || null;
               const followupStatus = getFollowupStatusLabel(nextFollowupDue);
