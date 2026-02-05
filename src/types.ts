@@ -2,12 +2,14 @@ export interface Company {
   id: string;
   company_name: string | null;
   company_type: string | null;
+  company_type_other_text: string | null;
   country: string | null;
   city: string | null;
   region: string | null;
   website: string | null;
   email_general: string | null;
   phone_general: string | null;
+  board_line: string | null;
   status: string | null;
   notes: string | null;
   is_active: boolean | null;
@@ -21,6 +23,8 @@ export interface CompanyWithContactCount extends Company {
 export interface CreateCompanyPayload {
   company_name: string;
   company_type: string;
+  company_type_other_text?: string | null;
+  board_line?: string | null;
   country?: string | null;
   city?: string | null;
   region?: string | null;

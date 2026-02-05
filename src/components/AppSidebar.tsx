@@ -7,7 +7,7 @@ import {
   FileText, 
   BarChart3,
   LogOut,
-  Anchor,
+  Ship,
   CalendarClock,
   ClipboardCheck,
   UserCog,
@@ -76,11 +76,11 @@ export function AppSidebar() {
     <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-            <Anchor className="h-5 w-5 text-primary-foreground" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 shadow-md">
+            <Ship className="h-6 w-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-sidebar-foreground">AQ Maritime</h1>
+            <h1 className="text-xl font-bold text-sidebar-foreground tracking-tight">AQ Maritime</h1>
             <p className="text-xs text-sidebar-foreground/60">CRM System</p>
           </div>
         </div>
@@ -142,16 +142,16 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
-        <div className="mb-3 truncate text-sm text-sidebar-foreground/70">
+        <div className="mb-3 px-2 py-1.5 rounded-lg bg-sidebar-accent/50 truncate text-sm text-sidebar-foreground/80">
           {user?.email}
         </div>
         <Button 
-          variant="outline" 
+          variant="destructive" 
           size="sm" 
-          className="w-full justify-start"
+          className="w-full justify-center gap-2 font-medium"
           onClick={signOut}
         >
-          <LogOut className="mr-2 h-4 w-4" />
+          <LogOut className="h-4 w-4" />
           Sign Out
         </Button>
       </SidebarFooter>

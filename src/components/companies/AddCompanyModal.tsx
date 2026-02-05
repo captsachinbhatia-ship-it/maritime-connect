@@ -34,9 +34,26 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { checkDuplicateCompanyName, createCompany } from '@/services/companies';
 import { useToast } from '@/hooks/use-toast';
 
+const COMPANY_TYPE_DB_VALUES = [
+  { label: 'Ship Owner', value: 'Owner' },
+  { label: 'Charterer', value: 'Charterer' },
+  { label: 'Broker', value: 'Broker' },
+  { label: 'Other', value: 'Other' },
+];
+
+const STATUS_OPTIONS = [
+  'Active',
+  'Inactive',
+  'Prospect',
+  'Lead',
+  'Partner',
+];
+
 const companySchema = z.object({
   company_name: z.string().trim().min(1, 'Company name is required').max(255),
   company_type: z.string().min(1, 'Company type is required'),
+  company_type_other_text: z.string().max(100).optional().or(z.literal('')),
+  board_line: z.string().max(50).optional().or(z.literal('')),
   country: z.string().max(100).optional().or(z.literal('')),
   city: z.string().max(100).optional().or(z.literal('')),
   region: z.string().max(100).optional().or(z.literal('')),
@@ -46,7 +63,10 @@ const companySchema = z.object({
   status: z.string().optional().or(z.literal('')),
   notes: z.string().max(2000).optional().or(z.literal('')),
   is_active: z.boolean(),
-});
+}).refine(
+  (data) => data.company_type !== 'Other' || (data.company_type_other_text && data.company_type_other_text.trim().length > 0),
+  { message: 'Please describe the company type', path: ['company_type_other_text'] }
+);
 
 type CompanyFormValues = z.infer<typeof companySchema>;
 
@@ -59,37 +79,16 @@ interface AddCompanyModalProps {
   regions: string[];
 }
 
-const COMPANY_TYPE_OPTIONS = [
-  'Shipowner',
-  'Charterer',
-  'Broker',
-  'Operator',
-  'Agent',
-  'Port Authority',
-  'Supplier',
-  'Other',
-];
-
-const STATUS_OPTIONS = [
-  'Active',
-  'Inactive',
-  'Prospect',
-  'Lead',
-  'Partner',
-];
-
 export function AddCompanyModal({
   open,
   onOpenChange,
   onSuccess,
-  companyTypes,
   statuses,
 }: AddCompanyModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const allCompanyTypes = [...new Set([...COMPANY_TYPE_OPTIONS, ...companyTypes])].sort();
   const allStatuses = [...new Set([...STATUS_OPTIONS, ...statuses])].sort();
 
   const form = useForm<CompanyFormValues>({
@@ -97,6 +96,8 @@ export function AddCompanyModal({
     defaultValues: {
       company_name: '',
       company_type: '',
+      company_type_other_text: '',
+      board_line: '',
       country: '',
       city: '',
       region: '',
@@ -108,6 +109,8 @@ export function AddCompanyModal({
       is_active: true,
     },
   });
+
+  const watchedCompanyType = form.watch('company_type');
 
   const handleSubmit = async (values: CompanyFormValues) => {
     setIsSubmitting(true);
@@ -137,6 +140,8 @@ export function AddCompanyModal({
       const result = await createCompany({
         company_name: values.company_name,
         company_type: values.company_type,
+        company_type_other_text: values.company_type === 'Other' ? values.company_type_other_text : null,
+        board_line: values.board_line || null,
         country: values.country || null,
         city: values.city || null,
         region: values.region || null,
@@ -221,19 +226,25 @@ export function AddCompanyModal({
               <FormField
                 control={form.control}
                 name="company_type"
-                render={({ field }) => (
+                  render={({ field }) => (
                   <FormItem>
                     <FormLabel>Company Type *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={(value) => {
+                        field.onChange(value);
+                        // Clear other text when not Other
+                        if (value !== 'Other') {
+                          form.setValue('company_type_other_text', '');
+                        }
+                      }} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {allCompanyTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
+                          {COMPANY_TYPE_DB_VALUES.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -242,6 +253,22 @@ export function AddCompanyModal({
                   </FormItem>
                 )}
               />
+
+              {watchedCompanyType === 'Other' && (
+                <FormField
+                  control={form.control}
+                  name="company_type_other_text"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Describe Type *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Describe company type" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <FormField
                 control={form.control}
@@ -279,6 +306,20 @@ export function AddCompanyModal({
                     <FormLabel>Region</FormLabel>
                     <FormControl>
                       <Input placeholder="Enter region" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="board_line"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Board Line</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+1 234 567 890" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
