@@ -40,13 +40,13 @@ export default function Login() {
             
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Select Role</label>
-              <Select value={previewRole} onValueChange={(value) => setPreviewRole(value as 'Admin' | 'User')}>
+              <Select value={previewRole} onValueChange={(value) => setPreviewRole(value as 'admin' | 'user')}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Admin">Admin (Full access)</SelectItem>
-                  <SelectItem value="User">User (Standard access)</SelectItem>
+                  <SelectItem value="admin">Admin (Full access)</SelectItem>
+                  <SelectItem value="user">User (Standard access)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

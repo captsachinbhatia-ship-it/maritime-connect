@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -46,29 +45,8 @@ const adminNavItems = [
 ];
 
 export function AppSidebar() {
-  const { user, crmUser, signOut } = useAuth();
+  const { user, crmUser, signOut, isAdmin, isPreviewMode } = useAuth();
   const location = useLocation();
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  useEffect(() => {
-    checkAdminRole();
-  }, [crmUser]);
-
-  const checkAdminRole = async () => {
-    if (!crmUser) {
-      setIsAdmin(false);
-      return;
-    }
-
-    // Check profiles table for system role (ADMIN, CEO)
-    const { data } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user?.id)
-      .maybeSingle();
-
-    setIsAdmin(data?.role === 'ADMIN' || data?.role === 'CEO');
-  };
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -141,7 +119,7 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
         <div className="mb-3 px-2 py-1.5 rounded-lg bg-sidebar-accent/50 truncate text-sm text-sidebar-foreground/80">
-          {user?.email}
+          {isPreviewMode ? crmUser?.email : user?.email}
         </div>
         <Button 
           variant="destructive" 
