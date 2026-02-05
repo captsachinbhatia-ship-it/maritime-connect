@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { formatDistanceToNow, format } from 'date-fns';
-import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight, Users, Bell } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { PhoneCall, Mail, Video, MessageSquare, FileEdit, ArrowRight, Users, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -19,10 +19,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCurrentCrmUserId } from '@/services/profiles';
 import { getCompanyNamesMap } from '@/services/contacts';
-import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
 import { getUserNames } from '@/services/interactions';
 import { getNudgeStatusMap } from '@/services/nudgeStatus';
-import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
 import { StageRequestModal } from './StageRequestModal';
 import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
@@ -52,12 +50,6 @@ const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
   NOTE: <FileEdit className="h-3 w-3" />,
 };
 
-const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
-  OVERDUE: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
-  DUE_TODAY: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
-  UPCOMING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-};
-
 interface SecondaryContact extends ContactWithCompany {
   stage: string | null;
   primary_owner_id: string | null;
@@ -69,19 +61,13 @@ export function SecondaryContactsTab() {
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [primaryOwnerNamesMap, setPrimaryOwnerNamesMap] = useState<Record<string, string>>({});
   const [nudgeStatusMap, setNudgeStatusMap] = useState<Record<string, boolean>>({});
-  const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
-  // Drawer state
-  const [selectedContact, setSelectedContact] = useState<SecondaryContact | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
   // Stage request modal state
   const [stageRequestContact, setStageRequestContact] = useState<SecondaryContact | null>(null);
   const [stageRequestModalOpen, setStageRequestModalOpen] = useState(false);
-
   const loadContacts = useCallback(async () => {
     if (!session) {
       setContacts([]);
@@ -232,16 +218,6 @@ export function SecondaryContactsTab() {
           setPrimaryOwnerNamesMap(ownerNamesResult.data);
         }
       }
-
-      // Fetch next follow-up dates
-      const contactIdsForFollowups = contactsList.map(c => c.id);
-      if (contactIdsForFollowups.length > 0) {
-        const followupResult = await getNextFollowupDueMap(contactIdsForFollowups);
-        if (followupResult.data) {
-          setNextFollowupMap(followupResult.data);
-        }
-      }
-
       // Fetch nudge status for all contacts
       if (contactIds.length > 0) {
         const nudgeResult = await getNudgeStatusMap(contactIds);
@@ -278,14 +254,7 @@ export function SecondaryContactsTab() {
     });
   }, [contacts, search, companyNamesMap]);
 
-  const handleRowClick = (e: React.MouseEvent, contact: SecondaryContact) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('[role="menu"]')) {
-      return;
-    }
-    setSelectedContact(contact);
-    setDrawerOpen(true);
-  };
+  // Row click disabled for secondary contacts to protect private details
 
   const formatLastInteraction = (contact: SecondaryContact) => {
     if (!contact.last_interaction_at) return null;
@@ -338,7 +307,6 @@ export function SecondaryContactsTab() {
                     <TableHead>Primary Owner</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Stage</TableHead>
-                    <TableHead>Next Follow-up</TableHead>
                     <TableHead>Last Activity</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
@@ -350,8 +318,6 @@ export function SecondaryContactsTab() {
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                     </TableRow>
@@ -375,7 +341,6 @@ export function SecondaryContactsTab() {
                     <TableHead>Primary Owner</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Stage</TableHead>
-                    <TableHead>Next Follow-up</TableHead>
                     <TableHead>Last Activity</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
@@ -383,19 +348,13 @@ export function SecondaryContactsTab() {
                 <TableBody>
                   {filteredContacts.map((contact) => {
                     const lastInteraction = formatLastInteraction(contact);
-                    const nextFollowupDue = nextFollowupMap[contact.id] || null;
-                    const followupStatus = getFollowupStatusLabel(nextFollowupDue);
                     const primaryOwnerName = contact.primary_owner_id 
                       ? primaryOwnerNamesMap[contact.primary_owner_id] || 'Unknown'
                       : 'Unassigned';
                     const hasActiveNudge = nudgeStatusMap[contact.id] || false;
 
                     return (
-                      <TableRow
-                        key={contact.id}
-                        className="cursor-pointer"
-                        onClick={(e) => handleRowClick(e, contact)}
-                      >
+                      <TableRow key={contact.id}>
                         <TableCell className="font-medium">
                           <div className="flex flex-col gap-1">
                             <span>{contact.full_name || '-'}</span>
@@ -426,23 +385,6 @@ export function SecondaryContactsTab() {
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {nextFollowupDue ? (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <CalendarClock className="h-3 w-3 text-muted-foreground" />
-                                <span>{format(new Date(nextFollowupDue), 'MMM d, h:mm a')}</span>
-                              </div>
-                              {followupStatus && (
-                                <Badge className={`text-xs ${FOLLOWUP_STATUS_STYLES[followupStatus]}`}>
-                                  {followupStatus.replace('_', ' ')}
-                                </Badge>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -492,22 +434,6 @@ export function SecondaryContactsTab() {
           )}
         </CardContent>
       </Card>
-
-      <ContactDetailsDrawer
-        contact={selectedContact}
-        companyName={selectedContact?.company_id ? companyNamesMap[selectedContact.company_id] || null : null}
-        currentStage={selectedContact?.stage || null}
-        isOpen={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setSelectedContact(null);
-        }}
-        onOwnersChange={loadContacts}
-        onCompanyChange={(newCompanyId, newCompanyName) => {
-          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
-          loadContacts();
-        }}
-      />
 
       <StageRequestModal
         contactId={stageRequestContact?.id || ''}
