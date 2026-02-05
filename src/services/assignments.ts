@@ -379,6 +379,48 @@ export async function upsertAssignment(params: {
   }
 }
 
+/**
+ * Change contact stage using RPC
+ * Returns action type: 'UPDATED' for direct updates, 'REQUESTED' for INACTIVE requests
+ */
+export async function changeContactStage(params: {
+  contact_id: string;
+  to_stage: AssignmentStage;
+  note?: string | null;
+}): Promise<{
+  data: { action: 'UPDATED' | 'REQUESTED' } | null;
+  error: string | null;
+}> {
+  try {
+    const { contact_id, to_stage, note } = params;
+
+    const { data, error } = await supabase.rpc('change_contact_stage', {
+      p_contact_id: contact_id,
+      p_to_stage: to_stage,
+      p_note: note || null,
+    });
+
+    if (error) {
+      console.error('[changeContactStage] RPC error:', error);
+      if (error.message.includes('row-level security')) {
+        return { data: null, error: 'Permission denied. You may not have access to change this stage.' };
+      }
+      return { data: null, error: error.message };
+    }
+
+    // RPC returns { action: 'UPDATED' | 'REQUESTED' }
+    const action = (data as { action: string })?.action as 'UPDATED' | 'REQUESTED';
+    
+    return { data: { action: action || 'UPDATED' }, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Unknown error occurred'
+    };
+  }
+}
+
+// Legacy updateStage - kept for backwards compatibility
 export async function updateStage(params: {
   contact_id: string;
   stage: AssignmentStage;
