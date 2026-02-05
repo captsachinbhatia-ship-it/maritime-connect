@@ -7,12 +7,12 @@ import {
   FileText, 
   BarChart3,
   LogOut,
-  Ship,
   CalendarClock,
   ClipboardCheck,
   UserCog,
   Activity
 } from 'lucide-react';
+import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -76,13 +76,11 @@ export function AppSidebar() {
     <Sidebar className="border-r border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 shadow-md">
-            <Ship className="h-6 w-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-sidebar-foreground tracking-tight">AQ Maritime</h1>
-            <p className="text-xs text-sidebar-foreground/60">CRM System</p>
-          </div>
+          <img 
+            src={aqMaritimeLogo} 
+            alt="AQ Maritime" 
+            className="h-12 w-auto object-contain"
+          />
         </div>
       </SidebarHeader>
 
