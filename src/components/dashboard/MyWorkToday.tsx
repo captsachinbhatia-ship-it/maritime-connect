@@ -8,6 +8,7 @@ import { ContactWithCompany } from '@/types';
 import { Loader2, AlertTriangle, UserCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { PendingNudges } from './PendingNudges';
+import { ReceivedAcknowledgements } from './ReceivedAcknowledgements';
 
 interface MyWorkTodayProps {
   onContactClick: (contact: ContactWithCompany) => void;
@@ -130,8 +131,11 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
 
   return (
     <div className="space-y-6">
-      {/* Pending Nudges Section */}
+      {/* Pending Nudges Section (for Secondary owners) */}
       <PendingNudges onContactClick={onContactClick} />
+
+      {/* Received Acknowledgements Section (for Primary owners) */}
+      <ReceivedAcknowledgements />
 
       {/* Stale Contacts Section */}
       <Card>

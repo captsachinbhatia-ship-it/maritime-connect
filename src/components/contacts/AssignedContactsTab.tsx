@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { Loader2, RefreshCw, Users, PhoneCall, Mail, Video, MessageSquare, FileEdit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +17,6 @@ import { ContactOwners, getOwnersForContacts } from '@/services/assignments';
 import { getUserNames } from '@/services/interactions';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { AssignOwnersModal } from './AssignOwnersModal';
-import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactWithCompany } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -60,10 +59,6 @@ export function AssignedContactsTab() {
   // Modal state
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<AssignedContact | null>(null);
-
-  // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerContact, setDrawerContact] = useState<AssignedContact | null>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -214,11 +209,6 @@ export function AssignedContactsTab() {
     fetchData();
   };
 
-  const handleRowClick = (contact: AssignedContact) => {
-    setDrawerContact(contact);
-    setDrawerOpen(true);
-  };
-
   const formatLastInteraction = (contact: AssignedContact) => {
     if (!contact.last_interaction_at) return null;
 
@@ -307,11 +297,7 @@ export function AssignedContactsTab() {
                     const lastInteraction = formatLastInteraction(contact);
 
                     return (
-                      <TableRow
-                        key={contact.id}
-                        className="cursor-pointer"
-                        onClick={() => handleRowClick(contact)}
-                      >
+                      <TableRow key={contact.id}>
                         <TableCell className="font-medium">
                           {contact.full_name || '—'}
                         </TableCell>
@@ -389,22 +375,6 @@ export function AssignedContactsTab() {
           onSuccess={handleReassignSuccess}
         />
       )}
-
-      <ContactDetailsDrawer
-        contact={drawerContact}
-        companyName={drawerContact?.company_id ? companyNamesMap[drawerContact.company_id] || null : null}
-        currentStage={drawerContact?.stage || null}
-        isOpen={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setDrawerContact(null);
-        }}
-        onOwnersChange={fetchData}
-        onCompanyChange={(newCompanyId, newCompanyName) => {
-          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
-          fetchData();
-        }}
-      />
     </>
   );
 }
