@@ -17,6 +17,8 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCurrentCrmUserId, listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
 import { getCompanyNamesMap } from '@/services/contacts';
+import { getOwnersForContacts, ContactOwners } from '@/services/assignments';
+import { getUserNames } from '@/services/interactions';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactWithCompany } from '@/types';
@@ -38,6 +40,8 @@ import { ContactWithCompany } from '@/types';
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [crmUsersMap, setCrmUsersMap] = useState<Record<string, CrmUserForAssignment>>({});
+  const [ownersMap, setOwnersMap] = useState<Record<string, ContactOwners>>({});
+  const [ownerNamesMap, setOwnerNamesMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -139,17 +143,44 @@ import { ContactWithCompany } from '@/types';
  
        setContacts(contactsList);
  
-       // Fetch company names
-       const companyIds = contactsList
-         .map(c => c.company_id)
-         .filter((id): id is string => id !== null);
- 
-       if (companyIds.length > 0) {
-         const namesResult = await getCompanyNamesMap(companyIds);
-         if (namesResult.data) {
-           setCompanyNamesMap(namesResult.data);
-         }
-       }
+        // Fetch company names
+        const companyIds = contactsList
+          .map(c => c.company_id)
+          .filter((id): id is string => id !== null);
+
+        if (companyIds.length > 0) {
+          const namesResult = await getCompanyNamesMap(companyIds);
+          if (namesResult.data) {
+            setCompanyNamesMap(namesResult.data);
+          }
+        }
+
+        // Fetch owners for all contacts
+        if (contactsList.length > 0) {
+          const contactIds = contactsList.map(c => c.id);
+          const ownersResult = await getOwnersForContacts(contactIds);
+          if (ownersResult.data) {
+            setOwnersMap(ownersResult.data);
+
+            // Collect owner user IDs for name resolution
+            const ownerUserIds = new Set<string>();
+            Object.values(ownersResult.data).forEach(owners => {
+              if (owners.primary?.assigned_to_crm_user_id) {
+                ownerUserIds.add(owners.primary.assigned_to_crm_user_id);
+              }
+              if (owners.secondary?.assigned_to_crm_user_id) {
+                ownerUserIds.add(owners.secondary.assigned_to_crm_user_id);
+              }
+            });
+
+            if (ownerUserIds.size > 0) {
+              const ownerNamesResult = await getUserNames(Array.from(ownerUserIds));
+              if (ownerNamesResult.data) {
+                setOwnerNamesMap(ownerNamesResult.data);
+              }
+            }
+          }
+        }
      } catch (err) {
        setError(err instanceof Error ? err.message : 'Failed to load contacts');
      } finally {
@@ -267,62 +298,73 @@ import { ContactWithCompany } from '@/types';
        ) : (
          <div className="rounded-md border overflow-x-auto">
            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Full Name</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Added By</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Activity</TableHead>
-                </TableRow>
-              </TableHeader>
-             <TableBody>
-                {filteredContacts.map((contact) => {
-                 const lastInteraction = formatLastInteraction(contact);
+               <TableHeader>
+                 <TableRow>
+                   <TableHead>Full Name</TableHead>
+                   <TableHead>Company</TableHead>
+                   <TableHead>Primary Owner</TableHead>
+                   <TableHead>Secondary Owner</TableHead>
+                   <TableHead>Added By</TableHead>
+                   <TableHead>Created</TableHead>
+                   <TableHead>Last Activity</TableHead>
+                 </TableRow>
+               </TableHeader>
+              <TableBody>
+                 {filteredContacts.map((contact) => {
+                  const lastInteraction = formatLastInteraction(contact);
+                  const owners = ownersMap[contact.id];
+                  const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id;
+                  const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id;
  
-                 return (
-                   <TableRow
-                     key={contact.id}
-                     className="cursor-pointer"
-                     onClick={(e) => handleRowClick(e, contact)}
-                   >
-                      <TableCell className="font-medium">
-                        {contact.full_name || '-'}
-                      </TableCell>
-                      <TableCell>
-                        {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {contact.email || '-'}
-                      </TableCell>
+                  return (
+                    <TableRow
+                      key={contact.id}
+                      className="cursor-pointer"
+                      onClick={(e) => handleRowClick(e, contact)}
+                    >
+                       <TableCell className="font-medium">
+                         {contact.full_name || '-'}
+                       </TableCell>
+                       <TableCell>
+                         {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
+                       </TableCell>
+                       <TableCell className="text-sm">
+                         {primaryOwnerId
+                           ? ownerNamesMap[primaryOwnerId] || 'Unknown'
+                           : <span className="text-muted-foreground">Unassigned</span>}
+                       </TableCell>
+                       <TableCell className="text-sm">
+                         {secondaryOwnerId
+                           ? ownerNamesMap[secondaryOwnerId] || 'Unknown'
+                           : <span className="text-muted-foreground/50">—</span>}
+                       </TableCell>
+                       <TableCell className="text-sm text-muted-foreground">
+                         {formatAddedBy((contact as any).created_by_crm_user_id)}
+                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {formatAddedBy((contact as any).created_by_crm_user_id)}
+                        {formatCreatedDate(contact.created_at)}
                       </TableCell>
-                     <TableCell className="text-sm text-muted-foreground">
-                       {formatCreatedDate(contact.created_at)}
-                     </TableCell>
-                      <TableCell>
-                       {lastInteraction ? (
-                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                           <span className="flex items-center gap-1">
-                             {INTERACTION_TYPE_ICONS[lastInteraction.type] || null}
-                             <span>{lastInteraction.type}</span>
-                           </span>
-                           <span>·</span>
-                           <span>{lastInteraction.timeAgo}</span>
-                         </div>
-                       ) : (
-                         <span className="text-xs text-muted-foreground/50">—</span>
-                       )}
-                     </TableCell>
-                   </TableRow>
-                 );
-               })}
-             </TableBody>
-           </Table>
-         </div>
-       )}
+                       <TableCell>
+                        {lastInteraction ? (
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              {INTERACTION_TYPE_ICONS[lastInteraction.type] || null}
+                              <span>{lastInteraction.type}</span>
+                            </span>
+                            <span>·</span>
+                            <span>{lastInteraction.timeAgo}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
  
        <ContactDetailsDrawer
          contact={selectedContact}

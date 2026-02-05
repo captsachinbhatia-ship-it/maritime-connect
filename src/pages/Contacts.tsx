@@ -16,7 +16,7 @@ type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added';
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('my-contacts');
+  const [activeTab, setActiveTab] = useState<TabType>('all-contacts');
   const [refreshKey, setRefreshKey] = useState(0);
   const [myAddedCount, setMyAddedCount] = useState(0);
 
@@ -100,72 +100,51 @@ export default function Contacts() {
           <p className="mt-1 text-muted-foreground">
             {isAdmin 
               ? 'Manage contact assignments and ownership'
-              : 'Manage your assigned contacts by stage'
+              : 'View contacts and manage your assigned pipeline'
             }
           </p>
         </div>
         <AddContactModal onSuccess={handleContactAdded} />
       </div>
 
-      {isAdmin ? (
-        // Admin view: Three tabs
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabType)}>
-          <TabsList>
-            <TabsTrigger value="all-contacts">All Contacts</TabsTrigger>
+      {/* All users now see All Contacts, My Contacts, and My Added tabs */}
+      {/* Admins additionally see Unassigned tab */}
+      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabType)}>
+        <TabsList>
+          <TabsTrigger value="all-contacts">All Contacts</TabsTrigger>
+          {isAdmin && (
             <TabsTrigger value="unassigned">Unassigned</TabsTrigger>
-            <TabsTrigger value="my-contacts">My Contacts</TabsTrigger>
-            <TabsTrigger value="my-added" className="flex items-center gap-1.5">
-              <UserPlus className="h-3.5 w-3.5" />
-              My Added
-              {myAddedCount > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                  {myAddedCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
+          )}
+          <TabsTrigger value="my-contacts">My Contacts</TabsTrigger>
+          <TabsTrigger value="my-added" className="flex items-center gap-1.5">
+            <UserPlus className="h-3.5 w-3.5" />
+            My Added
+            {myAddedCount > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                {myAddedCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="all-contacts" className="mt-4">
+          <AssignedContactsTab key={`assigned-${refreshKey}`} />
+        </TabsContent>
+
+        {isAdmin && (
           <TabsContent value="unassigned" className="mt-4">
             <UnassignedContactsTab key={`unassigned-${refreshKey}`} />
           </TabsContent>
+        )}
 
-          <TabsContent value="all-contacts" className="mt-4">
-            <AssignedContactsTab key={`assigned-${refreshKey}`} />
-          </TabsContent>
+        <TabsContent value="my-contacts" className="mt-4">
+          <MyContactsTab key={`my-${refreshKey}`} />
+        </TabsContent>
 
-          <TabsContent value="my-contacts" className="mt-4">
-            <MyContactsTab key={`my-${refreshKey}`} />
-          </TabsContent>
-
-          <TabsContent value="my-added" className="mt-4">
-            <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadMyAddedCount} />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        // Non-admin view: Only My Contacts
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabType)}>
-          <TabsList>
-            <TabsTrigger value="my-contacts">My Contacts</TabsTrigger>
-            <TabsTrigger value="my-added" className="flex items-center gap-1.5">
-              <UserPlus className="h-3.5 w-3.5" />
-              My Added
-              {myAddedCount > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                  {myAddedCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="my-contacts" className="mt-4">
-            <MyContactsTab key={`my-${refreshKey}`} />
-          </TabsContent>
-
-          <TabsContent value="my-added" className="mt-4">
-            <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadMyAddedCount} />
-          </TabsContent>
-        </Tabs>
-      )}
+        <TabsContent value="my-added" className="mt-4">
+          <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadMyAddedCount} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

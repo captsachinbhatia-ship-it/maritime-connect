@@ -201,7 +201,7 @@ export function ContactDetailsDrawer({
     if (result.data) {
       setOwners(result.data);
       
-      // Get user names for owners (assigned_to, assigned_by, stage_changed_by)
+      // Get user names for owners (assigned_to, assigned_by, stage_changed_by) and creator
       const userIds: string[] = [];
       if (result.data.primary?.assigned_to_crm_user_id) {
         userIds.push(result.data.primary.assigned_to_crm_user_id);
@@ -214,6 +214,12 @@ export function ContactDetailsDrawer({
       }
       if (result.data.secondary?.assigned_by_crm_user_id) {
         userIds.push(result.data.secondary.assigned_by_crm_user_id);
+      }
+      
+      // Add creator ID if present
+      const creatorId = (contact as any).created_by_crm_user_id;
+      if (creatorId) {
+        userIds.push(creatorId);
       }
       
       if (userIds.length > 0) {
@@ -661,6 +667,18 @@ export function ContactDetailsDrawer({
                     Record Info
                   </h4>
                   <div className="grid gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Added By</span>
+                      <span>
+                        {(contact as any).created_by_crm_user_id
+                          ? (ownerNames[(contact as any).created_by_crm_user_id] || 'Unknown')
+                          : 'Unknown'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Created</span>
+                      <span>{formatDate(contact.created_at || null)}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Status</span>
                       <span className={contact.is_active ? 'text-green-600' : 'text-red-600'}>

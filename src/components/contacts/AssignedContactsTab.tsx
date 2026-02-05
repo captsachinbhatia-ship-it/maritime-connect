@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Loader2, RefreshCw, Users, PhoneCall, Mail, Video, MessageSquare, FileEdit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,9 @@ import { getUserNames } from '@/services/interactions';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { AssignOwnersModal } from './AssignOwnersModal';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
+import { ContactsSearch } from './ContactsSearch';
 import { ContactWithCompany } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 
 const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
   CALL: <PhoneCall className="h-3 w-3" />,
@@ -47,11 +49,13 @@ interface AssignedContact extends ContactWithCompany {
 }
 
 export function AssignedContactsTab() {
+  const { isAdmin } = useAuth();
   const [contacts, setContacts] = useState<AssignedContact[]>([]);
   const [ownersMap, setOwnersMap] = useState<Record<string, ContactOwners>>({});
   const [ownerNamesMap, setOwnerNamesMap] = useState<Record<string, string>>({});
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   // Modal state
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
@@ -225,6 +229,25 @@ export function AssignedContactsTab() {
     return { type, timeAgo, outcome };
   };
 
+  // Client-side search filter for multi-field search
+  const filteredContacts = useMemo(() => {
+    if (!search.trim()) return contacts;
+    const searchLower = search.toLowerCase().trim();
+    return contacts.filter(contact => {
+      const fullName = (contact.full_name || '').toLowerCase();
+      const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
+      const email = (contact.email || '').toLowerCase();
+      const phone = (contact.phone || '').toLowerCase();
+      const primaryOwnerId = ownersMap[contact.id]?.primary?.assigned_to_crm_user_id;
+      const primaryOwnerName = primaryOwnerId ? (ownerNamesMap[primaryOwnerId] || '').toLowerCase() : '';
+      return fullName.includes(searchLower) || 
+             companyName.includes(searchLower) || 
+             email.includes(searchLower) || 
+             phone.includes(searchLower) ||
+             primaryOwnerName.includes(searchLower);
+    });
+  }, [contacts, search, companyNamesMap, ownersMap, ownerNamesMap]);
+
   return (
     <>
       <Card>
@@ -235,9 +258,9 @@ export function AssignedContactsTab() {
                 <Users className="h-5 w-5 text-accent-foreground" />
               </div>
               <div>
-                <CardTitle className="text-lg">Assigned Contacts</CardTitle>
+                <CardTitle className="text-lg">All Contacts</CardTitle>
                 <CardDescription>
-                  {isLoading ? 'Loading...' : `${contacts.length} contacts with owners`}
+                  {isLoading ? 'Loading...' : `${filteredContacts.length} contacts`}
                 </CardDescription>
               </div>
             </div>
@@ -248,14 +271,19 @@ export function AssignedContactsTab() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="mb-4">
+            <ContactsSearch value={search} onChange={setSearch} />
+          </div>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : contacts.length === 0 ? (
+          ) : filteredContacts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Users className="mb-2 h-10 w-10 text-muted-foreground/50" />
-              <p className="text-muted-foreground">No assigned contacts found</p>
+              <p className="text-muted-foreground">
+                {search.trim() ? 'No contacts match your search.' : 'No contacts found'}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -268,11 +296,11 @@ export function AssignedContactsTab() {
                     <TableHead>Primary Owner</TableHead>
                     <TableHead>Secondary Owner</TableHead>
                     <TableHead>Last Activity</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
+                    {isAdmin && <TableHead className="text-right">Action</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {contacts.map((contact) => {
+                  {filteredContacts.map((contact) => {
                     const owners = ownersMap[contact.id];
                     const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id;
                     const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id;
@@ -329,16 +357,18 @@ export function AssignedContactsTab() {
                             <span className="text-xs text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => handleReassignClick(contact, e)}
-                          >
-                            <Users className="mr-1 h-4 w-4" />
-                            Reassign Owners
-                          </Button>
-                        </TableCell>
+                        {isAdmin && (
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => handleReassignClick(contact, e)}
+                            >
+                              <Users className="mr-1 h-4 w-4" />
+                              Reassign
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })}
