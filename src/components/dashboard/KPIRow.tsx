@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { KPICard } from './KPICard';
 import { Users, MessageSquare, Clock, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
+import { getCurrentCrmUserId } from '@/services/profiles';
 
 interface KPIData {
   activeContacts: number;
@@ -24,15 +25,26 @@ export function KPIRow() {
       setIsLoading(true);
 
       try {
-        // RLS enforces visibility - fetch active assignments directly
+        // Get current user's CRM ID for filtering
+        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+        
+        if (crmError || !currentCrmUserId) {
+          console.error('Failed to get CRM user ID:', crmError);
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch only assignments where current user is PRIMARY or SECONDARY owner
         const { data: assignments, count: activeCount } = await supabase
           .from('contact_assignments')
           .select('contact_id', { count: 'exact' })
-          .eq('status', 'ACTIVE');
+          .eq('status', 'ACTIVE')
+          .eq('assigned_to_crm_user_id', currentCrmUserId)
+          .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
-        const contactIds = assignments?.map(a => a.contact_id) || [];
+        const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 
-        // Interactions today
+        // Interactions today (only for my contacts)
         let interactionsToday = 0;
         if (contactIds.length > 0) {
           const today = new Date();
@@ -47,7 +59,7 @@ export function KPIRow() {
           interactionsToday = count || 0;
         }
 
-        // Stale contacts (no activity in 14 days)
+        // Stale contacts (no activity in 14 days) - only my contacts
         let staleCount = 0;
         if (contactIds.length > 0) {
           const fourteenDaysAgo = new Date();
@@ -69,11 +81,27 @@ export function KPIRow() {
           }).length;
         }
 
+        // Follow-ups due today (only for my contacts)
+        let followUpsDue = 0;
+        if (contactIds.length > 0) {
+          const today = new Date();
+          today.setHours(23, 59, 59, 999);
+          
+          const { count } = await supabase
+            .from('contact_followups')
+            .select('*', { count: 'exact', head: true })
+            .in('contact_id', contactIds)
+            .eq('status', 'OPEN')
+            .lte('due_at', today.toISOString());
+          
+          followUpsDue = count || 0;
+        }
+
         setData({
-          activeContacts: activeCount || 0,
+          activeContacts: contactIds.length,
           interactionsToday,
           staleContacts: staleCount,
-          followUpsDue: 0, // Placeholder
+          followUpsDue,
         });
       } catch (error) {
         console.error('Failed to fetch KPIs:', error);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabaseClient';
+import { getCurrentCrmUserId } from '@/services/profiles';
 import { Loader2, MessageSquare, Phone, Mail, Video, StickyNote } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -31,13 +32,25 @@ export function RecentInteractions() {
       setIsLoading(true);
 
       try {
-        // RLS enforces visibility - fetch active assignments directly
+        // Get current user's CRM ID for filtering
+        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+        
+        if (crmError || !currentCrmUserId) {
+          console.error('Failed to get CRM user ID:', crmError);
+          setInteractions([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch only assignments where current user is PRIMARY or SECONDARY owner
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
-          .eq('status', 'ACTIVE');
+          .eq('status', 'ACTIVE')
+          .eq('assigned_to_crm_user_id', currentCrmUserId)
+          .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
-        const contactIds = assignments?.map(a => a.contact_id) || [];
+        const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 
         if (contactIds.length === 0) {
           setInteractions([]);
@@ -45,7 +58,7 @@ export function RecentInteractions() {
           return;
         }
 
-        // Fetch recent interactions from timeline view
+        // Fetch recent interactions from timeline view (only for my contacts)
         const { data: interactionsData } = await supabase
           .from('v_contact_interactions_timeline')
           .select('id, contact_id, interaction_type, interaction_at, subject')
@@ -92,8 +105,8 @@ export function RecentInteractions() {
             <MessageSquare className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <CardTitle className="text-lg">Recent Interactions</CardTitle>
-            <CardDescription>Last 5 activities across your contacts</CardDescription>
+            <CardTitle className="text-lg">My Recent Interactions</CardTitle>
+            <CardDescription>Last 5 activities on your assigned contacts</CardDescription>
           </div>
         </div>
       </CardHeader>
