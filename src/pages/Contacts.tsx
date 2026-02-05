@@ -6,19 +6,21 @@ import { UnassignedContactsTab } from '@/components/contacts/UnassignedContactsT
 import { AssignedContactsTab } from '@/components/contacts/AssignedContactsTab';
 import { MyContactsTab } from '@/components/contacts/MyContactsTab';
 import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
+import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, UserPlus } from 'lucide-react';
+import { Loader2, UserPlus, Users2 } from 'lucide-react';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
-type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added';
+type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary';
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('all-contacts');
+  const [activeTab, setActiveTab] = useState<TabType>('my-contacts'); // Default to My Contacts
   const [refreshKey, setRefreshKey] = useState(0);
   const [myAddedCount, setMyAddedCount] = useState(0);
+  const [secondaryCount, setSecondaryCount] = useState(0);
 
   useEffect(() => {
     const checkRole = async () => {
@@ -61,16 +63,37 @@ export default function Contacts() {
     }
   }, [crmUser]);
 
+  // Fetch count of secondary contacts for current user
+  const loadSecondaryCount = useCallback(async () => {
+    if (!crmUser) return;
+    
+    const { data: currentCrmUserId } = await getCurrentCrmUserId();
+    if (!currentCrmUserId) return;
+    
+    const { count, error } = await supabase
+      .from('contact_assignments')
+      .select('contact_id', { count: 'exact', head: true })
+      .eq('status', 'ACTIVE')
+      .eq('assigned_to_crm_user_id', currentCrmUserId)
+      .eq('assignment_role', 'SECONDARY');
+    
+    if (!error && count !== null) {
+      setSecondaryCount(count);
+    }
+  }, [crmUser]);
+
   useEffect(() => {
     if (!authLoading && crmUser) {
       loadMyAddedCount();
+      loadSecondaryCount();
     }
-  }, [authLoading, crmUser, loadMyAddedCount]);
+  }, [authLoading, crmUser, loadMyAddedCount, loadSecondaryCount]);
 
   const handleContactAdded = () => {
     // Trigger refresh by updating key
     setRefreshKey(prev => prev + 1);
     loadMyAddedCount();
+    loadSecondaryCount();
   };
 
   // Show loading while checking role
@@ -107,15 +130,26 @@ export default function Contacts() {
         <AddContactModal onSuccess={handleContactAdded} />
       </div>
 
-      {/* All users now see All Contacts, My Contacts, and My Added tabs */}
+      {/* Tab structure: All Contacts (global), My Contacts (PRIMARY + stage tabs), Secondary, My Added */}
       {/* Admins additionally see Unassigned tab */}
       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabType)}>
-        <TabsList>
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="my-contacts" className="font-semibold">
+            My Contacts
+          </TabsTrigger>
+          <TabsTrigger value="secondary" className="flex items-center gap-1.5">
+            <Users2 className="h-3.5 w-3.5" />
+            Secondary
+            {secondaryCount > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                {secondaryCount}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="all-contacts">All Contacts</TabsTrigger>
           {isAdmin && (
             <TabsTrigger value="unassigned">Unassigned</TabsTrigger>
           )}
-          <TabsTrigger value="my-contacts">My Contacts</TabsTrigger>
           <TabsTrigger value="my-added" className="flex items-center gap-1.5">
             <UserPlus className="h-3.5 w-3.5" />
             My Added
@@ -127,6 +161,14 @@ export default function Contacts() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="my-contacts" className="mt-4">
+          <MyContactsTab key={`my-${refreshKey}`} />
+        </TabsContent>
+
+        <TabsContent value="secondary" className="mt-4">
+          <SecondaryContactsTab key={`secondary-${refreshKey}`} />
+        </TabsContent>
+
         <TabsContent value="all-contacts" className="mt-4">
           <AssignedContactsTab key={`assigned-${refreshKey}`} />
         </TabsContent>
@@ -136,10 +178,6 @@ export default function Contacts() {
             <UnassignedContactsTab key={`unassigned-${refreshKey}`} />
           </TabsContent>
         )}
-
-        <TabsContent value="my-contacts" className="mt-4">
-          <MyContactsTab key={`my-${refreshKey}`} />
-        </TabsContent>
 
         <TabsContent value="my-added" className="mt-4">
           <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadMyAddedCount} />
