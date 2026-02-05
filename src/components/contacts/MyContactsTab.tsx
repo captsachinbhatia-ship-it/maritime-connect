@@ -65,7 +65,7 @@ const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
 export function MyContactsTab() {
   const { session, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [activeStage, setActiveStage] = useState<StageType>('ASPIRATION');
+  const [activeStage, setActiveStage] = useState<StageType>('COLD_CALLING');
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
