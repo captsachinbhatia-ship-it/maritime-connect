@@ -24,9 +24,17 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { createCompany, checkDuplicateCompanyName } from '@/services/companies';
 
+const COMPANY_TYPE_DB_VALUES = [
+  { label: 'Ship Owner', value: 'Owner' },
+  { label: 'Charterer', value: 'Charterer' },
+  { label: 'Broker', value: 'Broker' },
+  { label: 'Other', value: 'Other' },
+];
+
 const companySchema = z.object({
   company_name: z.string().min(1, 'Company name is required').max(200),
   company_type: z.string().optional(),
+  company_type_other_text: z.string().max(100).optional().or(z.literal('')),
   country: z.string().max(100).optional(),
   city: z.string().max(100).optional(),
   region: z.string().max(100).optional(),
@@ -40,8 +48,6 @@ interface AddCompanyMiniModalProps {
   initialName: string;
   onSuccess: (company: { id: string; company_name: string }) => void;
 }
-
-const COMPANY_TYPES = ['Ship Owner', 'Ship Manager', 'Charterer', 'Broker', 'Agent', 'Supplier', 'Other'];
 
 export function AddCompanyMiniModal({
   open,
@@ -57,17 +63,21 @@ export function AddCompanyMiniModal({
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
     defaultValues: {
       company_name: initialName,
       company_type: '',
+      company_type_other_text: '',
       country: '',
       city: '',
       region: '',
     },
   });
+
+  const watchedCompanyType = watch('company_type');
 
   // Update form when initialName changes
   useState(() => {
@@ -100,6 +110,7 @@ export function AddCompanyMiniModal({
       const result = await createCompany({
         company_name: data.company_name,
         company_type: data.company_type || 'Other',
+        company_type_other_text: data.company_type === 'Other' ? data.company_type_other_text : null,
         country: data.country || null,
         city: data.city || null,
         region: data.region || null,
@@ -162,19 +173,35 @@ export function AddCompanyMiniModal({
 
           <div className="space-y-2">
             <Label>Type</Label>
-            <Select onValueChange={(value) => setValue('company_type', value)}>
+            <Select onValueChange={(value) => {
+              setValue('company_type', value);
+              if (value !== 'Other') {
+                setValue('company_type_other_text', '');
+              }
+            }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                {COMPANY_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
+                {COMPANY_TYPE_DB_VALUES.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {watchedCompanyType === 'Other' && (
+            <div className="space-y-2">
+              <Label htmlFor="company_type_other_text">Describe Type *</Label>
+              <Input
+                id="company_type_other_text"
+                {...register('company_type_other_text')}
+                placeholder="Describe company type"
+              />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

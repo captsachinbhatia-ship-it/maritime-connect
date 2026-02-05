@@ -31,7 +31,7 @@ export async function listCompanies(filters: CompanyFilters = {}): Promise<{
   try {
     let query = supabase
       .from('companies')
-      .select('id, company_name, company_type, country, city, region, website, email_general, phone_general, status, notes, is_active, updated_at')
+      .select('id, company_name, company_type, company_type_other_text, country, city, region, website, email_general, phone_general, board_line, status, notes, is_active, updated_at')
       .order('company_name', { ascending: true });
 
     // Apply search filter (case-insensitive)
@@ -115,6 +115,8 @@ export async function createCompany(payload: CreateCompanyPayload): Promise<{
       .insert({
         company_name: payload.company_name.trim(),
         company_type: payload.company_type,
+          company_type_other_text: payload.company_type_other_text || null,
+          board_line: payload.board_line || null,
         country: payload.country || null,
         city: payload.city || null,
         region: payload.region || null,

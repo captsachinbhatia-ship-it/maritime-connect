@@ -31,6 +31,7 @@ import { StageRequestModal } from './StageRequestModal';
 import { StageHistoryPanel } from './StageHistoryPanel';
 import { AddAssignmentModal } from './AddAssignmentModal';
 import { EditCompanyModal } from './EditCompanyModal';
+import { getContactPhones, ContactPhone } from '@/services/contactPhones';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -108,6 +109,10 @@ export function ContactDetailsDrawer({
   // Edit company modal state
   const [isEditCompanyOpen, setIsEditCompanyOpen] = useState(false);
   const [displayedCompanyName, setDisplayedCompanyName] = useState<string | null>(companyName);
+  
+  // Phone numbers state
+  const [contactPhones, setContactPhones] = useState<ContactPhone[]>([]);
+  const [isLoadingPhones, setIsLoadingPhones] = useState(false);
 
   // Admin check
   const [isAdmin, setIsAdmin] = useState(false);
@@ -153,6 +158,30 @@ export function ContactDetailsDrawer({
     
     checkAdmin();
   }, []);
+
+  // Load contact phones when drawer opens
+  const loadContactPhones = useCallback(async () => {
+    if (!contact) return;
+    
+    setIsLoadingPhones(true);
+    
+    const result = await getContactPhones(contact.id);
+    
+    if (result.data) {
+      setContactPhones(result.data);
+    } else {
+      setContactPhones([]);
+    }
+    
+    setIsLoadingPhones(false);
+  }, [contact]);
+
+  // Load phones when drawer opens
+  useEffect(() => {
+    if (isOpen && contact) {
+      loadContactPhones();
+    }
+  }, [isOpen, contact?.id, loadContactPhones]);
 
   // Load owners when drawer opens
   const loadOwners = useCallback(async () => {
@@ -210,6 +239,7 @@ export function ContactDetailsDrawer({
       setAssignmentsError(null);
       setInteractionsError(null);
       setFollowupsError(null);
+      setContactPhones([]);
       // Reset filters when drawer closes
       setInteractionsFilters({
         type: 'all',
@@ -494,14 +524,43 @@ export function ContactDetailsDrawer({
                     Contact Information
                   </h4>
                   <div className="grid gap-3">
+                    {/* Phone Numbers from contact_phones */}
                     <div>
-                      <span className="text-xs text-muted-foreground">Phone</span>
-                      <p className="text-foreground">
-                        {formatPhone() || '-'}
-                        {contact.phone_type && (
-                          <span className="ml-2 text-xs text-muted-foreground">({contact.phone_type})</span>
-                        )}
-                      </p>
+                      <span className="text-xs text-muted-foreground">Phone Numbers</span>
+                      {isLoadingPhones ? (
+                        <div className="flex items-center gap-2 text-muted-foreground text-sm mt-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading...
+                        </div>
+                      ) : contactPhones.length > 0 ? (
+                        <div className="space-y-1 mt-1">
+                          {contactPhones.map((phone) => (
+                            <div key={phone.id} className="flex items-center gap-2 text-foreground">
+                              <span>{phone.phone_number}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {phone.phone_type}
+                              </Badge>
+                              {phone.is_primary && (
+                                <Badge className="text-xs bg-primary/10 text-primary border-0">
+                                  Primary
+                                </Badge>
+                              )}
+                              {phone.notes && (
+                                <span className="text-xs text-muted-foreground">({phone.notes})</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : formatPhone() ? (
+                        <p className="text-foreground">
+                          {formatPhone()}
+                          {contact.phone_type && (
+                            <span className="ml-2 text-xs text-muted-foreground">({contact.phone_type})</span>
+                          )}
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">-</p>
+                      )}
                     </div>
                     <div>
                       <span className="text-xs text-muted-foreground">Email</span>
