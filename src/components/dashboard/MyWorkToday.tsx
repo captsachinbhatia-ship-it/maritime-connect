@@ -7,6 +7,7 @@ import { getCurrentCrmUserId } from '@/services/profiles';
 import { ContactWithCompany } from '@/types';
 import { Loader2, AlertTriangle, UserCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { PendingNudges } from './PendingNudges';
 
 interface MyWorkTodayProps {
   onContactClick: (contact: ContactWithCompany) => void;
@@ -128,18 +129,23 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
   }, []);
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/10">
-            <AlertTriangle className="h-5 w-5 text-orange-600" />
+    <div className="space-y-6">
+      {/* Pending Nudges Section */}
+      <PendingNudges onContactClick={onContactClick} />
+
+      {/* Stale Contacts Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/10">
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Stale Contacts</CardTitle>
+              <CardDescription>Contacts needing attention (no activity in 14+ days)</CardDescription>
+            </div>
           </div>
-          <div>
-            <CardTitle className="text-lg">My Work Today</CardTitle>
-            <CardDescription>Contacts needing attention (no activity in 14+ days)</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -198,5 +204,6 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }
