@@ -40,8 +40,18 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
 import { createContact, checkDuplicateContact, getAllCompaniesForDropdown } from '@/services/contacts';
 import { saveContactPhones, ContactPhoneInput } from '@/services/contactPhones';
+import { fetchContactsForDuplicateCheck, ContactForDuplicateCheck } from '@/services/duplicateContacts';
 import { AddCompanyMiniModal } from './AddCompanyMiniModal';
 import { PhoneInput } from '@/components/ui/phone-input';
+import { DuplicateMatchesPanel, DuplicateMatch } from './DuplicateMatchesPanel';
+import { HighMatchConfirmDialog } from './HighMatchConfirmDialog';
+import {
+  normalizePhone,
+  isHighPhoneMatch,
+  isLowPhoneMatch,
+  isNameSimilar,
+  isEmailSimilar,
+} from '@/lib/duplicateDetection';
 
 const contactSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
@@ -99,6 +109,11 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     { id: crypto.randomUUID(), phone_type: 'Mobile', phone_number: '', is_primary: true, notes: '' }
   ]);
 
+  // Duplicate detection state
+  const [existingContacts, setExistingContacts] = useState<ContactForDuplicateCheck[]>([]);
+  const [showHighMatchConfirm, setShowHighMatchConfirm] = useState(false);
+  const [pendingSubmitData, setPendingSubmitData] = useState<ContactFormData | null>(null);
+
   const {
     register,
     handleSubmit,
@@ -122,10 +137,14 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     },
   });
 
-  // Load companies on mount
+  const watchedName = watch('full_name');
+  const watchedEmail = watch('email');
+
+  // Load companies and existing contacts on mount
   useEffect(() => {
     if (open) {
       loadCompanies();
+      loadExistingContacts();
     }
   }, [open]);
 
@@ -135,6 +154,93 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       setCompanies(result.data);
     }
   };
+
+  const loadExistingContacts = async () => {
+    const result = await fetchContactsForDuplicateCheck();
+    if (result.data) {
+      setExistingContacts(result.data);
+    }
+  };
+
+  // Compute duplicate matches based on current form input
+  const { highMatches, possibleMatches } = useMemo(() => {
+    const high: DuplicateMatch[] = [];
+    const possible: DuplicateMatch[] = [];
+    const seenIds = new Set<string>();
+
+    // Get all input phones
+    const inputPhones = phoneRows
+      .map(p => p.phone_number.trim())
+      .filter(p => normalizePhone(p).length >= 4);
+
+    const inputName = watchedName?.trim() || '';
+    const inputEmail = watchedEmail?.trim() || '';
+
+    for (const contact of existingContacts) {
+      if (seenIds.has(contact.id)) continue;
+
+      const reasons: string[] = [];
+      let isHigh = false;
+
+      // Check phone matches
+      for (const inputPhone of inputPhones) {
+        for (const existingPhone of contact.phones) {
+          // High confidence: last 6 digits match
+          if (isHighPhoneMatch(inputPhone, existingPhone)) {
+            isHigh = true;
+            reasons.push('Phone number closely matches');
+            break;
+          }
+          // Low confidence: ANY 4 digits match
+          if (isLowPhoneMatch(inputPhone, existingPhone)) {
+            reasons.push('Phone has similar digits');
+            break;
+          }
+        }
+        if (isHigh) break;
+      }
+
+      // Check name similarity (if name has 3+ chars)
+      if (inputName.length >= 3 && contact.full_name) {
+        if (isNameSimilar(inputName, contact.full_name)) {
+          reasons.push('Similar name');
+        }
+      }
+
+      // Check email similarity
+      if (inputEmail.length >= 3 && contact.email) {
+        if (isEmailSimilar(inputEmail, contact.email)) {
+          reasons.push('Similar email');
+        }
+      }
+
+      if (reasons.length > 0) {
+        seenIds.add(contact.id);
+        const match: DuplicateMatch = {
+          id: contact.id,
+          full_name: contact.full_name,
+          company_name: contact.company_name || null,
+          stage: contact.stage || null,
+          phone: contact.phones[0] || null,
+          email: contact.email,
+          matchType: isHigh ? 'high' : 'possible',
+          matchReason: [...new Set(reasons)].join(', '),
+        };
+
+        if (isHigh) {
+          high.push(match);
+        } else {
+          possible.push(match);
+        }
+      }
+    }
+
+    // Limit results to avoid overwhelming the UI
+    return {
+      highMatches: high.slice(0, 5),
+      possibleMatches: possible.slice(0, 5),
+    };
+  }, [existingContacts, phoneRows, watchedName, watchedEmail]);
 
   const filteredCompanies = useMemo(() => {
     if (!companySearch.trim()) return companies;
@@ -214,7 +320,18 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     }
   };
 
-  const onSubmit = async (data: ContactFormData) => {
+  const handleOpenContact = useCallback((contactId: string) => {
+    // Open contact in new tab (or could navigate within app)
+    window.open(`/contacts?open=${contactId}`, '_blank');
+  }, []);
+
+  const handleUseExisting = useCallback((contactId: string) => {
+    // Close modal and redirect to existing contact
+    setOpen(false);
+    window.location.href = `/contacts?open=${contactId}`;
+  }, []);
+
+  const performSubmit = async (data: ContactFormData) => {
     if (!user || !crmUser) {
       setSubmitError('You must be logged in to create a contact');
       return;
@@ -224,7 +341,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     setSubmitError(null);
 
     try {
-      // Check for duplicates (using first phone if available)
+      // Check for exact duplicates (using first phone if available)
       const firstPhone = phoneRows.find(p => p.phone_number.trim())?.phone_number || null;
       const duplicateCheck = await checkDuplicateContact(
         data.email || null,
@@ -291,6 +408,30 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     }
   };
 
+  const onSubmit = async (data: ContactFormData) => {
+    // If high matches exist, show confirmation dialog first
+    if (highMatches.length > 0) {
+      setPendingSubmitData(data);
+      setShowHighMatchConfirm(true);
+      return;
+    }
+
+    await performSubmit(data);
+  };
+
+  const handleConfirmCreate = async () => {
+    setShowHighMatchConfirm(false);
+    if (pendingSubmitData) {
+      await performSubmit(pendingSubmitData);
+      setPendingSubmitData(null);
+    }
+  };
+
+  const handleCancelCreate = () => {
+    setShowHighMatchConfirm(false);
+    setPendingSubmitData(null);
+  };
+
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       reset();
@@ -298,6 +439,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       setSubmitError(null);
       setCompanySearch('');
       setPhoneRows([{ id: crypto.randomUUID(), phone_type: 'Mobile', phone_number: '', is_primary: true, notes: '' }]);
+      setPendingSubmitData(null);
     }
     setOpen(newOpen);
   };
@@ -326,6 +468,14 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
                 <AlertDescription>{submitError}</AlertDescription>
               </Alert>
             )}
+
+            {/* Duplicate Matches Panel */}
+            <DuplicateMatchesPanel
+              highMatches={highMatches}
+              possibleMatches={possibleMatches}
+              onOpenContact={handleOpenContact}
+              onUseExisting={handleUseExisting}
+            />
 
             {/* Full Name */}
             <div className="space-y-2">
@@ -559,6 +709,14 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
         onOpenChange={setShowAddCompanyModal}
         initialName={pendingCompanyName}
         onSuccess={handleCompanyCreated}
+      />
+
+      <HighMatchConfirmDialog
+        open={showHighMatchConfirm}
+        onOpenChange={setShowHighMatchConfirm}
+        matchCount={highMatches.length}
+        onConfirm={handleConfirmCreate}
+        onCancel={handleCancelCreate}
       />
     </>
   );
