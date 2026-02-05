@@ -14,12 +14,12 @@ import { formatDistanceToNow, format } from 'date-fns';
  import { AlertCircle } from 'lucide-react';
  import { Skeleton } from '@/components/ui/skeleton';
  import { supabase } from '@/lib/supabaseClient';
- import { useAuth } from '@/contexts/AuthContext';
- import { getCurrentCrmUserId } from '@/services/profiles';
- import { getCompanyNamesMap } from '@/services/contacts';
- import { ContactDetailsDrawer } from './ContactDetailsDrawer';
- import { ContactsSearch } from './ContactsSearch';
- import { ContactWithCompany } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { getCurrentCrmUserId, listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
+import { getCompanyNamesMap } from '@/services/contacts';
+import { ContactDetailsDrawer } from './ContactDetailsDrawer';
+import { ContactsSearch } from './ContactsSearch';
+import { ContactWithCompany } from '@/types';
  
  const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
    CALL: <PhoneCall className="h-3 w-3" />,
@@ -34,12 +34,13 @@ import { formatDistanceToNow, format } from 'date-fns';
  }
  
  export function MyAddedContactsTab({ onRefresh }: MyAddedContactsTabProps) {
-   const { session, loading: authLoading } = useAuth();
-   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
-   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
-   const [isLoading, setIsLoading] = useState(true);
-   const [error, setError] = useState<string | null>(null);
-   const [search, setSearch] = useState('');
+  const { session, loading: authLoading } = useAuth();
+  const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
+  const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
+  const [crmUsersMap, setCrmUsersMap] = useState<Record<string, CrmUserForAssignment>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
  
    // Drawer state
    const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
@@ -66,27 +67,36 @@ import { formatDistanceToNow, format } from 'date-fns';
          return;
        }
  
-       // Fetch contacts created by this user
-       let contactsQuery = supabase
-         .from('contacts')
-         .select(`
-           id,
-           full_name,
-           company_id,
-           designation,
-           country_code,
-           phone,
-           phone_type,
-           email,
-           ice_handle,
-           preferred_channel,
-           notes,
-           is_active,
-           updated_at,
-           created_at
-         `)
-         .eq('created_by_crm_user_id', currentCrmUserId)
-         .order('created_at', { ascending: false });
+        // Fetch contacts created by this user
+        let contactsQuery = supabase
+          .from('contacts')
+          .select(`
+            id,
+            full_name,
+            company_id,
+            designation,
+            country_code,
+            phone,
+            phone_type,
+            email,
+            ice_handle,
+            preferred_channel,
+            notes,
+            is_active,
+            updated_at,
+            created_at,
+            created_by_crm_user_id
+          `)
+          .eq('created_by_crm_user_id', currentCrmUserId)
+          .order('created_at', { ascending: false });
+
+        // Also fetch CRM users for "Added By" display
+        const { data: crmUsersData } = await listCrmUsersForAssignment();
+        if (crmUsersData) {
+          const usersMap: Record<string, CrmUserForAssignment> = {};
+          crmUsersData.forEach(u => { usersMap[u.id] = u; });
+          setCrmUsersMap(usersMap);
+        }
  
        if (search.trim()) {
          contactsQuery = contactsQuery.ilike('full_name', `%${search.trim()}%`);
@@ -179,6 +189,12 @@ import { formatDistanceToNow, format } from 'date-fns';
     }
   };
 
+  const formatAddedBy = (creatorId: string | null | undefined): string => {
+    if (!creatorId) return 'Unknown';
+    const user = crmUsersMap[creatorId];
+    if (!user) return 'Unknown';
+    return user.email ? `${user.full_name} (${user.email})` : user.full_name;
+  };
   // Enhanced search: filter by name, company, email, phone
   const filteredContacts = useMemo(() => {
     if (!search.trim()) return contacts;
@@ -251,14 +267,16 @@ import { formatDistanceToNow, format } from 'date-fns';
        ) : (
          <div className="rounded-md border overflow-x-auto">
            <Table>
-             <TableHeader>
-               <TableRow>
-                 <TableHead>Full Name</TableHead>
-                 <TableHead>Company</TableHead>
-                 <TableHead>Email</TableHead>
-                 <TableHead>Last Activity</TableHead>
-               </TableRow>
-             </TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Full Name</TableHead>
+                  <TableHead>Company</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Added By</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Last Activity</TableHead>
+                </TableRow>
+              </TableHeader>
              <TableBody>
                 {filteredContacts.map((contact) => {
                  const lastInteraction = formatLastInteraction(contact);
@@ -269,19 +287,22 @@ import { formatDistanceToNow, format } from 'date-fns';
                      className="cursor-pointer"
                      onClick={(e) => handleRowClick(e, contact)}
                    >
-                     <TableCell className="font-medium">
-                       {contact.full_name || '-'}
+                      <TableCell className="font-medium">
+                        {contact.full_name || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {contact.email || '-'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatAddedBy((contact as any).created_by_crm_user_id)}
+                      </TableCell>
+                     <TableCell className="text-sm text-muted-foreground">
+                       {formatCreatedDate(contact.created_at)}
                      </TableCell>
-                     <TableCell>
-                       {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
-                     </TableCell>
-                     <TableCell>
-                       {contact.email || '-'}
-                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatCreatedDate(contact.created_at)}
-                    </TableCell>
-                     <TableCell>
+                      <TableCell>
                        {lastInteraction ? (
                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                            <span className="flex items-center gap-1">

@@ -33,6 +33,7 @@ interface UnassignedContact {
   email: string | null;
   phone: string | null;
   created_at: string | null;
+  created_by_crm_user_id: string | null;
 }
 
 const NONE_VALUE = '__none__';
@@ -40,6 +41,7 @@ const NONE_VALUE = '__none__';
 export function UnassignedContactsTab() {
   const [contacts, setContacts] = useState<UnassignedContact[]>([]);
   const [crmUsers, setCrmUsers] = useState<CrmUserForAssignment[]>([]);
+  const [crmUsersMap, setCrmUsersMap] = useState<Record<string, CrmUserForAssignment>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [primarySelections, setPrimarySelections] = useState<Record<string, string>>({});
@@ -81,7 +83,8 @@ export function UnassignedContactsTab() {
           phone,
           company_id,
           companies ( company_name ),
-          created_at
+          created_at,
+          created_by_crm_user_id
         `)
         .eq('is_active', true)
         .order('full_name')
@@ -104,6 +107,7 @@ export function UnassignedContactsTab() {
           email: c.email,
           phone: c.phone,
           created_at: c.created_at,
+          created_by_crm_user_id: c.created_by_crm_user_id,
         }));
 
         setContacts(mappedContacts);
@@ -113,6 +117,10 @@ export function UnassignedContactsTab() {
       const { data: crmUsersData, error: crmError } = await listCrmUsersForAssignment();
       if (!crmError && crmUsersData) {
         setCrmUsers(crmUsersData);
+        // Build a map for quick lookups
+        const usersMap: Record<string, CrmUserForAssignment> = {};
+        crmUsersData.forEach(u => { usersMap[u.id] = u; });
+        setCrmUsersMap(usersMap);
       }
     } catch (error) {
       console.error('[UnassignedContactsTab] Failed to fetch data:', error);
@@ -219,6 +227,13 @@ export function UnassignedContactsTab() {
     return user.full_name;
   };
 
+  const formatAddedBy = (creatorId: string | null): string => {
+    if (!creatorId) return 'Unknown';
+    const user = crmUsersMap[creatorId];
+    if (!user) return 'Unknown';
+    return user.email ? `${user.full_name} (${user.email})` : user.full_name;
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -258,9 +273,10 @@ export function UnassignedContactsTab() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
+              <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Company</TableHead>
+                  <TableHead>Added By</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="w-[200px]">Primary Owner *</TableHead>
                   <TableHead className="w-[200px]">Secondary Owner</TableHead>
@@ -283,6 +299,9 @@ export function UnassignedContactsTab() {
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatAddedBy(contact.created_by_crm_user_id)}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatCreatedDate(contact.created_at)}
