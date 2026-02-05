@@ -244,7 +244,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
         return;
       }
 
-      // Create contact
+      // Create contact - ensure empty strings become null
       const result = await createContact({
         full_name: data.full_name,
         company_id: data.company_id || null,
@@ -254,7 +254,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
         phone_type: null,
         email: data.email || null,
         ice_handle: data.ice_handle || null,
-        preferred_channel: data.preferred_channel || null,
+        preferred_channel: data.preferred_channel?.trim() || null,
         notes: data.notes || null,
       }, user.id);
 
