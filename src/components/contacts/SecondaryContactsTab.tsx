@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight, Users } from 'lucide-react';
+import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight, Users, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -20,9 +20,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getCurrentCrmUserId } from '@/services/profiles';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
+import { getUserNames } from '@/services/interactions';
+import { getNudgeStatusMap } from '@/services/nudgeStatus';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
 import { StageRequestModal } from './StageRequestModal';
+import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
 import { ContactWithCompany } from '@/types';
 
 type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
@@ -57,12 +60,15 @@ const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
 
 interface SecondaryContact extends ContactWithCompany {
   stage: string | null;
+  primary_owner_id: string | null;
 }
 
 export function SecondaryContactsTab() {
   const { session, loading: authLoading } = useAuth();
   const [contacts, setContacts] = useState<SecondaryContact[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
+  const [primaryOwnerNamesMap, setPrimaryOwnerNamesMap] = useState<Record<string, string>>({});
+  const [nudgeStatusMap, setNudgeStatusMap] = useState<Record<string, boolean>>({});
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,10 +126,10 @@ export function SecondaryContactsTab() {
         return;
       }
 
-      // Get the PRIMARY assignments for these contacts to determine stage
+      // Get the PRIMARY assignments for these contacts to determine stage and primary owner
       const { data: primaryAssignments, error: primaryError } = await supabase
         .from('contact_assignments')
-        .select('contact_id, stage')
+        .select('contact_id, stage, assigned_to_crm_user_id')
         .in('contact_id', contactIds)
         .eq('status', 'ACTIVE')
         .eq('assignment_role', 'PRIMARY');
@@ -135,10 +141,14 @@ export function SecondaryContactsTab() {
         return;
       }
 
-      // Build stage map
+      // Build stage map and primary owner map
       const stageMap: Record<string, string> = {};
+      const primaryOwnerMap: Record<string, string> = {};
       (primaryAssignments || []).forEach(a => {
         stageMap[a.contact_id] = a.stage;
+        if (a.assigned_to_crm_user_id) {
+          primaryOwnerMap[a.contact_id] = a.assigned_to_crm_user_id;
+        }
       });
 
       // Fetch contacts
@@ -173,6 +183,7 @@ export function SecondaryContactsTab() {
       let contactsList = (contactsData || []).map(c => ({
         ...c,
         stage: stageMap[c.id] || null,
+        primary_owner_id: primaryOwnerMap[c.id] || null,
       })) as SecondaryContact[];
 
       // Fetch last interaction data
@@ -213,12 +224,29 @@ export function SecondaryContactsTab() {
         }
       }
 
+      // Fetch primary owner names
+      const primaryOwnerIds = Object.values(primaryOwnerMap).filter(Boolean);
+      if (primaryOwnerIds.length > 0) {
+        const ownerNamesResult = await getUserNames(primaryOwnerIds);
+        if (ownerNamesResult.data) {
+          setPrimaryOwnerNamesMap(ownerNamesResult.data);
+        }
+      }
+
       // Fetch next follow-up dates
       const contactIdsForFollowups = contactsList.map(c => c.id);
       if (contactIdsForFollowups.length > 0) {
         const followupResult = await getNextFollowupDueMap(contactIdsForFollowups);
         if (followupResult.data) {
           setNextFollowupMap(followupResult.data);
+        }
+      }
+
+      // Fetch nudge status for all contacts
+      if (contactIds.length > 0) {
+        const nudgeResult = await getNudgeStatusMap(contactIds);
+        if (nudgeResult.data) {
+          setNudgeStatusMap(nudgeResult.data);
         }
       }
     } catch (err) {
@@ -307,6 +335,7 @@ export function SecondaryContactsTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Full Name</TableHead>
+                    <TableHead>Primary Owner</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Stage</TableHead>
                     <TableHead>Next Follow-up</TableHead>
@@ -318,8 +347,10 @@ export function SecondaryContactsTab() {
                   {Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -341,6 +372,7 @@ export function SecondaryContactsTab() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Full Name</TableHead>
+                    <TableHead>Primary Owner</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Stage</TableHead>
                     <TableHead>Next Follow-up</TableHead>
@@ -353,6 +385,10 @@ export function SecondaryContactsTab() {
                     const lastInteraction = formatLastInteraction(contact);
                     const nextFollowupDue = nextFollowupMap[contact.id] || null;
                     const followupStatus = getFollowupStatusLabel(nextFollowupDue);
+                    const primaryOwnerName = contact.primary_owner_id 
+                      ? primaryOwnerNamesMap[contact.primary_owner_id] || 'Unknown'
+                      : 'Unassigned';
+                    const hasActiveNudge = nudgeStatusMap[contact.id] || false;
 
                     return (
                       <TableRow
@@ -361,7 +397,18 @@ export function SecondaryContactsTab() {
                         onClick={(e) => handleRowClick(e, contact)}
                       >
                         <TableCell className="font-medium">
-                          {contact.full_name || '-'}
+                          <div className="flex flex-col gap-1">
+                            <span>{contact.full_name || '-'}</span>
+                            {hasActiveNudge && (
+                              <Badge className="w-fit text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300">
+                                <Bell className="mr-1 h-3 w-3" />
+                                Backup requested
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{primaryOwnerName}</span>
                         </TableCell>
                         <TableCell>
                           {contact.company_id ? (
@@ -413,19 +460,28 @@ export function SecondaryContactsTab() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setStageRequestContact(contact);
-                              setStageRequestModalOpen(true);
-                            }}
-                          >
-                            Request Move
-                            <ArrowRight className="ml-1 h-3 w-3" />
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            {hasActiveNudge && (
+                              <AcknowledgeNudgeButton
+                                contactId={contact.id}
+                                contactName={contact.full_name || 'Unknown'}
+                                onSuccess={loadContacts}
+                              />
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setStageRequestContact(contact);
+                                setStageRequestModalOpen(true);
+                              }}
+                            >
+                              Request Move
+                              <ArrowRight className="ml-1 h-3 w-3" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
