@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabaseClient';
+import { getCurrentCrmUserId } from '@/services/profiles';
 import { Loader2, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -32,11 +33,22 @@ export function StageSnapshot() {
       setIsLoading(true);
 
       try {
-        // RLS enforces visibility - fetch active assignments directly
+        // Get current user's CRM ID for filtering
+        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+        
+        if (crmError || !currentCrmUserId) {
+          console.error('Failed to get CRM user ID:', crmError);
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch only assignments where current user is PRIMARY or SECONDARY owner
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id, stage')
-          .eq('status', 'ACTIVE');
+          .eq('status', 'ACTIVE')
+          .eq('assigned_to_crm_user_id', currentCrmUserId)
+          .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
         // Get unique contact per stage (latest assignment)
         const latestByContact = new Map<string, string>();
@@ -81,8 +93,8 @@ export function StageSnapshot() {
             <BarChart3 className="h-5 w-5 text-accent-foreground" />
           </div>
           <div>
-            <CardTitle className="text-lg">Stage Snapshot</CardTitle>
-            <CardDescription>Contacts by pipeline stage</CardDescription>
+            <CardTitle className="text-lg">My Stage Snapshot</CardTitle>
+            <CardDescription>Your assigned contacts by pipeline stage</CardDescription>
           </div>
         </div>
       </CardHeader>

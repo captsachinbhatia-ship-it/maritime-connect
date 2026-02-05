@@ -32,9 +32,9 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <h1 className="text-3xl font-bold text-foreground">My Dashboard</h1>
           <p className="mt-1 text-muted-foreground">
-            Welcome to AQ Maritime CRM
+            Your personal work and assigned contacts
           </p>
         </div>
         {isAdmin && <ModeIndicator isCEO={isCEO} />}

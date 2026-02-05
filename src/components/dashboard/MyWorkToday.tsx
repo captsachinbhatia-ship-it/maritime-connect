@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabaseClient';
+import { getCurrentCrmUserId } from '@/services/profiles';
 import { ContactWithCompany } from '@/types';
 import { Loader2, AlertTriangle, UserCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -21,13 +22,25 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
       setIsLoading(true);
 
       try {
-        // RLS enforces visibility - fetch active assignments directly
+        // Get current user's CRM ID for filtering
+        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+        
+        if (crmError || !currentCrmUserId) {
+          console.error('Failed to get CRM user ID:', crmError);
+          setContacts([]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch only assignments where current user is PRIMARY or SECONDARY owner
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
-          .eq('status', 'ACTIVE');
+          .eq('status', 'ACTIVE')
+          .eq('assigned_to_crm_user_id', currentCrmUserId)
+          .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
-        const contactIds = assignments?.map(a => a.contact_id) || [];
+        const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 
         if (contactIds.length === 0) {
           setContacts([]);
