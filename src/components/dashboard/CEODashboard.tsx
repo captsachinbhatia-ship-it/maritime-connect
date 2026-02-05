@@ -5,6 +5,7 @@ import { RiskNeglectList } from './RiskNeglectList';
 import { RecentCompanies } from './RecentCompanies';
 import { ModeIndicator } from './ModeIndicator';
 import { PendingStageRequests } from './PendingStageRequests';
+import { UnassignedContactsList } from './UnassignedContactsList';
 
 interface CEODashboardProps {
   isAdmin: boolean;
@@ -30,6 +31,9 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
 
       {/* Pending Stage Requests */}
       <PendingStageRequests />
+
+      {/* Unassigned Contacts - Admin operational pool */}
+      <UnassignedContactsList />
 
       {/* Pipeline Health - Full Width */}
       <PipelineHealth />

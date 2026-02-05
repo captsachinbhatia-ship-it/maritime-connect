@@ -9,6 +9,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { updateStage, AssignmentStage } from '@/services/assignments';
+import { createStageRequest } from '@/services/stageRequests';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface StageDropdownProps {
   contactId: string;
@@ -38,6 +40,7 @@ export function StageDropdown({
   disabled = false 
 }: StageDropdownProps) {
   const { toast } = useToast();
+  const { crmUser } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleStageSelect = async (newStage: AssignmentStage) => {
@@ -45,6 +48,43 @@ export function StageDropdown({
 
     setIsUpdating(true);
 
+    // INACTIVE requires admin approval - create a request instead of direct update
+    if (newStage === 'INACTIVE') {
+      if (!crmUser?.id) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'User not authenticated.',
+        });
+        setIsUpdating(false);
+        return;
+      }
+
+      const result = await createStageRequest(
+        contactId,
+        'INACTIVE',
+        crmUser.id
+      );
+
+      if (result.success) {
+        toast({
+          title: 'Inactive request sent for admin approval',
+          description: 'An administrator will review this request.',
+        });
+        onStageChange();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Failed to submit request',
+          description: result.error || 'Unknown error',
+        });
+      }
+
+      setIsUpdating(false);
+      return;
+    }
+
+    // Other stages - direct update
     const result = await updateStage({
       contact_id: contactId,
       stage: newStage,
@@ -96,6 +136,9 @@ export function StageDropdown({
             className={currentStage === stage.value ? 'bg-accent' : ''}
           >
             {stage.label}
+            {stage.value === 'INACTIVE' && currentStage !== 'INACTIVE' && (
+              <span className="ml-2 text-xs text-muted-foreground">(requires approval)</span>
+            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
