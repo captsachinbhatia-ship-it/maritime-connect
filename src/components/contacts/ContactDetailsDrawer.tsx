@@ -4,7 +4,7 @@ import {
   User, Building2, Phone, Mail, MessageSquare, FileText, 
   MapPin, Calendar, UserCheck, Clock, PhoneCall, Video, 
   FileEdit, Loader2, AlertCircle, Plus, CalendarClock, Users,
-  ArrowUpRight, UserPlus, Pencil
+  ArrowUpRight, UserPlus, Pencil, Bell
 } from 'lucide-react';
 import { ContactWithCompany } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAssignmentsByContact, getContactOwners, ContactAssignment, ContactOwners } from '@/services/assignments';
 import { getInteractionsByContact, getUserNames, ContactInteraction, InteractionFilters } from '@/services/interactions';
 import { getFollowupsByContact, ContactFollowup } from '@/services/followups';
+import { getNudgeStatus, NudgeStatus } from '@/services/nudgeStatus';
 import { AddInteractionModal } from './AddInteractionModal';
 import { InteractionsFilters, InteractionsFiltersState } from './InteractionsFilters';
 import { FollowupsTab } from './FollowupsTab';
@@ -31,6 +32,8 @@ import { StageRequestModal } from './StageRequestModal';
 import { StageHistoryPanel } from './StageHistoryPanel';
 import { AddAssignmentModal } from './AddAssignmentModal';
 import { EditCompanyModal } from './EditCompanyModal';
+import { NudgeSecondaryModal } from './NudgeSecondaryModal';
+import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
 import { getContactPhones, ContactPhone } from '@/services/contactPhones';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -124,6 +127,10 @@ export function ContactDetailsDrawer({
   // Admin check
   const [isAdmin, setIsAdmin] = useState(false);
   
+  // Nudge state
+  const [isNudgeModalOpen, setIsNudgeModalOpen] = useState(false);
+  const [nudgeStatus, setNudgeStatus] = useState<NudgeStatus | null>(null);
+  
   // Interactions filters state
   const [interactionsFilters, setInteractionsFilters] = useState<InteractionsFiltersState>({
     type: 'all',
@@ -147,6 +154,28 @@ export function ContactDetailsDrawer({
     
     return isPrimaryOwner || isSecondaryOwner;
   }, [isAdmin, crmUser?.id, owners]);
+
+  // Permission checks for nudge workflow
+  const isPrimaryOwner = useMemo(() => {
+    if (!crmUser?.id || !owners) return false;
+    return owners.primary?.assigned_to_crm_user_id === crmUser.id;
+  }, [crmUser?.id, owners]);
+
+  const isSecondaryOwner = useMemo(() => {
+    if (!crmUser?.id || !owners) return false;
+    return owners.secondary?.assigned_to_crm_user_id === crmUser.id;
+  }, [crmUser?.id, owners]);
+
+  const canNudgeSecondary = useMemo(() => {
+    // Can nudge if: (Primary owner OR Admin/CEO) AND there's a secondary owner
+    const hasSecondary = !!owners?.secondary?.assigned_to_crm_user_id;
+    return hasSecondary && (isPrimaryOwner || isAdmin);
+  }, [isPrimaryOwner, isAdmin, owners]);
+
+  const secondaryOwnerName = useMemo(() => {
+    if (!owners?.secondary?.assigned_to_crm_user_id) return '';
+    return ownerNames[owners.secondary.assigned_to_crm_user_id] || 'Unknown';
+  }, [owners, ownerNames]);
 
   // Check admin status on mount
   useEffect(() => {
@@ -240,6 +269,22 @@ export function ContactDetailsDrawer({
     }
   }, [isOpen, contact?.id, loadOwners]);
 
+  // Load nudge status when drawer opens
+  const loadNudgeStatus = useCallback(async () => {
+    if (!contact) return;
+    
+    const result = await getNudgeStatus(contact.id);
+    if (result.data) {
+      setNudgeStatus(result.data);
+    }
+  }, [contact]);
+
+  useEffect(() => {
+    if (isOpen && contact) {
+      loadNudgeStatus();
+    }
+  }, [isOpen, contact?.id, loadNudgeStatus]);
+
   // Reset state when drawer closes
   useEffect(() => {
     if (!isOpen) {
@@ -253,6 +298,7 @@ export function ContactDetailsDrawer({
       setInteractionsError(null);
       setFollowupsError(null);
       setContactPhones([]);
+      setNudgeStatus(null);
       // Reset filters when drawer closes
       setInteractionsFilters({
         type: 'all',
@@ -628,7 +674,7 @@ export function ContactDetailsDrawer({
                   </>
                 )}
 
-                {/* Request Stage Move (for non-primary owners) */}
+                {/* Stage & Coordination Actions */}
                 {currentStage && (
                   <>
                     <Separator />
@@ -646,6 +692,50 @@ export function ContactDetailsDrawer({
                           <ArrowUpRight className="mr-1 h-3 w-3" />
                           Request Stage Move
                         </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Nudge/Acknowledge Section */}
+                {owners?.secondary && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                            <Bell className="h-4 w-4" />
+                            Backup Coordination
+                          </h4>
+                          {nudgeStatus?.hasActiveNudge && (
+                            <Badge className="mt-1 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300">
+                              Backup requested
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {canNudgeSecondary && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setIsNudgeModalOpen(true)}
+                            >
+                              <Bell className="mr-1 h-3 w-3" />
+                              Nudge Secondary
+                            </Button>
+                          )}
+                          {isSecondaryOwner && nudgeStatus?.hasActiveNudge && (
+                            <AcknowledgeNudgeButton
+                              contactId={contact.id}
+                              contactName={contact.full_name || 'Unknown'}
+                              onSuccess={() => {
+                                loadNudgeStatus();
+                                loadInteractions();
+                              }}
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
                   </>
@@ -1074,6 +1164,21 @@ export function ContactDetailsDrawer({
             onSuccess={() => {
               onOwnersChange?.();
               onClose();
+            }}
+          />
+        )}
+
+        {/* Nudge Secondary Modal */}
+        {contact && canNudgeSecondary && (
+          <NudgeSecondaryModal
+            contactId={contact.id}
+            contactName={contact.full_name || 'Unknown'}
+            secondaryOwnerName={secondaryOwnerName}
+            isOpen={isNudgeModalOpen}
+            onClose={() => setIsNudgeModalOpen(false)}
+            onSuccess={() => {
+              loadNudgeStatus();
+              loadInteractions();
             }}
           />
         )}
