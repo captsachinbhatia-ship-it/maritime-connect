@@ -9,6 +9,33 @@ import {
   attachAuthStateListener,
 } from '@/lib/authGuard';
 
+ // Preview mode detection
+ function isPreviewDomain(): boolean {
+   const hostname = window.location.hostname;
+   return hostname.endsWith('lovable.dev') || hostname.endsWith('lovableproject.com');
+ }
+
+ const PREVIEW_ROLE_KEY = 'preview_role';
+
+ type PreviewRole = 'Admin' | 'User';
+
+ const MOCK_USERS: Record<PreviewRole, CrmUser> = {
+   Admin: {
+     id: '00000000-0000-0000-0000-000000000001',
+     full_name: 'Preview Admin',
+     email: 'admin@aqmaritime.com',
+     role: 'ADMIN',
+     active: true,
+   },
+   User: {
+     id: '00000000-0000-0000-0000-000000000002',
+     full_name: 'Preview User',
+     email: 'user@aqmaritime.com',
+     role: 'OPS',
+     active: true,
+   },
+ };
+
 interface AuthContextType {
   user: User | null; // Supabase auth user (for backward compatibility)
   session: Session | null;
@@ -18,20 +45,41 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   clearAuthError: () => void;
+  // Preview mode
+  isPreviewMode: boolean;
+  previewRole: PreviewRole;
+  setPreviewRole: (role: PreviewRole) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const isPreviewMode = isPreviewDomain();
+  
+  const [previewRole, setPreviewRoleState] = useState<PreviewRole>(() => {
+    if (!isPreviewMode) return 'User';
+    const stored = localStorage.getItem(PREVIEW_ROLE_KEY);
+    return (stored === 'Admin' || stored === 'User') ? stored : 'User';
+  });
+
   const [session, setSession] = useState<Session | null>(null);
   const [crmUser, setCrmUser] = useState<CrmUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isPreviewMode);
   const [authError, setAuthError] = useState<{ code: string; message: string } | null>(null);
 
-  // Derive user from session for backward compatibility
-  const user = session?.user ?? null;
+  const setPreviewRole = (role: PreviewRole) => {
+    setPreviewRoleState(role);
+    localStorage.setItem(PREVIEW_ROLE_KEY, role);
+  };
+
+  // In preview mode, use mock user; otherwise derive from session
+  const user = isPreviewMode ? null : (session?.user ?? null);
+  const effectiveCrmUser = isPreviewMode ? MOCK_USERS[previewRole] : crmUser;
 
   const runBootstrap = useCallback(async (currentSession: Session | null) => {
+    // Skip bootstrap in preview mode
+    if (isPreviewMode) return;
+    
     setLoading(true);
     setAuthError(null);
 
@@ -50,9 +98,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(false);
-  }, []);
+  }, [isPreviewMode]);
 
   useEffect(() => {
+    // In preview mode, skip auth bootstrap
+    if (isPreviewMode) {
+      setLoading(false);
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       runBootstrap(initialSession);
@@ -70,14 +124,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return unsubscribe;
-  }, [runBootstrap]);
+  }, [runBootstrap, isPreviewMode]);
 
   const signInWithGoogle = async () => {
+    if (isPreviewMode) {
+      return { error: 'Sign-in disabled in preview mode' };
+    }
     setAuthError(null);
     return signInWithGoogleOnly();
   };
 
   const signOut = async () => {
+    if (isPreviewMode) return;
     await signOutUser();
     setSession(null);
     setCrmUser(null);
@@ -93,12 +151,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
-        crmUser,
+        crmUser: effectiveCrmUser,
         loading,
         authError,
         signInWithGoogle,
         signOut,
         clearAuthError,
+        isPreviewMode,
+        previewRole,
+        setPreviewRole,
       }}
     >
       {children}

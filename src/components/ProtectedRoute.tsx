@@ -13,9 +13,17 @@ interface ProtectedRouteProps {
  * - No guest mode
  * - No partial dashboards
  * - No local user state fallbacks
+ * 
+ * EXCEPTION: Preview mode on lovable.dev/lovableproject.com
+ * - Uses mock CRM user for role simulation
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { crmUser, loading, authError, signOut } = useAuth();
+  const { crmUser, loading, authError, signOut, isPreviewMode } = useAuth();
+
+  // In preview mode, always allow access with mock user
+  if (isPreviewMode) {
+    return <>{children}</>;
+  }
 
   // Loading state - show spinner, never partial content
   if (loading) {
