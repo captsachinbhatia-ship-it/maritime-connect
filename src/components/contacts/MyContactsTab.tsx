@@ -4,7 +4,6 @@ import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { StageRequestModal } from './StageRequestModal';
 import {
   Table,
   TableBody,
@@ -62,15 +61,12 @@ const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
   UPCOMING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
 };
 
-interface ContactWithRole extends ContactWithCompany {
-  userRole: 'PRIMARY' | 'SECONDARY';
-}
-
+// My Contacts tab shows only PRIMARY ownership contacts with stage sub-tabs
 export function MyContactsTab() {
   const { session, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [activeStage, setActiveStage] = useState<StageType>('ASPIRATION');
-  const [contacts, setContacts] = useState<ContactWithRole[]>([]);
+  const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -79,12 +75,8 @@ export function MyContactsTab() {
   const [search, setSearch] = useState('');
 
   // Drawer state
-  const [selectedContact, setSelectedContact] = useState<ContactWithRole | null>(null);
+  const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-
-  // Stage request modal state
-  const [stageRequestContact, setStageRequestContact] = useState<ContactWithRole | null>(null);
-  const [stageRequestModalOpen, setStageRequestModalOpen] = useState(false);
 
   const loadContacts = useCallback(async () => {
     if (!session) {
@@ -107,70 +99,32 @@ export function MyContactsTab() {
         return;
       }
 
-      // Step 1: Get all ACTIVE assignments where the current user is PRIMARY or SECONDARY
-      const { data: userAssignments, error: userAssignmentError } = await supabase
-        .from('contact_assignments')
-        .select('contact_id, assignment_role')
-        .eq('status', 'ACTIVE')
-        .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .in('assignment_role', ['PRIMARY', 'SECONDARY']);
-
-      if (userAssignmentError) {
-        setError(userAssignmentError.message);
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Build map of contact_id -> user's role
-      const userRoleMap: Record<string, 'PRIMARY' | 'SECONDARY'> = {};
-      (userAssignments || []).forEach(a => {
-        // If user is both PRIMARY and SECONDARY (shouldn't happen), prefer PRIMARY
-        if (!userRoleMap[a.contact_id] || a.assignment_role === 'PRIMARY') {
-          userRoleMap[a.contact_id] = a.assignment_role as 'PRIMARY' | 'SECONDARY';
-        }
-      });
-
-      const contactIdsWithUser = Object.keys(userRoleMap);
-
-      if (contactIdsWithUser.length === 0) {
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Step 2: Get the PRIMARY assignments for these contacts to determine stage (source of truth)
-      const { data: primaryAssignments, error: primaryError } = await supabase
+      // Get ACTIVE PRIMARY assignments for the current user in the selected stage
+      const { data: primaryAssignments, error: assignmentError } = await supabase
         .from('contact_assignments')
         .select('contact_id, stage')
-        .in('contact_id', contactIdsWithUser)
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'PRIMARY');
+        .eq('assigned_to_crm_user_id', currentCrmUserId)
+        .eq('assignment_role', 'PRIMARY')
+        .eq('stage', activeStage);
 
-      if (primaryError) {
-        setError(primaryError.message);
+      if (assignmentError) {
+        setError(assignmentError.message);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      // Build map of contact_id -> stage from PRIMARY assignment
-      const stageMap: Record<string, string> = {};
-      (primaryAssignments || []).forEach(a => {
-        stageMap[a.contact_id] = a.stage;
-      });
+      const contactIds = (primaryAssignments || []).map(a => a.contact_id);
 
-      // Filter contacts that are in the active stage
-      const contactIdsInStage = contactIdsWithUser.filter(id => stageMap[id] === activeStage);
-
-      if (contactIdsInStage.length === 0) {
+      if (contactIds.length === 0) {
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      // Step 3: Fetch contacts
-      let contactsQuery = supabase
+      // Fetch contacts
+      const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select(`
           id,
@@ -187,14 +141,9 @@ export function MyContactsTab() {
           is_active,
           updated_at
         `)
-        .in('id', contactIdsInStage)
+        .in('id', contactIds)
+        .eq('is_active', true)
         .order('full_name', { ascending: true });
-
-      if (search.trim()) {
-        // Removed DB-side filter, will do client-side for multi-field search
-      }
-
-      const { data: contactsData, error: contactsError } = await contactsQuery;
 
       if (contactsError) {
         setError(contactsError.message);
@@ -203,11 +152,7 @@ export function MyContactsTab() {
         return;
       }
 
-      // Add user role to each contact
-      let contactsList = (contactsData || []).map(c => ({
-        ...c,
-        userRole: userRoleMap[c.id],
-      })) as ContactWithRole[];
+      let contactsList = (contactsData || []) as ContactWithCompany[];
 
       // Fetch last interaction data
       if (contactsList.length > 0) {
@@ -260,7 +205,7 @@ export function MyContactsTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeStage, search, session]);
+  }, [activeStage, session]);
 
   // Client-side search filter for multi-field search
   const filteredContacts = useMemo(() => {
@@ -407,7 +352,7 @@ export function MyContactsTab() {
     }
   };
 
-  const handleRowClick = (e: React.MouseEvent, contact: ContactWithRole) => {
+  const handleRowClick = (e: React.MouseEvent, contact: ContactWithCompany) => {
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('[role="menu"]')) {
       return;
@@ -416,7 +361,7 @@ export function MyContactsTab() {
     setDrawerOpen(true);
   };
 
-  const formatLastInteraction = (contact: ContactWithRole) => {
+  const formatLastInteraction = (contact: ContactWithCompany) => {
     if (!contact.last_interaction_at) return null;
     const type = contact.last_interaction_type || '';
     const timeAgo = formatDistanceToNow(new Date(contact.last_interaction_at), { addSuffix: true });
@@ -436,7 +381,6 @@ export function MyContactsTab() {
             <TableHeader>
               <TableRow>
                 <TableHead>Full Name</TableHead>
-                <TableHead>Role</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Next Follow-up</TableHead>
                 <TableHead>Last Activity</TableHead>
@@ -447,7 +391,6 @@ export function MyContactsTab() {
               {Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
@@ -474,7 +417,6 @@ export function MyContactsTab() {
           <TableHeader>
             <TableRow>
               <TableHead>Full Name</TableHead>
-              <TableHead>Role</TableHead>
               <TableHead>Company</TableHead>
               <TableHead>Next Follow-up</TableHead>
               <TableHead>Last Activity</TableHead>
@@ -496,14 +438,6 @@ export function MyContactsTab() {
                 >
                   <TableCell className="font-medium">
                     {contact.full_name || '-'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={contact.userRole === 'PRIMARY' ? 'default' : 'secondary'}
-                      className="text-xs"
-                    >
-                      {contact.userRole === 'PRIMARY' ? 'Primary' : 'Secondary'}
-                    </Badge>
                   </TableCell>
                   <TableCell>
                     {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
@@ -540,54 +474,38 @@ export function MyContactsTab() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {contact.userRole === 'PRIMARY' ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={isUpdatingStage === contact.id}
-                            className="h-7"
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isUpdatingStage === contact.id}
+                          className="h-7"
+                        >
+                          {isUpdatingStage === contact.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              Move to
+                              <ArrowRight className="ml-1 h-3 w-3" />
+                            </>
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {availableStages.map((stage) => (
+                          <DropdownMenuItem
+                            key={stage.value}
+                            onClick={() => handleStageUpdate(contact.id, stage.value)}
                           >
-                            {isUpdatingStage === contact.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <>
-                                Move to
-                                <ArrowRight className="ml-1 h-3 w-3" />
-                              </>
-                            )}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {availableStages.map((stage) => (
-                            <DropdownMenuItem
-                              key={stage.value}
-                              onClick={() => handleStageUpdate(contact.id, stage.value)}
-                            >
-                              <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
-                                {stage.label}
-                              </Badge>
-                              Move to {stage.label}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setStageRequestContact(contact);
-                          setStageRequestModalOpen(true);
-                        }}
-                      >
-                        Request Move
-                        <ArrowRight className="ml-1 h-3 w-3" />
-                      </Button>
-                    )}
+                            <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
+                              {stage.label}
+                            </Badge>
+                            Move to {stage.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               );
@@ -640,22 +558,9 @@ export function MyContactsTab() {
         }}
         onOwnersChange={loadContacts}
         onCompanyChange={(newCompanyId, newCompanyName) => {
-          // Update local company names map and refetch contacts
           setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
           loadContacts();
         }}
-      />
-
-      <StageRequestModal
-        contactId={stageRequestContact?.id || ''}
-        contactName={stageRequestContact?.full_name || 'Unknown'}
-        currentStage={activeStage}
-        isOpen={stageRequestModalOpen}
-        onClose={() => {
-          setStageRequestModalOpen(false);
-          setStageRequestContact(null);
-        }}
-        onSuccess={loadContacts}
       />
     </div>
   );
