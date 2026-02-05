@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, UserPlus } from 'lucide-react';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
-type TabType = 'unassigned' | 'assigned' | 'my-contacts' | 'my-added';
+type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added';
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -111,8 +111,8 @@ export default function Contacts() {
         // Admin view: Three tabs
         <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabType)}>
           <TabsList>
+            <TabsTrigger value="all-contacts">All Contacts</TabsTrigger>
             <TabsTrigger value="unassigned">Unassigned</TabsTrigger>
-            <TabsTrigger value="assigned">Assigned</TabsTrigger>
             <TabsTrigger value="my-contacts">My Contacts</TabsTrigger>
             <TabsTrigger value="my-added" className="flex items-center gap-1.5">
               <UserPlus className="h-3.5 w-3.5" />
@@ -129,7 +129,7 @@ export default function Contacts() {
             <UnassignedContactsTab key={`unassigned-${refreshKey}`} />
           </TabsContent>
 
-          <TabsContent value="assigned" className="mt-4">
+          <TabsContent value="all-contacts" className="mt-4">
             <AssignedContactsTab key={`assigned-${refreshKey}`} />
           </TabsContent>
 

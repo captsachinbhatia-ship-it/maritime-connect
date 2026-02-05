@@ -38,7 +38,10 @@ const companySchema = z.object({
   country: z.string().max(100).optional(),
   city: z.string().max(100).optional(),
   region: z.string().max(100).optional(),
-});
+}).refine(
+  (data) => data.company_type !== 'Other' || (data.company_type_other_text && data.company_type_other_text.trim().length > 0),
+  { message: 'Please describe the company type', path: ['company_type_other_text'] }
+);
 
 type CompanyFormData = z.infer<typeof companySchema>;
 
@@ -78,6 +81,10 @@ export function AddCompanyMiniModal({
   });
 
   const watchedCompanyType = watch('company_type');
+  const watchedCompanyTypeOther = watch('company_type_other_text');
+  
+  // Disable button if Other is selected but describe type is empty
+  const isOtherInvalid = watchedCompanyType === 'Other' && (!watchedCompanyTypeOther || !watchedCompanyTypeOther.trim());
 
   // Update form when initialName changes
   useState(() => {
@@ -117,6 +124,12 @@ export function AddCompanyMiniModal({
       });
 
       if (result.error) {
+        // Handle DB constraint error with friendly message
+        if (result.error.includes('companies_company_type_other_text_check')) {
+          setSubmitError("Please describe the company type when 'Other' is selected.");
+          setIsSubmitting(false);
+          return;
+        }
         setSubmitError(result.error);
         setIsSubmitting(false);
         return;
@@ -200,6 +213,9 @@ export function AddCompanyMiniModal({
                 {...register('company_type_other_text')}
                 placeholder="Describe company type"
               />
+              {errors.company_type_other_text && (
+                <p className="text-sm text-destructive">{errors.company_type_other_text.message}</p>
+              )}
             </div>
           )}
 
@@ -239,7 +255,7 @@ export function AddCompanyMiniModal({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || isOtherInvalid}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add Company
             </Button>

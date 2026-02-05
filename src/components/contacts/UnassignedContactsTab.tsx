@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { Loader2, UserPlus, RefreshCw, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
 import { upsertOwners } from '@/services/assignments';
+import { ContactsSearch } from './ContactsSearch';
 
 interface UnassignedContact {
   id: string;
@@ -30,6 +32,7 @@ interface UnassignedContact {
   designation: string | null;
   email: string | null;
   phone: string | null;
+  created_at: string | null;
 }
 
 const NONE_VALUE = '__none__';
@@ -42,6 +45,7 @@ export function UnassignedContactsTab() {
   const [primarySelections, setPrimarySelections] = useState<Record<string, string>>({});
   const [secondarySelections, setSecondarySelections] = useState<Record<string, string>>({});
   const { toast } = useToast();
+  const [search, setSearch] = useState('');
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -76,7 +80,8 @@ export function UnassignedContactsTab() {
           email,
           phone,
           company_id,
-          companies ( company_name )
+          companies ( company_name ),
+          created_at
         `)
         .eq('is_active', true)
         .order('full_name')
@@ -98,6 +103,7 @@ export function UnassignedContactsTab() {
           designation: c.designation,
           email: c.email,
           phone: c.phone,
+          created_at: c.created_at,
         }));
 
         setContacts(mappedContacts);
@@ -118,6 +124,31 @@ export function UnassignedContactsTab() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Filter contacts based on search
+  const filteredContacts = useMemo(() => {
+    if (!search.trim()) return contacts;
+    const searchLower = search.toLowerCase().trim();
+    return contacts.filter(contact => {
+      const fullName = (contact.full_name || '').toLowerCase();
+      const companyName = (contact.company_name || '').toLowerCase();
+      const email = (contact.email || '').toLowerCase();
+      const phone = (contact.phone || '').toLowerCase();
+      return fullName.includes(searchLower) || 
+             companyName.includes(searchLower) || 
+             email.includes(searchLower) || 
+             phone.includes(searchLower);
+    });
+  }, [contacts, search]);
+
+  const formatCreatedDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    try {
+      return format(new Date(dateStr), 'dd MMM yyyy, HH:mm');
+    } catch {
+      return '-';
+    }
+  };
 
   const handleSave = async (contactId: string) => {
     const primaryId = primarySelections[contactId];
@@ -199,7 +230,7 @@ export function UnassignedContactsTab() {
             <div>
               <CardTitle className="text-lg">Unassigned Contacts</CardTitle>
               <CardDescription>
-                {isLoading ? 'Loading...' : `${contacts.length} contacts need assignment`}
+                {isLoading ? 'Loading...' : `${filteredContacts.length} contacts need assignment`}
               </CardDescription>
             </div>
           </div>
@@ -210,6 +241,10 @@ export function UnassignedContactsTab() {
         </div>
       </CardHeader>
       <CardContent>
+        <div className="mb-4">
+          <ContactsSearch value={search} onChange={setSearch} />
+        </div>
+        
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -226,13 +261,14 @@ export function UnassignedContactsTab() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Company</TableHead>
+                  <TableHead>Created</TableHead>
                   <TableHead className="w-[200px]">Primary Owner *</TableHead>
                   <TableHead className="w-[200px]">Secondary Owner</TableHead>
                   <TableHead className="w-[100px] text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {contacts.map((contact) => {
+                {filteredContacts.map((contact) => {
                   const primaryId = primarySelections[contact.id] || '';
                   const secondaryId = secondarySelections[contact.id] || NONE_VALUE;
 
@@ -247,6 +283,9 @@ export function UnassignedContactsTab() {
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatCreatedDate(contact.created_at)}
                       </TableCell>
                       <TableCell>
                         <Select

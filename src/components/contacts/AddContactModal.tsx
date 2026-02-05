@@ -41,6 +41,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { createContact, checkDuplicateContact, getAllCompaniesForDropdown } from '@/services/contacts';
 import { saveContactPhones, ContactPhoneInput } from '@/services/contactPhones';
 import { AddCompanyMiniModal } from './AddCompanyMiniModal';
+import { PhoneInput } from '@/components/ui/phone-input';
 
 const contactSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
@@ -441,9 +442,9 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
                             ))}
                           </SelectContent>
                         </Select>
-                        <Input
+                        <PhoneInput
                           value={phone.phone_number}
-                          onChange={(e) => updatePhoneRow(phone.id, 'phone_number', e.target.value)}
+                          onChange={(value) => updatePhoneRow(phone.id, 'phone_number', value)}
                           placeholder="Phone number"
                         />
                       </div>

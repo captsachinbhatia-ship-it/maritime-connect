@@ -63,6 +63,7 @@ export interface Contact {
   notes: string | null;
   is_active: boolean | null;
   updated_at: string | null;
+  created_at?: string | null;
 }
 
 export interface ContactWithCompany extends Contact {
