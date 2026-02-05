@@ -1,12 +1,68 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Anchor, Loader2, AlertCircle } from 'lucide-react';
+import { Anchor, Loader2, AlertCircle, Eye } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 
 export default function Login() {
-  const { crmUser, loading, authError, signInWithGoogle, clearAuthError } = useAuth();
+  const { crmUser, loading, authError, signInWithGoogle, clearAuthError, isPreviewMode, previewRole, setPreviewRole } = useAuth();
+
+  // Preview mode - show role selector and enter button
+  if (isPreviewMode) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+        <Card className="w-full max-w-md border-amber-300 shadow-xl">
+          <CardHeader className="space-y-4 text-center">
+            <div className="mx-auto">
+              <img 
+                src={aqMaritimeLogo} 
+                alt="AQ Maritime" 
+                className="h-16 w-auto object-contain mx-auto"
+              />
+            </div>
+            <div className="flex items-center justify-center gap-2 text-amber-600">
+              <Eye className="h-5 w-5" />
+              <span className="font-semibold">Preview Mode</span>
+            </div>
+            <CardTitle className="text-2xl">AQ Maritime CRM</CardTitle>
+            <CardDescription>
+              Explore the CRM with simulated roles. Database writes are disabled.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+              <p className="font-medium mb-2">Preview Role Simulation</p>
+              <p className="text-xs text-amber-600">Select a role to see different UI features and permissions.</p>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Select Role</label>
+              <Select value={previewRole} onValueChange={(value) => setPreviewRole(value as 'Admin' | 'User')}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Admin">Admin (Full access)</SelectItem>
+                  <SelectItem value="User">User (Standard access)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button asChild className="w-full" size="lg">
+              <a href="/">
+                <Eye className="mr-2 h-4 w-4" />
+                Enter Preview
+              </a>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -51,8 +107,12 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
       <Card className="w-full max-w-md border-border/50 shadow-xl">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-            <Anchor className="h-8 w-8 text-primary" />
+          <div className="mx-auto">
+            <img 
+              src={aqMaritimeLogo} 
+              alt="AQ Maritime" 
+              className="h-16 w-auto object-contain mx-auto"
+            />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold">AQ Maritime CRM</CardTitle>
