@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, CalendarClock, Bell, Send } from 'lucide-react';
+import { Target, CalendarClock, Bell, Send, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
 import { formatDistanceToNow } from 'date-fns';
@@ -45,14 +45,17 @@ interface TouchTargetsProps {
   onContactClick?: (contact: ContactWithCompany) => void;
   /** undefined = logged-in user, null = all users, string = specific user */
   crmUserId?: string | null;
+  /** Whether the current user is an admin (shows unassigned count) */
+  isAdmin?: boolean;
 }
 
-export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: TouchTargetsProps) {
+export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp, isAdmin }: TouchTargetsProps) {
   const navigate = useNavigate();
   const [stageTargets, setStageTargets] = useState<StageTarget[]>([]);
   const [followupsPending, setFollowupsPending] = useState(0);
   const [nudgesReceived, setNudgesReceived] = useState(0);
   const [nudgesSent, setNudgesSent] = useState(0);
+  const [unassignedCount, setUnassignedCount] = useState(0);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -145,7 +148,6 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
           .lte('due_at', endOfToday.toISOString());
         setFollowupsPending(fCount ?? 0);
       } else if (!userId) {
-        // Cumulative mode
         const { count: fCount } = await supabase
           .from('contact_followups')
           .select('*', { count: 'exact', head: true })
@@ -154,7 +156,7 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
         setFollowupsPending(fCount ?? 0);
       }
 
-      // Nudges — these views are user-specific (auth.uid() based), so they always show logged-in user's nudges
+      // Nudges
       const { data: nudgesData } = await supabase
         .from('v_my_pending_nudges')
         .select('followup_id')
@@ -166,6 +168,30 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
         .select('followup_id, display_status')
         .in('display_status', ['PENDING', 'OVERDUE']);
       setNudgesSent(sentData?.length ?? 0);
+
+      // Unassigned contacts count (admin only)
+      if (isAdmin) {
+        const { data: activePrimaryAssignments } = await supabase
+          .from('contact_assignments')
+          .select('contact_id')
+          .eq('status', 'ACTIVE')
+          .eq('assignment_role', 'PRIMARY')
+          .not('assigned_to_crm_user_id', 'is', null);
+
+        const assignedContactIds = new Set(
+          (activePrimaryAssignments || []).map(a => a.contact_id)
+        );
+
+        const { data: allContacts } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('is_active', true);
+
+        const unassigned = (allContacts || []).filter(
+          c => !assignedContactIds.has(c.id)
+        ).length;
+        setUnassignedCount(unassigned);
+      }
 
       // Build action queue
       const actions: ActionItem[] = [];
@@ -229,7 +255,7 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
     } finally {
       setIsLoading(false);
     }
-  }, [crmUserIdProp]);
+  }, [crmUserIdProp, isAdmin]);
 
   useEffect(() => {
     fetchData();
@@ -238,6 +264,7 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
   const handlePendingClick = () => navigate('/contacts?tab=my-contacts');
   const handleFollowupsClick = () => navigate('/followups');
   const handleNudgesClick = () => navigate('/');
+  const handleUnassignedClick = () => navigate('/unassigned-contacts');
 
   const handleActionClick = (item: ActionItem) => {
     if (onContactClick) {
@@ -261,6 +288,8 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
       } as ContactWithCompany);
     }
   };
+
+  const showUnassigned = isAdmin && unassignedCount >= 0;
 
   return (
     <Card className="flex flex-col">
@@ -318,7 +347,7 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
             </div>
 
             {/* Priority Buckets */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid gap-2 ${showUnassigned ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <button
                 className="flex items-center gap-2 rounded-lg border p-2.5 text-left transition-colors hover:bg-accent/50"
                 onClick={handleFollowupsClick}
@@ -349,6 +378,18 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: Touch
                   <p className="text-lg font-bold tabular-nums leading-tight">{nudgesSent}</p>
                 </div>
               </button>
+              {showUnassigned && (
+                <button
+                  className="flex items-center gap-2 rounded-lg border p-2.5 text-left transition-colors hover:bg-accent/50 border-orange-300/50"
+                  onClick={handleUnassignedClick}
+                >
+                  <Users className="h-4 w-4 text-orange-600 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] text-muted-foreground leading-tight">Unassigned</p>
+                    <p className="text-lg font-bold tabular-nums leading-tight text-orange-600">{unassignedCount}</p>
+                  </div>
+                </button>
+              )}
             </div>
 
             {/* Action Queue */}
