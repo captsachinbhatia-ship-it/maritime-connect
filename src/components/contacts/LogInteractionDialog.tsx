@@ -1,0 +1,397 @@
+import { useState } from 'react';
+import { Loader2, CalendarIcon } from 'lucide-react';
+import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
+import { createInteraction, InteractionType } from '@/services/interactions';
+import { createFollowup, getActiveAssignmentForContact, FollowupType } from '@/services/followups';
+
+const INTERACTION_TYPES: { value: InteractionType; label: string; icon: string }[] = [
+  { value: 'CALL', label: 'Call', icon: '📞' },
+  { value: 'EMAIL', label: 'Email', icon: '✉️' },
+  { value: 'WHATSAPP', label: 'WhatsApp', icon: '💬' },
+  { value: 'MEETING', label: 'Meeting', icon: '🤝' },
+  { value: 'NOTE', label: 'Note', icon: '📝' },
+];
+
+const OUTCOME_OPTIONS = [
+  { value: 'INTERESTED', label: 'Positive', icon: '✅' },
+  { value: 'NO_RESPONSE', label: 'No Response', icon: '🔇' },
+  { value: 'NOT_INTERESTED', label: 'Not Interested', icon: '❌' },
+  { value: 'FOLLOW_UP', label: 'Follow-up Needed', icon: '🔔' },
+  { value: 'MEETING_SCHEDULED', label: 'Meeting Scheduled', icon: '📅' },
+  { value: 'DEAL_PROGRESS', label: 'Deal Progress', icon: '📈' },
+  { value: 'CLOSED_WON', label: 'Closed Won', icon: '🎉' },
+  { value: 'CLOSED_LOST', label: 'Closed Lost', icon: '📉' },
+];
+
+// Map interaction types to followup types
+const INTERACTION_TO_FOLLOWUP: Record<string, FollowupType> = {
+  CALL: 'CALL',
+  EMAIL: 'EMAIL',
+  WHATSAPP: 'WHATSAPP',
+  MEETING: 'MEETING',
+  NOTE: 'OTHER',
+};
+
+interface LogInteractionDialogProps {
+  contactId: string;
+  contactName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+}
+
+export function LogInteractionDialog({
+  contactId,
+  contactName,
+  open,
+  onOpenChange,
+  onSuccess,
+}: LogInteractionDialogProps) {
+  const [interactionType, setInteractionType] = useState<InteractionType | ''>('');
+  const [subject, setSubject] = useState('');
+  const [notes, setNotes] = useState('');
+  const [outcome, setOutcome] = useState('');
+  const [duration, setDuration] = useState('');
+  const [needsFollowup, setNeedsFollowup] = useState(false);
+  const [nextAction, setNextAction] = useState('');
+  const [dueDate, setDueDate] = useState<Date | undefined>();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationMessage, setValidationMessage] = useState('');
+
+  const resetForm = () => {
+    setInteractionType('');
+    setSubject('');
+    setNotes('');
+    setOutcome('');
+    setDuration('');
+    setNeedsFollowup(false);
+    setNextAction('');
+    setDueDate(undefined);
+    setValidationMessage('');
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onOpenChange(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setValidationMessage('');
+
+    if (!interactionType) {
+      toast({
+        title: 'Missing Required Fields',
+        description: 'Please select an interaction type.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validation: require at least one of subject or notes (unless NOT_INTERESTED)
+    const isNotInterested = outcome === 'NOT_INTERESTED';
+    const hasSubject = subject.trim().length > 0;
+    const hasNotes = notes.trim().length > 0;
+
+    if (!isNotInterested && !hasSubject && !hasNotes) {
+      setValidationMessage('Please enter a Subject or Notes.');
+      return;
+    }
+
+    if (needsFollowup && !nextAction.trim()) {
+      setValidationMessage('Please enter a next action for the follow-up.');
+      return;
+    }
+
+    if (needsFollowup && !dueDate) {
+      setValidationMessage('Please select a due date for the follow-up.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // 1. Log the interaction
+      const result = await createInteraction({
+        contact_id: contactId,
+        interaction_type: interactionType,
+        outcome: outcome || null,
+        subject: subject.trim() || null,
+        notes: notes.trim(),
+        interaction_at: new Date().toISOString(),
+      });
+
+      if (result.error) {
+        toast({
+          title: 'Error Logging Interaction',
+          description: result.error,
+          variant: 'destructive',
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. If follow-up is needed, create it
+      if (needsFollowup && nextAction.trim() && dueDate) {
+        const assignmentResult = await getActiveAssignmentForContact(contactId);
+        const assignmentId = assignmentResult.data?.id;
+
+        if (assignmentId) {
+          const followupResult = await createFollowup({
+            contact_id: contactId,
+            assignment_id: assignmentId,
+            followup_type: INTERACTION_TO_FOLLOWUP[interactionType] || 'OTHER',
+            followup_reason: nextAction.trim(),
+            notes: `Follow-up from ${interactionType.toLowerCase()}: ${subject || notes.substring(0, 100)}`,
+            due_at: dueDate.toISOString(),
+          });
+
+          if (followupResult.error) {
+            // Interaction logged but follow-up failed
+            toast({
+              title: 'Interaction Logged',
+              description: `Interaction saved but follow-up creation failed: ${followupResult.error}`,
+            });
+            resetForm();
+            onOpenChange(false);
+            onSuccess?.();
+            return;
+          }
+        } else {
+          toast({
+            title: 'Interaction Logged',
+            description: 'Interaction saved but no active assignment found for follow-up creation.',
+          });
+          resetForm();
+          onOpenChange(false);
+          onSuccess?.();
+          return;
+        }
+      }
+
+      toast({
+        title: 'Interaction Logged',
+        description: needsFollowup
+          ? 'Interaction logged and follow-up reminder created.'
+          : 'Interaction logged successfully.',
+      });
+
+      resetForm();
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to log interaction',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const showDuration = interactionType === 'CALL' || interactionType === 'MEETING';
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Log Interaction — {contactName}</DialogTitle>
+          <DialogDescription>Record a contact interaction with optional follow-up.</DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Interaction Type */}
+          <div className="space-y-2">
+            <Label>
+              Interaction Type <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={interactionType}
+              onValueChange={(val) => setInteractionType(val as InteractionType)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select type..." />
+              </SelectTrigger>
+              <SelectContent>
+                {INTERACTION_TYPES.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.icon} {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Subject */}
+          <div className="space-y-2">
+            <Label>Subject (optional)</Label>
+            <Input
+              value={subject}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                if (validationMessage) setValidationMessage('');
+              }}
+              placeholder="e.g., Discussed Q1 rates"
+              maxLength={200}
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-2">
+            <Label>
+              Notes <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              value={notes}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                if (validationMessage) setValidationMessage('');
+              }}
+              placeholder="Describe the interaction..."
+              rows={4}
+              maxLength={2000}
+            />
+          </div>
+
+          {/* Outcome */}
+          <div className="space-y-2">
+            <Label>Outcome</Label>
+            <Select value={outcome} onValueChange={setOutcome}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select outcome..." />
+              </SelectTrigger>
+              <SelectContent>
+                {OUTCOME_OPTIONS.map((out) => (
+                  <SelectItem key={out.value} value={out.value}>
+                    {out.icon} {out.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Duration (only for calls/meetings) */}
+          {showDuration && (
+            <div className="space-y-2">
+              <Label>Duration (minutes)</Label>
+              <Input
+                type="number"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="e.g., 15"
+                min="0"
+                max="480"
+              />
+            </div>
+          )}
+
+          {/* Follow-up Section */}
+          <div className="rounded-lg border p-4 space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="followup-check"
+                checked={needsFollowup}
+                onCheckedChange={(checked) => setNeedsFollowup(checked as boolean)}
+              />
+              <label
+                htmlFor="followup-check"
+                className="text-sm font-medium leading-none cursor-pointer"
+              >
+                Set Follow-up Reminder
+              </label>
+            </div>
+
+            {needsFollowup && (
+              <>
+                <div className="space-y-2">
+                  <Label>Next Action</Label>
+                  <Input
+                    value={nextAction}
+                    onChange={(e) => {
+                      setNextAction(e.target.value);
+                      if (validationMessage) setValidationMessage('');
+                    }}
+                    placeholder="e.g., Send rate sheet"
+                    maxLength={200}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Due Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          'w-full justify-start text-left font-normal',
+                          !dueDate && 'text-muted-foreground'
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dueDate ? format(dueDate, 'PPP') : 'Pick a date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dueDate}
+                        onSelect={setDueDate}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        initialFocus
+                        className={cn('p-3 pointer-events-auto')}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Validation message */}
+          {validationMessage && (
+            <p className="text-sm text-destructive">{validationMessage}</p>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Log It →
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
