@@ -1,20 +1,18 @@
 import { useState } from 'react';
-import { KPIRow } from './KPIRow';
-import { StageSnapshot } from './StageSnapshot';
-import { RecentCompanies } from './RecentCompanies';
-import { RecentInteractions } from './RecentInteractions';
-import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
-import { ContactWithCompany } from '@/types';
-import { ModeIndicator } from './ModeIndicator';
+import { ContactHealthSnapshot } from './ContactHealthSnapshot';
+import { DashboardLineChart } from './DashboardLineChart';
+import { ActivityMatrix } from './ActivityMatrix';
 import { TouchTargets } from './TouchTargets';
 import { GrowthTargets } from './GrowthTargets';
-import { DailyReport } from './DailyReport';
+import { RecentCompanies } from './RecentCompanies';
+import { RecentInteractions } from './RecentInteractions';
 import { EnquiriesSummary } from './EnquiriesSummary';
-import { ActivityMatrix } from './ActivityMatrix';
-import { UserVsTeamComparison } from './UserVsTeamComparison';
-import { DashboardLineChart } from './DashboardLineChart';
-import { ContactHealthSnapshot } from './ContactHealthSnapshot';
+import { DailyReport } from './DailyReport';
 import { MyWorkToday } from './MyWorkToday';
+import { UserVsTeamComparison } from './UserVsTeamComparison';
+import { ModeIndicator } from './ModeIndicator';
+import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
+import { ContactWithCompany } from '@/types';
 
 interface CallerDashboardProps {
   isAdmin: boolean;
@@ -48,29 +46,23 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         {isAdmin && <ModeIndicator isCEO={isCEO} />}
       </div>
 
-      {/* KPI Row */}
-      <KPIRow />
+      {/* Contact Health — full width */}
+      <ContactHealthSnapshot />
 
-      {/* Contact Health + Line Chart */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ContactHealthSnapshot />
-        <DashboardLineChart isPersonal />
-      </div>
+      {/* Performance Trend — full width */}
+      <DashboardLineChart isPersonal />
 
-      {/* Activity Matrix */}
+      {/* Activity Matrix — full width */}
       <ActivityMatrix />
 
       {/* CEO: User vs Team Comparison */}
       <UserVsTeamComparison isCEO={isCEO} isAdmin={isAdmin} />
 
-      {/* Touch Targets + Growth Targets */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <TouchTargets onContactClick={handleContactClick} />
-        <GrowthTargets />
-      </div>
+      {/* Touch Targets — full width (includes Follow-ups / Nudges KPI cards) */}
+      <TouchTargets onContactClick={handleContactClick} isAdmin={isAdmin} />
 
-      {/* Stage Snapshot */}
-      <StageSnapshot />
+      {/* Growth Targets — full width */}
+      <GrowthTargets />
 
       {/* Stale Contacts */}
       <MyWorkToday onContactClick={handleContactClick} />

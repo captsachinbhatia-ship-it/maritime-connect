@@ -1,23 +1,21 @@
 import { useState, useEffect } from 'react';
-import { KPIRow } from './KPIRow';
 import { ContactHealthSnapshot } from './ContactHealthSnapshot';
 import { DashboardLineChart } from './DashboardLineChart';
 import { ActivityMatrix } from './ActivityMatrix';
 import { TouchTargets } from './TouchTargets';
 import { GrowthTargets } from './GrowthTargets';
-import { StageSnapshot } from './StageSnapshot';
-import { RecentInteractions } from './RecentInteractions';
 import { RecentCompanies } from './RecentCompanies';
-import { MyWorkToday } from './MyWorkToday';
-import { ModeIndicator } from './ModeIndicator';
+import { RecentInteractions } from './RecentInteractions';
 import { EnquiriesSummary } from './EnquiriesSummary';
 import { DailyReport } from './DailyReport';
-import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
+import { MyWorkToday } from './MyWorkToday';
+import { ModeIndicator } from './ModeIndicator';
 import { RunningNegotiationsTab } from './management/RunningNegotiationsTab';
 import { OperationalIssuesTab } from './management/OperationalIssuesTab';
 import { CommercialOutstandingTab } from './management/CommercialOutstandingTab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactWithCompany } from '@/types';
 
@@ -101,14 +99,11 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
 
         {/* Dashboard Tab — mirrors CallerDashboard layout */}
         <TabsContent value="dashboard" className="space-y-6 mt-4">
-          {/* KPI Row */}
-          <KPIRow crmUserId={selectedUserId} />
+          {/* Contact Health — full width */}
+          <ContactHealthSnapshot crmUserId={selectedUserId} />
 
-          {/* Contact Health + Line Chart */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ContactHealthSnapshot crmUserId={selectedUserId} />
-            <DashboardLineChart crmUserId={selectedUserId} isPersonal={false} />
-          </div>
+          {/* Performance Trend — full width */}
+          <DashboardLineChart crmUserId={selectedUserId} isPersonal={false} />
 
           {/* Activity Matrix — full width */}
           <ActivityMatrix crmUserId={selectedUserId} />
@@ -116,11 +111,8 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
           {/* Touch Targets — full width */}
           <TouchTargets crmUserId={selectedUserId} onContactClick={handleContactClick} />
 
-          {/* Growth Targets + Stage Snapshot */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <GrowthTargets crmUserId={selectedUserId} />
-            <StageSnapshot crmUserId={selectedUserId} />
-          </div>
+          {/* Growth Targets — full width */}
+          <GrowthTargets crmUserId={selectedUserId} />
 
           {/* Stale Contacts */}
           <MyWorkToday crmUserId={selectedUserId} onContactClick={handleContactClick} />
