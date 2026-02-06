@@ -5,65 +5,44 @@ import { FileText } from 'lucide-react';
 
 export function EnquiriesSummary() {
   const navigate = useNavigate();
-
   const handleClick = () => navigate('/enquiries');
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <FileText className="h-5 w-5 text-primary" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+            <FileText className="h-4.5 w-4.5 text-primary" />
           </div>
-          <CardTitle className="text-lg">Enquiries Overview</CardTitle>
+          <CardTitle className="text-base">Enquiries Overview</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex-1 space-y-4">
         {/* Counts */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border p-3 space-y-1">
-            <p className="text-xs text-muted-foreground">Generated Today</p>
-            <p
-              className="text-xl font-bold cursor-pointer text-primary hover:underline"
-              onClick={handleClick}
-            >
-              0
-            </p>
-          </div>
-          <div className="rounded-lg border p-3 space-y-1">
-            <p className="text-xs text-muted-foreground">Generated (7 Days)</p>
-            <p
-              className="text-xl font-bold cursor-pointer text-primary hover:underline"
-              onClick={handleClick}
-            >
-              0
-            </p>
-          </div>
-          <div className="rounded-lg border p-3 space-y-1">
-            <p className="text-xs text-muted-foreground">Closed Today</p>
-            <p
-              className="text-xl font-bold cursor-pointer text-primary hover:underline"
-              onClick={handleClick}
-            >
-              0
-            </p>
-          </div>
-          <div className="rounded-lg border p-3 space-y-1">
-            <p className="text-xs text-muted-foreground">Closed (7 Days)</p>
-            <p
-              className="text-xl font-bold cursor-pointer text-primary hover:underline"
-              onClick={handleClick}
-            >
-              0
-            </p>
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: 'Generated Today', value: 0 },
+            { label: 'Generated (7 Days)', value: 0 },
+            { label: 'Closed Today', value: 0 },
+            { label: 'Closed (7 Days)', value: 0 },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border p-2.5">
+              <p className="text-[11px] text-muted-foreground leading-tight">{item.label}</p>
+              <p
+                className="text-lg font-bold tabular-nums cursor-pointer text-primary hover:underline leading-tight mt-0.5"
+                onClick={handleClick}
+              >
+                {item.value}
+              </p>
+            </div>
+          ))}
         </div>
 
         {/* Empty State */}
         <div className="rounded-lg border p-4 text-center">
-          <FileText className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+          <FileText className="mx-auto h-7 w-7 text-muted-foreground/40 mb-1.5" />
           <p className="text-sm text-muted-foreground">Enquiry module pending rollout</p>
-          <Badge variant="outline" className="mt-2 text-xs">Phase 2</Badge>
+          <Badge variant="outline" className="mt-1.5 text-[11px]">Phase 2</Badge>
         </div>
       </CardContent>
     </Card>

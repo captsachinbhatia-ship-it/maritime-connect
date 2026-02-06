@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Building2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { Loader2, Building2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface RecentCompany {
@@ -21,14 +22,12 @@ export function RecentCompanies() {
   useEffect(() => {
     const fetchRecentCompanies = async () => {
       setIsLoading(true);
-
       try {
         const { data } = await supabase
           .from('companies')
           .select('id, company_name, company_type, country, updated_at')
           .order('updated_at', { ascending: false })
           .limit(5);
-
         setCompanies(data || []);
       } catch (error) {
         console.error('Failed to fetch recent companies:', error);
@@ -36,67 +35,64 @@ export function RecentCompanies() {
         setIsLoading(false);
       }
     };
-
     fetchRecentCompanies();
   }, []);
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-            <Building2 className="h-5 w-5 text-accent-foreground" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent">
+            <Building2 className="h-4.5 w-4.5 text-accent-foreground" />
           </div>
-          <div>
-            <CardTitle className="text-lg">Recently Added Companies</CardTitle>
-            <CardDescription>Latest companies in the database</CardDescription>
-          </div>
+          <CardTitle className="text-base">Recent Companies</CardTitle>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
           </div>
         ) : companies.length === 0 ? (
-          <div className="py-8 text-center text-muted-foreground">
-            No companies found
-          </div>
+          <p className="py-6 text-center text-sm text-muted-foreground">No companies found</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Company</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Country</TableHead>
-                <TableHead className="text-right">Added</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {companies.map((company) => (
-                <TableRow key={company.id}>
-                  <TableCell className="font-medium">
-                    {company.company_name || '—'}
-                  </TableCell>
-                  <TableCell>
-                    {company.company_type ? (
-                      <Badge variant="secondary">{company.company_type}</Badge>
-                    ) : (
-                      '—'
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {company.country || '—'}
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground text-sm">
-                    {company.updated_at
-                      ? formatDistanceToNow(new Date(company.updated_at), { addSuffix: true })
-                      : '—'}
-                  </TableCell>
+          <div className="rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Company</TableHead>
+                  <TableHead className="text-xs">Type</TableHead>
+                  <TableHead className="text-xs text-right">Added</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {companies.map((company) => (
+                  <TableRow key={company.id}>
+                    <TableCell className="py-2">
+                      <div>
+                        <p className="text-sm font-medium leading-tight">{company.company_name || '—'}</p>
+                        {company.country && (
+                          <p className="text-[11px] text-muted-foreground leading-tight">{company.country}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      {company.company_type ? (
+                        <Badge variant="secondary" className="text-[11px]">{company.company_type}</Badge>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground py-2">
+                      {company.updated_at
+                        ? formatDistanceToNow(new Date(company.updated_at), { addSuffix: true })
+                        : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>

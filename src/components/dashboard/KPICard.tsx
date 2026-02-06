@@ -21,19 +21,22 @@ export function KPICard({ title, value, icon: Icon, variant = 'default', isLoadi
 
   return (
     <Card
-      className={cn('flex-1', onClick && 'cursor-pointer transition-shadow hover:shadow-md')}
+      className={cn(
+        'flex-1 transition-all',
+        onClick && 'cursor-pointer hover:shadow-md hover:border-primary/30 active:scale-[0.99]'
+      )}
       onClick={onClick}
     >
-      <CardContent className="flex items-center gap-4 p-4">
-        <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-lg', variantStyles[variant])}>
-          <Icon className="h-6 w-6" />
+      <CardContent className="flex items-center gap-3 p-4">
+        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', variantStyles[variant])}>
+          <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="truncate text-xs font-medium text-muted-foreground">{title}</p>
           {isLoading ? (
-            <div className="mt-1 h-7 w-12 animate-pulse rounded bg-muted" />
+            <div className="mt-1 h-6 w-10 animate-pulse rounded bg-muted" />
           ) : (
-            <p className="text-2xl font-bold text-foreground">{value}</p>
+            <p className="text-xl font-bold tabular-nums text-foreground">{value}</p>
           )}
         </div>
       </CardContent>

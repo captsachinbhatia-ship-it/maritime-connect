@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Clock } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
@@ -103,45 +103,53 @@ export function InteractionRecency() {
   };
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Clock className="h-5 w-5 text-primary" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+            <Clock className="h-4.5 w-4.5 text-primary" />
           </div>
-          <CardTitle className="text-lg">Interaction Recency Overview</CardTitle>
+          <CardTitle className="text-base">Interaction Recency</CardTitle>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {isLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Period</TableHead>
-                <TableHead className="text-right">Contacts</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {buckets.map((bucket) => (
-                <TableRow key={bucket.label}>
-                  <TableCell className="text-sm font-medium">{bucket.label}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge
-                      variant="outline"
-                      className="cursor-pointer transition-colors hover:bg-accent"
-                      onClick={handleCountClick}
-                    >
-                      {bucket.count}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <>
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Period</TableHead>
+                    <TableHead className="text-xs text-right">Contacts</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {buckets.map((bucket) => (
+                    <TableRow key={bucket.label}>
+                      <TableCell className="text-sm py-2">{bucket.label}</TableCell>
+                      <TableCell className="text-right py-2">
+                        <span
+                          className="cursor-pointer text-sm font-medium tabular-nums text-primary hover:underline"
+                          onClick={handleCountClick}
+                        >
+                          {bucket.count}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <p className="text-[11px] text-muted-foreground text-center mt-2">
+              Click counts to open filtered list
+            </p>
+          </>
         )}
       </CardContent>
     </Card>

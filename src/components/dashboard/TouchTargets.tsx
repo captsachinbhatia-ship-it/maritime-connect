@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Target, CalendarClock, Bell, Send } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Target, CalendarClock, Bell, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
 import { formatDistanceToNow } from 'date-fns';
@@ -16,7 +17,6 @@ interface StageTarget {
   target: number;
   completed: number;
   pending: number;
-  color: string;
 }
 
 interface ActionItem {
@@ -35,10 +35,10 @@ const STAGE_FREQUENCY: Record<string, number> = {
   ACHIEVEMENT: 3,
 };
 
-const STAGE_CONFIG: Record<string, { label: string; color: string }> = {
-  COLD_CALLING: { label: 'Cold Calling', color: 'bg-blue-100 text-blue-800' },
-  ASPIRATION: { label: 'Aspiration', color: 'bg-amber-100 text-amber-800' },
-  ACHIEVEMENT: { label: 'Achievement', color: 'bg-green-100 text-green-800' },
+const STAGE_LABELS: Record<string, string> = {
+  COLD_CALLING: 'Cold Calling',
+  ASPIRATION: 'Aspiration',
+  ACHIEVEMENT: 'Achievement',
 };
 
 interface TouchTargetsProps {
@@ -63,7 +63,6 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
         return;
       }
 
-      // Fetch PRIMARY assignments with stage
       const { data: assignments } = await supabase
         .from('contact_assignments')
         .select('contact_id, stage')
@@ -85,7 +84,6 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
 
       const allContactIds = Object.values(contactsByStage).flat();
 
-      // Fetch last interactions
       const { data: interactions } = allContactIds.length > 0
         ? await supabase
             .from('v_contacts_last_interaction')
@@ -100,8 +98,7 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // Calculate stage targets
-      const targets: StageTarget[] = Object.entries(STAGE_CONFIG).map(([stage, config]) => {
+      const targets: StageTarget[] = Object.keys(STAGE_LABELS).map(stage => {
         const contacts = contactsByStage[stage] || [];
         const freq = STAGE_FREQUENCY[stage] || 1;
         const target = Math.ceil(contacts.length / freq);
@@ -111,18 +108,17 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
         }).length;
         return {
           stage,
-          label: config.label,
+          label: STAGE_LABELS[stage],
           assigned: contacts.length,
           target,
           completed,
           pending: Math.max(0, target - completed),
-          color: config.color,
         };
       });
 
       setStageTargets(targets);
 
-      // Fetch follow-ups pending (due today or overdue)
+      // Follow-ups pending
       const endOfToday = new Date(startOfToday);
       endOfToday.setHours(23, 59, 59, 999);
 
@@ -133,40 +129,34 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
           .in('contact_id', allContactIds)
           .eq('status', 'OPEN')
           .lte('due_at', endOfToday.toISOString());
-
-        setFollowupsPending(fCount || 0);
+        setFollowupsPending(fCount ?? 0);
       }
 
-      // Fetch nudges received
       const { data: nudgesData } = await supabase
         .from('v_my_pending_nudges')
         .select('followup_id')
         .eq('status', 'OPEN');
+      setNudgesReceived(nudgesData?.length ?? 0);
 
-      setNudgesReceived(nudgesData?.length || 0);
-
-      // Fetch nudges sent (pending)
       const { data: sentData } = await supabase
         .from('v_nudges_i_created')
         .select('followup_id, display_status')
         .in('display_status', ['PENDING', 'OVERDUE']);
-
-      setNudgesSent(sentData?.length || 0);
+      setNudgesSent(sentData?.length ?? 0);
 
       // Build action queue
       const actions: ActionItem[] = [];
 
-      // Contacts needing touch (overdue by stage frequency)
       if (allContactIds.length > 0) {
         const { data: contactsForQueue } = await supabase
           .from('contacts')
           .select('id, full_name, company_id')
           .in('id', allContactIds);
 
-        const { data: companies } = await supabase
-          .from('companies')
-          .select('id, company_name')
-          .in('id', (contactsForQueue || []).map(c => c.company_id).filter(Boolean) as string[]);
+        const companyIds = (contactsForQueue || []).map(c => c.company_id).filter(Boolean) as string[];
+        const { data: companies } = companyIds.length > 0
+          ? await supabase.from('companies').select('id, company_name').in('id', companyIds)
+          : { data: [] };
 
         const companyMap = new Map<string, string>(
           (companies || []).map(c => [c.id, c.company_name] as [string, string])
@@ -175,7 +165,6 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
           (contactsForQueue || []).map(c => [c.id, c] as [string, typeof c])
         );
 
-        // Get stage for each contact
         const stageMap = new Map<string, string>();
         (assignments || []).forEach(a => stageMap.set(a.contact_id, a.stage));
 
@@ -184,28 +173,26 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
           const stage = stageMap.get(id) || '';
           const freq = STAGE_FREQUENCY[stage] || 1;
           const contact = contactMap.get(id);
-
           if (!contact) return;
 
           const daysAgo = lastAt
-            ? Math.floor((now.getTime() - new Date(lastAt as string).getTime()) / (1000 * 60 * 60 * 24))
+            ? Math.floor((now.getTime() - new Date(lastAt).getTime()) / (1000 * 60 * 60 * 24))
             : 999;
 
           if (daysAgo >= freq) {
             actions.push({
               contact_id: id,
-              contact_name: (contact as any).full_name || 'Unknown',
-              company_name: (contact as any).company_id ? companyMap.get((contact as any).company_id) || null : null,
+              contact_name: contact.full_name || 'Unknown',
+              company_name: contact.company_id ? companyMap.get(contact.company_id) || null : null,
               stage,
               reason: lastAt ? `Overdue by ${daysAgo - freq + 1}d` : 'Never contacted',
-              last_interaction_at: (lastAt as string) || null,
+              last_interaction_at: lastAt || null,
               priority: lastAt ? 2 : 1,
             });
           }
         });
       }
 
-      // Sort by priority (lower = higher priority), then by oldest
       actions.sort((a, b) => {
         if (a.priority !== b.priority) return a.priority - b.priority;
         const aTime = a.last_interaction_at ? new Date(a.last_interaction_at).getTime() : 0;
@@ -253,103 +240,116 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
   };
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Target className="h-5 w-5 text-primary" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+            <Target className="h-4.5 w-4.5 text-primary" />
           </div>
-          <CardTitle className="text-lg">Today's Touch Targets</CardTitle>
+          <CardTitle className="text-base">Today's Touch Targets</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex-1 space-y-4">
         {isLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="space-y-3">
+            <Skeleton className="h-28 w-full" />
+            <div className="grid grid-cols-3 gap-2">
+              <Skeleton className="h-16" />
+              <Skeleton className="h-16" />
+              <Skeleton className="h-16" />
+            </div>
           </div>
         ) : (
           <>
             {/* Stage Targets */}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Stage</TableHead>
-                  <TableHead className="text-center">Assigned</TableHead>
-                  <TableHead className="text-center">Target</TableHead>
-                  <TableHead className="text-center">Done</TableHead>
-                  <TableHead className="text-center">Pending</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stageTargets.map((st) => (
-                  <TableRow key={st.stage}>
-                    <TableCell>
-                      <Badge className={st.color}>{st.label}</Badge>
-                    </TableCell>
-                    <TableCell className="text-center text-sm">{st.assigned}</TableCell>
-                    <TableCell className="text-center text-sm font-medium">{st.target}</TableCell>
-                    <TableCell className="text-center text-sm text-emerald-600 font-medium">{st.completed}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant="outline"
-                        className="cursor-pointer transition-colors hover:bg-accent"
-                        onClick={handlePendingClick}
-                      >
-                        {st.pending}
-                      </Badge>
-                    </TableCell>
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Stage</TableHead>
+                    <TableHead className="text-xs text-right">Assigned</TableHead>
+                    <TableHead className="text-xs text-right">Target</TableHead>
+                    <TableHead className="text-xs text-right">Done</TableHead>
+                    <TableHead className="text-xs text-right">Pending</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {stageTargets.map((st) => (
+                    <TableRow key={st.stage}>
+                      <TableCell className="text-sm py-2 font-medium">{st.label}</TableCell>
+                      <TableCell className="text-right text-sm py-2 tabular-nums">{st.assigned}</TableCell>
+                      <TableCell className="text-right text-sm py-2 tabular-nums font-medium">{st.target}</TableCell>
+                      <TableCell className="text-right text-sm py-2 tabular-nums font-medium text-emerald-600">{st.completed}</TableCell>
+                      <TableCell className="text-right py-2">
+                        <span
+                          className="cursor-pointer text-sm tabular-nums font-medium text-primary hover:underline"
+                          onClick={handlePendingClick}
+                        >
+                          {st.pending}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
             {/* Priority Buckets */}
             <div className="grid grid-cols-3 gap-2">
-              <div
-                className="flex items-center gap-2 rounded-lg border p-2 cursor-pointer transition-colors hover:bg-accent/50"
+              <button
+                className="flex items-center gap-2 rounded-lg border p-2.5 text-left transition-colors hover:bg-accent/50"
                 onClick={handleFollowupsClick}
               >
                 <CalendarClock className="h-4 w-4 text-orange-600 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Follow-ups</p>
-                  <p className="text-lg font-bold">{followupsPending}</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">Follow-ups</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{followupsPending}</p>
                 </div>
-              </div>
-              <div
-                className="flex items-center gap-2 rounded-lg border p-2 cursor-pointer transition-colors hover:bg-accent/50"
+              </button>
+              <button
+                className="flex items-center gap-2 rounded-lg border p-2.5 text-left transition-colors hover:bg-accent/50"
                 onClick={handleNudgesClick}
               >
                 <Bell className="h-4 w-4 text-amber-600 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Nudges In</p>
-                  <p className="text-lg font-bold">{nudgesReceived}</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">Nudges In</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{nudgesReceived}</p>
                 </div>
-              </div>
-              <div
-                className="flex items-center gap-2 rounded-lg border p-2 cursor-pointer transition-colors hover:bg-accent/50"
+              </button>
+              <button
+                className="flex items-center gap-2 rounded-lg border p-2.5 text-left transition-colors hover:bg-accent/50"
                 onClick={handleNudgesClick}
               >
-                <Send className="h-4 w-4 text-blue-600 shrink-0" />
+                <Send className="h-4 w-4 text-primary shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">Nudges Out</p>
-                  <p className="text-lg font-bold">{nudgesSent}</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">Nudges Out</p>
+                  <p className="text-lg font-bold tabular-nums leading-tight">{nudgesSent}</p>
                 </div>
-              </div>
+              </button>
             </div>
 
             {/* Action Queue */}
             {actionItems.length > 0 && (
               <div>
-                <p className="text-sm font-medium text-muted-foreground mb-2">Contacts To Touch Base Now</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-muted-foreground">Contacts To Touch Now</p>
+                  {actionItems.length >= 10 && (
+                    <button
+                      className="text-xs text-primary hover:underline"
+                      onClick={handlePendingClick}
+                    >
+                      View All →
+                    </button>
+                  )}
+                </div>
                 <div className="rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Company</TableHead>
-                        <TableHead>Stage</TableHead>
-                        <TableHead>Reason</TableHead>
-                        <TableHead>Last Touch</TableHead>
+                        <TableHead className="text-xs">Contact</TableHead>
+                        <TableHead className="text-xs">Stage</TableHead>
+                        <TableHead className="text-xs">Reason</TableHead>
+                        <TableHead className="text-xs text-right">Last Touch</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -359,21 +359,25 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
                           className="cursor-pointer hover:bg-muted/50"
                           onClick={() => handleActionClick(item)}
                         >
-                          <TableCell className="font-medium text-sm">{item.contact_name}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{item.company_name || '—'}</TableCell>
-                          <TableCell>
-                            {item.stage && STAGE_CONFIG[item.stage] ? (
-                              <Badge className={`text-xs ${STAGE_CONFIG[item.stage].color}`}>
-                                {STAGE_CONFIG[item.stage].label}
-                              </Badge>
-                            ) : '—'}
+                          <TableCell className="py-2">
+                            <div>
+                              <p className="text-sm font-medium leading-tight">{item.contact_name}</p>
+                              {item.company_name && (
+                                <p className="text-[11px] text-muted-foreground leading-tight">{item.company_name}</p>
+                              )}
+                            </div>
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">
+                          <TableCell className="py-2">
+                            <span className="text-xs text-muted-foreground">
+                              {item.stage ? STAGE_LABELS[item.stage] || item.stage : '—'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-2">
+                            <Badge variant="outline" className="text-[11px]">
                               {item.reason}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
+                          <TableCell className="text-right text-xs text-muted-foreground py-2">
                             {item.last_interaction_at
                               ? formatDistanceToNow(new Date(item.last_interaction_at), { addSuffix: true })
                               : 'Never'}
@@ -383,14 +387,9 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
                     </TableBody>
                   </Table>
                 </div>
-                {actionItems.length >= 10 && (
-                  <button
-                    className="mt-2 text-xs text-primary hover:underline"
-                    onClick={handlePendingClick}
-                  >
-                    View All →
-                  </button>
-                )}
+                <p className="text-[11px] text-muted-foreground text-center mt-1.5">
+                  Click a row to open contact details
+                </p>
               </div>
             )}
 
