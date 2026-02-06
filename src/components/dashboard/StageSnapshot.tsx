@@ -20,7 +20,12 @@ const stageConfig = [
   { key: 'INACTIVE', label: 'Inactive', color: 'bg-slate-400' },
 ] as const;
 
-export function StageSnapshot() {
+interface StageSnapshotProps {
+  /** undefined = logged-in user, null = all users, string = specific user */
+  crmUserId?: string | null;
+}
+
+export function StageSnapshot({ crmUserId: crmUserIdProp }: StageSnapshotProps = {}) {
   const [counts, setCounts] = useState<StageCounts>({
     COLD_CALLING: 0,
     ASPIRATION: 0,
@@ -33,18 +38,30 @@ export function StageSnapshot() {
     const fetchStageCounts = async () => {
       setIsLoading(true);
       try {
-        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-        if (crmError || !currentCrmUserId) {
-          setIsLoading(false);
-          return;
+        let userId: string | null = null;
+
+        if (crmUserIdProp === undefined) {
+          const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+          if (crmError || !currentCrmUserId) {
+            setIsLoading(false);
+            return;
+          }
+          userId = currentCrmUserId;
+        } else {
+          userId = crmUserIdProp;
         }
 
-        const { data: assignments } = await supabase
+        let assignQuery = supabase
           .from('contact_assignments')
           .select('contact_id, stage')
           .eq('status', 'ACTIVE')
-          .eq('assigned_to_crm_user_id', currentCrmUserId)
           .in('assignment_role', ['PRIMARY', 'SECONDARY']);
+
+        if (userId) {
+          assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
+        }
+
+        const { data: assignments } = await assignQuery;
 
         const latestByContact = new Map<string, string>();
         (assignments || []).forEach(a => {
@@ -74,7 +91,7 @@ export function StageSnapshot() {
       }
     };
     fetchStageCounts();
-  }, []);
+  }, [crmUserIdProp]);
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
 

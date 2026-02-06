@@ -11,7 +11,12 @@ interface KPIData {
   followUpsDue: number;
 }
 
-export function KPIRow() {
+interface KPIRowProps {
+  /** undefined = logged-in user, null = all users, string = specific user */
+  crmUserId?: string | null;
+}
+
+export function KPIRow({ crmUserId: crmUserIdProp }: KPIRowProps = {}) {
   const navigate = useNavigate();
   const [data, setData] = useState<KPIData>({
     activeContacts: 0,
@@ -25,21 +30,30 @@ export function KPIRow() {
       setIsLoading(true);
 
       try {
-        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-        
-        if (crmError || !currentCrmUserId) {
-          console.error('Failed to get CRM user ID:', crmError);
-          setIsLoading(false);
-          return;
+        let userId: string | null = null;
+
+        if (crmUserIdProp === undefined) {
+          const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+          if (crmError || !currentCrmUserId) {
+            setIsLoading(false);
+            return;
+          }
+          userId = currentCrmUserId;
+        } else {
+          userId = crmUserIdProp;
         }
 
-        const { data: assignments } = await supabase
+        let assignQuery = supabase
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .eq('assigned_to_crm_user_id', currentCrmUserId)
           .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
+        if (userId) {
+          assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
+        }
+
+        const { data: assignments } = await assignQuery;
         const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 
         // Stale contacts (no activity in 14 days)
@@ -66,17 +80,26 @@ export function KPIRow() {
 
         // Follow-ups due today
         let followUpsDue = 0;
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+
         if (contactIds.length > 0) {
-          const today = new Date();
-          today.setHours(23, 59, 59, 999);
-          
           const { count } = await supabase
             .from('contact_followups')
             .select('*', { count: 'exact', head: true })
             .in('contact_id', contactIds)
             .eq('status', 'OPEN')
             .lte('due_at', today.toISOString());
-          
+
+          followUpsDue = count || 0;
+        } else if (!userId) {
+          // Cumulative mode with no specific contacts — count all open followups
+          const { count } = await supabase
+            .from('contact_followups')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'OPEN')
+            .lte('due_at', today.toISOString());
+
           followUpsDue = count || 0;
         }
 
@@ -93,12 +116,12 @@ export function KPIRow() {
     };
 
     fetchKPIs();
-  }, []);
+  }, [crmUserIdProp]);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <KPICard
-        title="My Active Contacts"
+        title="Active Contacts"
         value={data.activeContacts}
         icon={Users}
         variant="default"
@@ -106,7 +129,7 @@ export function KPIRow() {
         onClick={() => navigate('/contacts?tab=my-contacts')}
       />
       <KPICard
-        title="No Activity (14 Days)"
+        title="Stale (>14 Days)"
         value={data.staleContacts}
         icon={Clock}
         variant={data.staleContacts > 0 ? 'warning' : 'muted'}

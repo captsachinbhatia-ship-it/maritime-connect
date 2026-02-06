@@ -24,7 +24,12 @@ const typeIcons: Record<string, typeof Phone> = {
   NOTE: StickyNote,
 };
 
-export function RecentInteractions() {
+interface RecentInteractionsProps {
+  /** undefined = logged-in user, null = all users, string = specific user */
+  crmUserId?: string | null;
+}
+
+export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteractionsProps = {}) {
   const [interactions, setInteractions] = useState<RecentInteraction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -32,20 +37,31 @@ export function RecentInteractions() {
     const fetchRecentInteractions = async () => {
       setIsLoading(true);
       try {
-        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-        if (crmError || !currentCrmUserId) {
-          setInteractions([]);
-          setIsLoading(false);
-          return;
+        let userId: string | null = null;
+
+        if (crmUserIdProp === undefined) {
+          const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+          if (crmError || !currentCrmUserId) {
+            setInteractions([]);
+            setIsLoading(false);
+            return;
+          }
+          userId = currentCrmUserId;
+        } else {
+          userId = crmUserIdProp;
         }
 
-        const { data: assignments } = await supabase
+        let assignQuery = supabase
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .eq('assigned_to_crm_user_id', currentCrmUserId)
           .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
+        if (userId) {
+          assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
+        }
+
+        const { data: assignments } = await assignQuery;
         const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 
         if (contactIds.length === 0) {
@@ -57,7 +73,7 @@ export function RecentInteractions() {
         const { data: interactionsData } = await supabase
           .from('v_contact_interactions_timeline')
           .select('id, contact_id, interaction_type, interaction_at, subject')
-          .in('contact_id', contactIds)
+          .in('contact_id', contactIds.slice(0, 500))
           .order('interaction_at', { ascending: false })
           .limit(5);
 
@@ -86,7 +102,7 @@ export function RecentInteractions() {
       }
     };
     fetchRecentInteractions();
-  }, []);
+  }, [crmUserIdProp]);
 
   return (
     <Card className="flex flex-col">
@@ -121,6 +137,11 @@ export function RecentInteractions() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium leading-tight">{interaction.contact_name}</p>
+                    {interaction.subject && (
+                      <p className="truncate text-[11px] text-muted-foreground leading-tight mt-0.5">
+                        {interaction.subject}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant="secondary" className="text-[11px] py-0">
                         {interaction.interaction_type}

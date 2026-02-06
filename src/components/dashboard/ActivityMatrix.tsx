@@ -6,7 +6,7 @@ import { LayoutGrid } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
 import { toast } from '@/hooks/use-toast';
-import { subDays, format } from 'date-fns';
+import { subDays } from 'date-fns';
 
 /* ──────────────────────── types ──────────────────────── */
 
@@ -70,7 +70,12 @@ function distinctContactsInWindow(
 
 /* ──────────────────────── component ──────────────────────── */
 
-export function ActivityMatrix() {
+interface ActivityMatrixProps {
+  /** undefined = logged-in user, null = all users, string = specific user */
+  crmUserId?: string | null;
+}
+
+export function ActivityMatrix({ crmUserId: crmUserIdProp }: ActivityMatrixProps = {}) {
   const navigate = useNavigate();
   const [rows, setRows] = useState<MatrixRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,32 +83,46 @@ export function ActivityMatrix() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-      if (crmError || !currentCrmUserId) {
-        setIsLoading(false);
-        return;
+      let userId: string | null = null;
+
+      if (crmUserIdProp === undefined) {
+        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+        if (crmError || !currentCrmUserId) {
+          setIsLoading(false);
+          return;
+        }
+        userId = currentCrmUserId;
+      } else {
+        userId = crmUserIdProp;
       }
 
       const thirtyDaysAgo = subDays(startOfDay(new Date()), 30).toISOString();
 
+      // Build queries with conditional user filters
+      let contactsQuery = supabase
+        .from('contacts')
+        .select('id, created_at')
+        .gte('created_at', thirtyDaysAgo);
+      if (userId) contactsQuery = contactsQuery.eq('created_by_crm_user_id', userId);
+
+      let companiesQuery = supabase
+        .from('companies')
+        .select('id, created_at')
+        .gte('created_at', thirtyDaysAgo);
+      if (userId) companiesQuery = companiesQuery.eq('created_by_crm_user_id', userId);
+
+      let assignmentsQuery = supabase
+        .from('contact_assignments')
+        .select('contact_id, stage')
+        .eq('status', 'ACTIVE')
+        .eq('assignment_role', 'PRIMARY');
+      if (userId) assignmentsQuery = assignmentsQuery.eq('assigned_to_crm_user_id', userId);
+
       // Parallel fetches
       const [contactsRes, companiesRes, assignmentsRes, interactionsRes] = await Promise.all([
-        supabase
-          .from('contacts')
-          .select('id, created_at')
-          .eq('created_by_crm_user_id', currentCrmUserId)
-          .gte('created_at', thirtyDaysAgo),
-        supabase
-          .from('companies')
-          .select('id, created_at')
-          .eq('created_by_crm_user_id', currentCrmUserId)
-          .gte('created_at', thirtyDaysAgo),
-        supabase
-          .from('contact_assignments')
-          .select('contact_id, stage')
-          .eq('status', 'ACTIVE')
-          .eq('assigned_to_crm_user_id', currentCrmUserId)
-          .eq('assignment_role', 'PRIMARY'),
+        contactsQuery,
+        companiesQuery,
+        assignmentsQuery,
         supabase
           .from('v_contact_interactions_timeline')
           .select('contact_id, interaction_at')
@@ -125,9 +144,9 @@ export function ActivityMatrix() {
         if (stageContacts[a.stage]) stageContacts[a.stage].add(a.contact_id);
       });
 
-      // Filter interactions to only user's assigned contacts
+      // Filter interactions to only assigned contacts
       const allAssignedIds = new Set(assignments.map(a => a.contact_id));
-      const myInteractions = interactions.filter(i => allAssignedIds.has(i.contact_id));
+      const filteredInteractions = interactions.filter(i => allAssignedIds.has(i.contact_id));
 
       // Build values for each time window
       const buildValues = (
@@ -148,7 +167,7 @@ export function ActivityMatrix() {
           routeParams: { tab: 'my-added' },
         },
         {
-          label: 'New Companies Approached',
+          label: 'New Companies Added',
           section: 'growth',
           values: buildValues(w => countInWindow(companies, 'created_at', w)),
           route: '/companies',
@@ -157,21 +176,21 @@ export function ActivityMatrix() {
         {
           label: 'Cold Calling Touch-Based',
           section: 'engagement',
-          values: buildValues(w => distinctContactsInWindow(myInteractions, stageContacts.COLD_CALLING, w)),
+          values: buildValues(w => distinctContactsInWindow(filteredInteractions, stageContacts.COLD_CALLING, w)),
           route: '/contacts',
           routeParams: { tab: 'my-contacts' },
         },
         {
           label: 'Aspiration Touch-Based',
           section: 'engagement',
-          values: buildValues(w => distinctContactsInWindow(myInteractions, stageContacts.ASPIRATION, w)),
+          values: buildValues(w => distinctContactsInWindow(filteredInteractions, stageContacts.ASPIRATION, w)),
           route: '/contacts',
           routeParams: { tab: 'my-contacts' },
         },
         {
           label: 'Achievement Touch-Based',
           section: 'engagement',
-          values: buildValues(w => distinctContactsInWindow(myInteractions, stageContacts.ACHIEVEMENT, w)),
+          values: buildValues(w => distinctContactsInWindow(filteredInteractions, stageContacts.ACHIEVEMENT, w)),
           route: '/contacts',
           routeParams: { tab: 'my-contacts' },
         },
@@ -219,7 +238,7 @@ export function ActivityMatrix() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [crmUserIdProp]);
 
   useEffect(() => {
     fetchData();

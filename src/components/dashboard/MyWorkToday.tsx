@@ -11,9 +11,11 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface MyWorkTodayProps {
   onContactClick: (contact: ContactWithCompany) => void;
+  /** undefined = logged-in user, null = all users, string = specific user */
+  crmUserId?: string | null;
 }
 
-export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
+export function MyWorkToday({ onContactClick, crmUserId: crmUserIdProp }: MyWorkTodayProps) {
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
   const [companyMap, setCompanyMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -22,20 +24,31 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
     const fetchStaleContacts = async () => {
       setIsLoading(true);
       try {
-        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-        if (crmError || !currentCrmUserId) {
-          setContacts([]);
-          setIsLoading(false);
-          return;
+        let userId: string | null = null;
+
+        if (crmUserIdProp === undefined) {
+          const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+          if (crmError || !currentCrmUserId) {
+            setContacts([]);
+            setIsLoading(false);
+            return;
+          }
+          userId = currentCrmUserId;
+        } else {
+          userId = crmUserIdProp;
         }
 
-        const { data: assignments } = await supabase
+        let assignQuery = supabase
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .eq('assigned_to_crm_user_id', currentCrmUserId)
           .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
+        if (userId) {
+          assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
+        }
+
+        const { data: assignments } = await assignQuery;
         const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 
         if (contactIds.length === 0) {
@@ -47,7 +60,7 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
         const { data: lastInteractions } = await supabase
           .from('v_contacts_last_interaction')
           .select('contact_id, last_interaction_at, last_interaction_type')
-          .in('contact_id', contactIds);
+          .in('contact_id', contactIds.slice(0, 500));
 
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
@@ -71,7 +84,7 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
         const { data: contactsData } = await supabase
           .from('contacts')
           .select('id, full_name, company_id, designation, email, phone')
-          .in('id', staleContactIds);
+          .in('id', staleContactIds.slice(0, 100));
 
         let contactsList = (contactsData || []).map(c => ({
           ...c,
@@ -112,7 +125,7 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
       }
     };
     fetchStaleContacts();
-  }, []);
+  }, [crmUserIdProp]);
 
   return (
     <Card>

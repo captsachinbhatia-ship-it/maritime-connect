@@ -43,9 +43,11 @@ const STAGE_LABELS: Record<string, string> = {
 
 interface TouchTargetsProps {
   onContactClick?: (contact: ContactWithCompany) => void;
+  /** undefined = logged-in user, null = all users, string = specific user */
+  crmUserId?: string | null;
 }
 
-export function TouchTargets({ onContactClick }: TouchTargetsProps) {
+export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp }: TouchTargetsProps) {
   const navigate = useNavigate();
   const [stageTargets, setStageTargets] = useState<StageTarget[]>([]);
   const [followupsPending, setFollowupsPending] = useState(0);
@@ -57,18 +59,30 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-      if (crmError || !currentCrmUserId) {
-        setIsLoading(false);
-        return;
+      let userId: string | null = null;
+
+      if (crmUserIdProp === undefined) {
+        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+        if (crmError || !currentCrmUserId) {
+          setIsLoading(false);
+          return;
+        }
+        userId = currentCrmUserId;
+      } else {
+        userId = crmUserIdProp;
       }
 
-      const { data: assignments } = await supabase
+      let assignQuery = supabase
         .from('contact_assignments')
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
-        .eq('assigned_to_crm_user_id', currentCrmUserId)
         .eq('assignment_role', 'PRIMARY');
+
+      if (userId) {
+        assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
+      }
+
+      const { data: assignments } = await assignQuery;
 
       const contactsByStage: Record<string, string[]> = {
         COLD_CALLING: [],
@@ -130,8 +144,17 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
           .eq('status', 'OPEN')
           .lte('due_at', endOfToday.toISOString());
         setFollowupsPending(fCount ?? 0);
+      } else if (!userId) {
+        // Cumulative mode
+        const { count: fCount } = await supabase
+          .from('contact_followups')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'OPEN')
+          .lte('due_at', endOfToday.toISOString());
+        setFollowupsPending(fCount ?? 0);
       }
 
+      // Nudges — these views are user-specific (auth.uid() based), so they always show logged-in user's nudges
       const { data: nudgesData } = await supabase
         .from('v_my_pending_nudges')
         .select('followup_id')
@@ -151,7 +174,7 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
         const { data: contactsForQueue } = await supabase
           .from('contacts')
           .select('id, full_name, company_id')
-          .in('id', allContactIds);
+          .in('id', allContactIds.slice(0, 500));
 
         const companyIds = (contactsForQueue || []).map(c => c.company_id).filter(Boolean) as string[];
         const { data: companies } = companyIds.length > 0
@@ -206,7 +229,7 @@ export function TouchTargets({ onContactClick }: TouchTargetsProps) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [crmUserIdProp]);
 
   useEffect(() => {
     fetchData();

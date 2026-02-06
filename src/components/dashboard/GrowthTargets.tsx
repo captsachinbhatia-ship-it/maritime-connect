@@ -22,7 +22,12 @@ export interface WeeklyDayData {
   companiesAdded: number;
 }
 
-export function GrowthTargets() {
+interface GrowthTargetsProps {
+  /** undefined = logged-in user, null = all users, string = specific user */
+  crmUserId?: string | null;
+}
+
+export function GrowthTargets({ crmUserId: crmUserIdProp }: GrowthTargetsProps = {}) {
   const navigate = useNavigate();
   const [companiesFound, setCompaniesFound] = useState(0);
   const [contactsAdded, setContactsAdded] = useState(0);
@@ -32,47 +37,58 @@ export function GrowthTargets() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-      if (crmError || !currentCrmUserId) {
-        setIsLoading(false);
-        return;
+      let userId: string | null = null;
+
+      if (crmUserIdProp === undefined) {
+        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+        if (crmError || !currentCrmUserId) {
+          setIsLoading(false);
+          return;
+        }
+        userId = currentCrmUserId;
+      } else {
+        userId = crmUserIdProp;
       }
 
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       // Today's companies
-      const { count: compCount } = await supabase
+      let compQuery = supabase
         .from('companies')
         .select('*', { count: 'exact', head: true })
-        .eq('created_by_crm_user_id', currentCrmUserId)
         .gte('created_at', startOfToday.toISOString());
-
+      if (userId) compQuery = compQuery.eq('created_by_crm_user_id', userId);
+      const { count: compCount } = await compQuery;
       setCompaniesFound(compCount ?? 0);
 
       // Today's contacts
-      const { count: contCount } = await supabase
+      let contQuery = supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
-        .eq('created_by_crm_user_id', currentCrmUserId)
         .gte('created_at', startOfToday.toISOString());
-
+      if (userId) contQuery = contQuery.eq('created_by_crm_user_id', userId);
+      const { count: contCount } = await contQuery;
       setContactsAdded(contCount ?? 0);
 
       // Weekly data (last 7 days including today)
       const sevenDaysAgo = subDays(startOfToday, 6);
 
+      let weekContactsQuery = supabase
+        .from('contacts')
+        .select('created_at')
+        .gte('created_at', sevenDaysAgo.toISOString());
+      if (userId) weekContactsQuery = weekContactsQuery.eq('created_by_crm_user_id', userId);
+
+      let weekCompaniesQuery = supabase
+        .from('companies')
+        .select('created_at')
+        .gte('created_at', sevenDaysAgo.toISOString());
+      if (userId) weekCompaniesQuery = weekCompaniesQuery.eq('created_by_crm_user_id', userId);
+
       const [{ data: weekContacts }, { data: weekCompanies }] = await Promise.all([
-        supabase
-          .from('contacts')
-          .select('created_at')
-          .eq('created_by_crm_user_id', currentCrmUserId)
-          .gte('created_at', sevenDaysAgo.toISOString()),
-        supabase
-          .from('companies')
-          .select('created_at')
-          .eq('created_by_crm_user_id', currentCrmUserId)
-          .gte('created_at', sevenDaysAgo.toISOString()),
+        weekContactsQuery,
+        weekCompaniesQuery,
       ]);
 
       const days: WeeklyDayData[] = [];
@@ -106,7 +122,7 @@ export function GrowthTargets() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [crmUserIdProp]);
 
   useEffect(() => {
     fetchData();
