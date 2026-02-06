@@ -18,23 +18,32 @@ import { getCurrentCrmUserId } from '@/services/profiles';
 
 type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary' | 'bulk-import' | 'duplicate-risk' | 'pending-requests';
 
+const ALL_TABS: TabType[] = ['my-contacts', 'secondary', 'all-contacts', 'unassigned', 'duplicate-risk', 'pending-requests', 'my-added', 'bulk-import'];
+
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'bulk-import' || tabParam === 'my-added') return tabParam as TabType;
+    if (tabParam && ALL_TABS.includes(tabParam as TabType)) return tabParam as TabType;
     return 'my-contacts';
   });
   const [refreshKey, setRefreshKey] = useState(0);
-  const [myAddedCount, setMyAddedCount] = useState(0);
+
+  // Counts
+  const [myContactsCount, setMyContactsCount] = useState(0);
   const [secondaryCount, setSecondaryCount] = useState(0);
+  const [allContactsCount, setAllContactsCount] = useState(0);
+  const [unassignedCount, setUnassignedCount] = useState(0);
+  const [duplicateRiskCount, setDuplicateRiskCount] = useState(0);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [myAddedCount, setMyAddedCount] = useState(0);
 
   // Sync tab from URL param
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'bulk-import' || tabParam === 'my-added') {
+    if (tabParam && ALL_TABS.includes(tabParam as TabType)) {
       setActiveTab(tabParam as TabType);
       // Clear the param after applying
       setSearchParams({}, { replace: true });
@@ -65,76 +74,97 @@ export default function Contacts() {
     }
   }, [user, crmUser, authLoading]);
 
-  // Fetch count of contacts created by current user
-  const loadMyAddedCount = useCallback(async () => {
+  // Fetch all counts
+  const loadCounts = useCallback(async () => {
     if (!crmUser) return;
-    
-    const { data: currentCrmUserId } = await getCurrentCrmUserId();
-    if (!currentCrmUserId) return;
-    
-    const { count, error } = await supabase
-      .from('contacts')
-      .select('id', { count: 'exact', head: true })
-      .eq('created_by_crm_user_id', currentCrmUserId);
-    
-    if (!error && count !== null) {
-      setMyAddedCount(count);
-    }
-  }, [crmUser]);
 
-  // Fetch count of secondary contacts for current user
-  const loadSecondaryCount = useCallback(async () => {
-    if (!crmUser) return;
-    
     const { data: currentCrmUserId } = await getCurrentCrmUserId();
     if (!currentCrmUserId) return;
-    
-    const { count, error } = await supabase
+
+    // My Contacts (PRIMARY ACTIVE)
+    const { count: myCount } = await supabase
+      .from('contact_assignments')
+      .select('contact_id', { count: 'exact', head: true })
+      .eq('status', 'ACTIVE')
+      .eq('assigned_to_crm_user_id', currentCrmUserId)
+      .eq('assignment_role', 'PRIMARY');
+    setMyContactsCount(myCount || 0);
+
+    // Secondary
+    const { count: secCount } = await supabase
       .from('contact_assignments')
       .select('contact_id', { count: 'exact', head: true })
       .eq('status', 'ACTIVE')
       .eq('assigned_to_crm_user_id', currentCrmUserId)
       .eq('assignment_role', 'SECONDARY');
-    
-    if (!error && count !== null) {
-      setSecondaryCount(count);
-    }
+    setSecondaryCount(secCount || 0);
+
+    // All Contacts (with active primary assignment)
+    const { count: allCount } = await supabase
+      .from('contact_assignments')
+      .select('contact_id', { count: 'exact', head: true })
+      .eq('status', 'ACTIVE')
+      .eq('assignment_role', 'PRIMARY');
+    setAllContactsCount(allCount || 0);
+
+    // My Added
+    const { count: addedCount } = await supabase
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by_crm_user_id', currentCrmUserId);
+    setMyAddedCount(addedCount || 0);
+
+    // Admin-only counts
+    try {
+      const { count: unCount } = await supabase
+        .from('v_unassigned_contacts')
+        .select('*', { count: 'exact', head: true });
+      setUnassignedCount(unCount || 0);
+    } catch { setUnassignedCount(0); }
+
+    try {
+      const { count: dupCount } = await supabase
+        .from('contact_duplicate_risk')
+        .select('*', { count: 'exact', head: true });
+      setDuplicateRiskCount(dupCount || 0);
+    } catch { setDuplicateRiskCount(0); }
+
+    try {
+      const { count: pendCount } = await supabase
+        .from('v_pending_inactive_requests')
+        .select('*', { count: 'exact', head: true });
+      setPendingRequestsCount(pendCount || 0);
+    } catch { setPendingRequestsCount(0); }
   }, [crmUser]);
 
   useEffect(() => {
     if (!authLoading && crmUser) {
-      loadMyAddedCount();
-      loadSecondaryCount();
+      loadCounts();
     }
-  }, [authLoading, crmUser, loadMyAddedCount, loadSecondaryCount]);
+  }, [authLoading, crmUser, loadCounts]);
 
   const handleContactAdded = () => {
     setRefreshKey(prev => prev + 1);
-    loadMyAddedCount();
-    loadSecondaryCount();
+    loadCounts();
   };
 
   const handleImportComplete = () => {
-    // Navigate to My Added tab and refresh counts
     setActiveTab('my-added');
     setRefreshKey(prev => prev + 1);
-    loadMyAddedCount();
+    loadCounts();
   };
 
   const handleTabChange = (val: string) => {
     setActiveTab(val as TabType);
   };
 
-  // Show loading while checking role
   if (authLoading || isAdmin === null) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
-            <p className="mt-1 text-muted-foreground">
-              Manage your contact records
-            </p>
+            <p className="mt-1 text-muted-foreground">Manage your contact records</p>
           </div>
         </div>
         <div className="flex items-center justify-center py-16">
@@ -150,10 +180,9 @@ export default function Contacts() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
           <p className="mt-1 text-muted-foreground">
-            {isAdmin 
+            {isAdmin
               ? 'Manage contact assignments and ownership'
-              : 'View contacts and manage your assigned pipeline'
-            }
+              : 'View contacts and manage your assigned pipeline'}
           </p>
         </div>
         <AddContactModal onSuccess={handleContactAdded} />
@@ -162,41 +191,35 @@ export default function Contacts() {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="my-contacts" className="font-semibold">
-            My Contacts
+            My Contacts ({myContactsCount})
           </TabsTrigger>
           <TabsTrigger value="secondary" className="flex items-center gap-1.5">
             <Users2 className="h-3.5 w-3.5" />
-            Secondary
-            {secondaryCount > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {secondaryCount}
-              </Badge>
-            )}
+            Secondary ({secondaryCount})
           </TabsTrigger>
-          <TabsTrigger value="all-contacts">All Contacts</TabsTrigger>
+          <TabsTrigger value="all-contacts">
+            All Contacts ({allContactsCount})
+          </TabsTrigger>
           {isAdmin && (
-            <TabsTrigger value="unassigned">Unassigned</TabsTrigger>
+            <TabsTrigger value="unassigned">
+              Unassigned ({unassignedCount})
+            </TabsTrigger>
           )}
           {isAdmin && (
             <TabsTrigger value="duplicate-risk" className="flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />
-              Duplicate Risk
+              Duplicate Risk ({duplicateRiskCount})
             </TabsTrigger>
           )}
           {isAdmin && (
             <TabsTrigger value="pending-requests" className="flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
-              Pending Requests
+              Pending Requests ({pendingRequestsCount})
             </TabsTrigger>
           )}
           <TabsTrigger value="my-added" className="flex items-center gap-1.5">
             <UserPlus className="h-3.5 w-3.5" />
-            My Added
-            {myAddedCount > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {myAddedCount}
-              </Badge>
-            )}
+            My Added ({myAddedCount})
           </TabsTrigger>
           <TabsTrigger
             value="bulk-import"
@@ -241,7 +264,7 @@ export default function Contacts() {
         )}
 
         <TabsContent value="my-added" className="mt-4">
-          <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadMyAddedCount} />
+          <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadCounts} />
         </TabsContent>
 
         <TabsContent value="bulk-import" className="mt-4">

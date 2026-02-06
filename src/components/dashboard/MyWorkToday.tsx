@@ -7,8 +7,6 @@ import { getCurrentCrmUserId } from '@/services/profiles';
 import { ContactWithCompany } from '@/types';
 import { Loader2, AlertTriangle, UserCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { PendingNudges } from './PendingNudges';
-import { MyNudges } from './MyNudges';
 
 interface MyWorkTodayProps {
   onContactClick: (contact: ContactWithCompany) => void;
@@ -131,12 +129,6 @@ export function MyWorkToday({ onContactClick }: MyWorkTodayProps) {
 
   return (
     <div className="space-y-6">
-      {/* Nudges Grid: Pending (for Secondary) + Sent (for Primary) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <PendingNudges />
-        <MyNudges />
-      </div>
-
       {/* Stale Contacts Section */}
       <Card>
         <CardHeader className="pb-3">

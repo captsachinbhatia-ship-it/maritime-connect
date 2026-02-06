@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { KPICard } from './KPICard';
-import { Users, MessageSquare, Clock, Bell } from 'lucide-react';
+import { Users, Clock, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
 interface KPIData {
   activeContacts: number;
-  interactionsToday: number;
   staleContacts: number;
   followUpsDue: number;
 }
 
 export function KPIRow() {
+  const navigate = useNavigate();
   const [data, setData] = useState<KPIData>({
     activeContacts: 0,
-    interactionsToday: 0,
     staleContacts: 0,
     followUpsDue: 0,
   });
@@ -25,7 +25,6 @@ export function KPIRow() {
       setIsLoading(true);
 
       try {
-        // Get current user's CRM ID for filtering
         const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
         
         if (crmError || !currentCrmUserId) {
@@ -34,32 +33,16 @@ export function KPIRow() {
           return;
         }
 
-        // Fetch only assignments where current user is PRIMARY or SECONDARY owner
-        const { data: assignments, count: activeCount } = await supabase
+        const { data: assignments } = await supabase
           .from('contact_assignments')
-          .select('contact_id', { count: 'exact' })
+          .select('contact_id')
           .eq('status', 'ACTIVE')
           .eq('assigned_to_crm_user_id', currentCrmUserId)
           .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
         const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 
-        // Interactions today (only for my contacts)
-        let interactionsToday = 0;
-        if (contactIds.length > 0) {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          const { count } = await supabase
-            .from('contact_interactions')
-            .select('*', { count: 'exact', head: true })
-            .in('contact_id', contactIds)
-            .gte('interaction_at', today.toISOString());
-          
-          interactionsToday = count || 0;
-        }
-
-        // Stale contacts (no activity in 14 days) - only my contacts
+        // Stale contacts (no activity in 14 days)
         let staleCount = 0;
         if (contactIds.length > 0) {
           const fourteenDaysAgo = new Date();
@@ -81,7 +64,7 @@ export function KPIRow() {
           }).length;
         }
 
-        // Follow-ups due today (only for my contacts)
+        // Follow-ups due today
         let followUpsDue = 0;
         if (contactIds.length > 0) {
           const today = new Date();
@@ -99,7 +82,6 @@ export function KPIRow() {
 
         setData({
           activeContacts: contactIds.length,
-          interactionsToday,
           staleContacts: staleCount,
           followUpsDue,
         });
@@ -114,20 +96,14 @@ export function KPIRow() {
   }, []);
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <KPICard
         title="My Active Contacts"
         value={data.activeContacts}
         icon={Users}
         variant="default"
         isLoading={isLoading}
-      />
-      <KPICard
-        title="Interactions Today"
-        value={data.interactionsToday}
-        icon={MessageSquare}
-        variant="success"
-        isLoading={isLoading}
+        onClick={() => navigate('/contacts?tab=my-contacts')}
       />
       <KPICard
         title="No Activity (14 Days)"
@@ -142,6 +118,7 @@ export function KPIRow() {
         icon={Bell}
         variant="muted"
         isLoading={isLoading}
+        onClick={() => navigate('/followups')}
       />
     </div>
   );
