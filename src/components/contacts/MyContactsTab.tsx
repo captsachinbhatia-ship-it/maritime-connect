@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight } from 'lucide-react';
+import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight, MoreHorizontal, Send, Ban } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -30,6 +31,8 @@ import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactWithCompany } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { SendNudgeDialog } from './SendNudgeDialog';
+import { RequestInactiveDialog } from './RequestInactiveDialog';
 
 type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
@@ -77,6 +80,8 @@ export function MyContactsTab() {
   // Drawer state
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [nudgeContact, setNudgeContact] = useState<{ id: string; name: string } | null>(null);
+  const [inactiveContact, setInactiveContact] = useState<{ id: string; name: string } | null>(null);
 
   const loadContacts = useCallback(async () => {
     if (!session) {
@@ -342,7 +347,7 @@ export function MyContactsTab() {
               <TableHead>Company</TableHead>
               <TableHead>Next Follow-up</TableHead>
               <TableHead>Last Activity</TableHead>
-              {isAdmin && <TableHead>Move Stage</TableHead>}
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -395,41 +400,55 @@ export function MyContactsTab() {
                       <span className="text-xs text-muted-foreground/50">—</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    {isAdmin ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={isUpdatingStage === contact.id}
-                            className="h-7"
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isUpdatingStage === contact.id}
+                          className="h-7"
+                        >
+                          {isUpdatingStage === contact.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              Actions
+                              <MoreHorizontal className="ml-1 h-3 w-3" />
+                            </>
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {availableStages.filter(s => s.value !== 'INACTIVE').map((stage) => (
+                          <DropdownMenuItem
+                            key={stage.value}
+                            onClick={() => handleStageUpdate(contact.id, stage.value)}
                           >
-                            {isUpdatingStage === contact.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <>
-                                Move to
-                                <ArrowRight className="ml-1 h-3 w-3" />
-                              </>
-                            )}
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {availableStages.map((stage) => (
-                            <DropdownMenuItem
-                              key={stage.value}
-                              onClick={() => handleStageUpdate(contact.id, stage.value)}
-                            >
-                              <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
-                                {stage.label}
-                              </Badge>
-                              Move to {stage.label}
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : null}
+                            <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
+                              {stage.label}
+                            </Badge>
+                            Move to {stage.label}
+                          </DropdownMenuItem>
+                        ))}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => setNudgeContact({ id: contact.id, name: contact.full_name || 'Unknown' })}
+                        >
+                          <Send className="mr-2 h-4 w-4" />
+                          Send Nudge
+                        </DropdownMenuItem>
+                        {(activeStage === 'ASPIRATION' || activeStage === 'ACHIEVEMENT') && (
+                          <DropdownMenuItem
+                            onClick={() => setInactiveContact({ id: contact.id, name: contact.full_name || 'Unknown' })}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Ban className="mr-2 h-4 w-4" />
+                            Request Inactive
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               );
@@ -486,6 +505,25 @@ export function MyContactsTab() {
           loadContacts();
         }}
       />
+      {nudgeContact && (
+        <SendNudgeDialog
+          open={!!nudgeContact}
+          onOpenChange={(open) => !open && setNudgeContact(null)}
+          contactId={nudgeContact.id}
+          contactName={nudgeContact.name}
+          onSuccess={loadContacts}
+        />
+      )}
+
+      {inactiveContact && (
+        <RequestInactiveDialog
+          open={!!inactiveContact}
+          onOpenChange={(open) => !open && setInactiveContact(null)}
+          contactId={inactiveContact.id}
+          contactName={inactiveContact.name}
+          onSuccess={loadContacts}
+        />
+      )}
     </div>
   );
 }
