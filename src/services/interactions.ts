@@ -9,6 +9,8 @@ export interface ContactInteraction {
   interaction_type: InteractionType;
   outcome: string | null;
   summary: string | null;
+  subject: string | null;
+  notes: string | null;
   next_action: string | null;
   next_action_date: string | null;
   creator_full_name: string | null;

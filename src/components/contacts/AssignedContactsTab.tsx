@@ -118,16 +118,18 @@ export function AssignedContactsTab() {
         const contactIdsForInteraction = contactsList.map(c => c.id);
         const { data: lastInteractionData } = await supabase
           .from('v_contacts_last_interaction')
-          .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
+          .select('*')
           .in('contact_id', contactIdsForInteraction);
 
         if (lastInteractionData && lastInteractionData.length > 0) {
-          const liMap: Record<string, { last_interaction_at: string | null; last_interaction_type: string | null; last_interaction_outcome: string | null }> = {};
-          lastInteractionData.forEach((li) => {
+          const liMap: Record<string, Partial<ContactWithCompany>> = {};
+          lastInteractionData.forEach((li: any) => {
             liMap[li.contact_id] = {
               last_interaction_at: li.last_interaction_at,
               last_interaction_type: li.last_interaction_type,
               last_interaction_outcome: li.last_interaction_outcome,
+              last_interaction_subject: li.last_interaction_subject || null,
+              last_interaction_notes: li.last_interaction_notes || null,
             };
           });
           contactsList = contactsList.map(c => ({

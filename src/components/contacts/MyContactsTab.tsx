@@ -4,6 +4,7 @@ import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -33,6 +34,8 @@ import { ContactWithCompany } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { SendNudgeDialog } from './SendNudgeDialog';
 import { RequestInactiveDialog } from './RequestInactiveDialog';
+import { ContactRowHoverCard } from './ContactRowHoverCard';
+import { extractKeywordChips } from '@/lib/interactionKeywords';
 
 type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
@@ -171,21 +174,23 @@ export function MyContactsTab() {
 
       let contactsList = (contactsData || []) as ContactWithCompany[];
 
-      // Fetch last interaction data
+      // Fetch last interaction data (try to include subject/notes if view supports it)
       if (contactsList.length > 0) {
         const contactIdsForInteraction = contactsList.map(c => c.id);
         const { data: lastInteractionData } = await supabase
           .from('v_contacts_last_interaction')
-          .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
+          .select('*')
           .in('contact_id', contactIdsForInteraction);
 
         if (lastInteractionData && lastInteractionData.length > 0) {
-          const liMap: Record<string, { last_interaction_at: string | null; last_interaction_type: string | null; last_interaction_outcome: string | null }> = {};
-          lastInteractionData.forEach((li) => {
+          const liMap: Record<string, Partial<ContactWithCompany>> = {};
+          lastInteractionData.forEach((li: any) => {
             liMap[li.contact_id] = {
               last_interaction_at: li.last_interaction_at,
               last_interaction_type: li.last_interaction_type,
               last_interaction_outcome: li.last_interaction_outcome,
+              last_interaction_subject: li.last_interaction_subject || null,
+              last_interaction_notes: li.last_interaction_notes || null,
             };
           });
           contactsList = contactsList.map(c => ({
@@ -321,7 +326,9 @@ export function MyContactsTab() {
     const type = contact.last_interaction_type || '';
     const timeAgo = formatDistanceToNow(new Date(contact.last_interaction_at), { addSuffix: true });
     const outcome = contact.last_interaction_outcome;
-    return { type, timeAgo, outcome };
+    const subject = contact.last_interaction_subject || null;
+    const notes = contact.last_interaction_notes || null;
+    return { type, timeAgo, outcome, subject, notes };
   };
 
   const getAvailableStages = (currentStage: StageType) => {
@@ -337,9 +344,11 @@ export function MyContactsTab() {
               <TableRow>
                 <TableHead>Full Name</TableHead>
                 <TableHead>Company</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Next Follow-up</TableHead>
                 <TableHead>Last Activity</TableHead>
-                <TableHead>Move Stage</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -348,7 +357,9 @@ export function MyContactsTab() {
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                 </TableRow>
               ))}
@@ -367,123 +378,183 @@ export function MyContactsTab() {
     }
 
     return (
-      <div className="rounded-md border overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Full Name</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Next Follow-up</TableHead>
-              <TableHead>Last Activity</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredContacts.map((contact) => {
-              const lastInteraction = formatLastInteraction(contact);
-              const nextFollowupDue = nextFollowupMap[contact.id] || null;
-              const followupStatus = getFollowupStatusLabel(nextFollowupDue);
-              const availableStages = getAvailableStages(activeStage);
+      <TooltipProvider>
+        <div className="rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Full Name</TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead>Phone</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Next Follow-up</TableHead>
+                <TableHead>Last Activity</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredContacts.map((contact) => {
+                const lastInteraction = formatLastInteraction(contact);
+                const nextFollowupDue = nextFollowupMap[contact.id] || null;
+                const followupStatus = getFollowupStatusLabel(nextFollowupDue);
+                const availableStages = getAvailableStages(activeStage);
+                const lastPreview = lastInteraction?.subject || lastInteraction?.notes || null;
+                const lastChips = extractKeywordChips(`${lastInteraction?.subject || ''} ${lastInteraction?.notes || ''}`);
 
-              return (
-                <TableRow
-                  key={contact.id}
-                  className="cursor-pointer"
-                  onClick={(e) => handleRowClick(e, contact)}
-                >
-                  <TableCell className="font-medium">
-                    {contact.full_name || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
-                  </TableCell>
-                  <TableCell>
-                    {nextFollowupDue ? (
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <CalendarClock className="h-3 w-3 text-muted-foreground" />
-                          <span>{format(new Date(nextFollowupDue), 'MMM d, h:mm a')}</span>
-                        </div>
-                        {followupStatus && (
-                          <Badge className={`text-xs ${FOLLOWUP_STATUS_STYLES[followupStatus]}`}>
-                            {followupStatus.replace('_', ' ')}
-                          </Badge>
+                return (
+                  <ContactRowHoverCard
+                    key={contact.id}
+                    lastInteractionSubject={lastInteraction?.subject}
+                    lastInteractionNotes={lastInteraction?.notes}
+                    nextFollowupDue={nextFollowupDue}
+                  >
+                    <TableRow
+                      className="cursor-pointer"
+                      onClick={(e) => handleRowClick(e, contact)}
+                    >
+                      <TableCell className="font-medium">
+                        {contact.full_name || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {contact.primary_phone || contact.phone ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-xs text-muted-foreground max-w-[110px] truncate block">
+                                {contact.primary_phone || contact.phone}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>{contact.primary_phone || contact.phone}</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
                         )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {lastInteraction ? (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          {INTERACTION_TYPE_ICONS[lastInteraction.type] || null}
-                          <span>{lastInteraction.type}</span>
-                        </span>
-                        <span>·</span>
-                        <span>{lastInteraction.timeAgo}</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={isUpdatingStage === contact.id}
-                          className="h-7"
-                        >
-                          {isUpdatingStage === contact.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <>
-                              Actions
-                              <MoreHorizontal className="ml-1 h-3 w-3" />
-                            </>
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {availableStages.filter(s => s.value !== 'INACTIVE').map((stage) => (
-                          <DropdownMenuItem
-                            key={stage.value}
-                            onClick={() => handleStageUpdate(contact.id, stage.value)}
-                          >
-                            <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
-                              {stage.label}
-                            </Badge>
-                            Move to {stage.label}
-                          </DropdownMenuItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => setNudgeContact({ id: contact.id, name: contact.full_name || 'Unknown' })}
-                        >
-                          <Send className="mr-2 h-4 w-4" />
-                          Send Nudge
-                        </DropdownMenuItem>
-                        {(activeStage === 'ASPIRATION' || activeStage === 'ACHIEVEMENT') && (
-                          <DropdownMenuItem
-                            onClick={() => setInactiveContact({ id: contact.id, name: contact.full_name || 'Unknown' })}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Ban className="mr-2 h-4 w-4" />
-                            Request Inactive
-                          </DropdownMenuItem>
+                      </TableCell>
+                      <TableCell>
+                        {contact.email ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-xs text-muted-foreground max-w-[140px] truncate block">
+                                {contact.email}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>{contact.email}</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
                         )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+                      </TableCell>
+                      <TableCell>
+                        {nextFollowupDue ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <CalendarClock className="h-3 w-3 text-muted-foreground" />
+                              <span>{format(new Date(nextFollowupDue), 'MMM d, h:mm a')}</span>
+                            </div>
+                            {followupStatus && (
+                              <Badge className={`text-xs ${FOLLOWUP_STATUS_STYLES[followupStatus]}`}>
+                                {followupStatus.replace('_', ' ')}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {lastInteraction ? (
+                          <div className="space-y-0.5 max-w-[200px]">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                {INTERACTION_TYPE_ICONS[lastInteraction.type] || null}
+                                <span>{lastInteraction.type}</span>
+                              </span>
+                              <span>·</span>
+                              <span>{lastInteraction.timeAgo}</span>
+                            </div>
+                            {lastPreview && (
+                              <p className="text-xs text-muted-foreground/70 line-clamp-1 leading-snug">
+                                {lastPreview}
+                              </p>
+                            )}
+                            {lastChips.length > 0 && (
+                              <div className="flex flex-wrap gap-0.5">
+                                {lastChips.slice(0, 3).map(chip => (
+                                  <Badge
+                                    key={chip}
+                                    variant="outline"
+                                    className="h-4 px-1 text-[9px] font-semibold border-amber-500 text-amber-600 dark:text-amber-400"
+                                  >
+                                    {chip}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isUpdatingStage === contact.id}
+                              className="h-7"
+                            >
+                              {isUpdatingStage === contact.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <>
+                                  Actions
+                                  <MoreHorizontal className="ml-1 h-3 w-3" />
+                                </>
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {availableStages.filter(s => s.value !== 'INACTIVE').map((stage) => (
+                              <DropdownMenuItem
+                                key={stage.value}
+                                onClick={() => handleStageUpdate(contact.id, stage.value)}
+                              >
+                                <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
+                                  {stage.label}
+                                </Badge>
+                                Move to {stage.label}
+                              </DropdownMenuItem>
+                            ))}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setNudgeContact({ id: contact.id, name: contact.full_name || 'Unknown' })}
+                            >
+                              <Send className="mr-2 h-4 w-4" />
+                              Send Nudge
+                            </DropdownMenuItem>
+                            {(activeStage === 'ASPIRATION' || activeStage === 'ACHIEVEMENT') && (
+                              <DropdownMenuItem
+                                onClick={() => setInactiveContact({ id: contact.id, name: contact.full_name || 'Unknown' })}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Ban className="mr-2 h-4 w-4" />
+                                Request Inactive
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  </ContactRowHoverCard>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </TooltipProvider>
     );
   };
 

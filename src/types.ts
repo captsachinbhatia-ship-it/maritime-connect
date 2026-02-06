@@ -74,6 +74,8 @@ export interface ContactWithCompany extends Contact {
   last_interaction_at?: string | null;
   last_interaction_type?: string | null;
   last_interaction_outcome?: string | null;
+  last_interaction_subject?: string | null;
+  last_interaction_notes?: string | null;
 }
 
 export interface CreateContactPayload {
