@@ -10,7 +10,6 @@ import {
   ClipboardCheck,
   UserCog,
   Activity,
-  FileUp
 } from 'lucide-react';
 import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
@@ -37,7 +36,6 @@ const navItems = [
   { title: 'My Follow-ups', url: '/followups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Reporting', url: '/reporting', icon: BarChart3 },
-  { title: 'Bulk Import', url: '/bulk-import', icon: FileUp },
 ];
 
 const adminNavItems = [

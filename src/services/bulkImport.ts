@@ -154,10 +154,10 @@ export async function importValidatedContacts(
 // Fetch a contact by ID for duplicate preview
 export async function fetchContactById(
   contactId: string
-): Promise<{ data: { id: string; full_name: string; email: string | null; phone: string | null; designation: string | null } | null; error: string | null }> {
+): Promise<{ data: { id: string; full_name: string; email: string | null; primary_phone: string | null; designation: string | null } | null; error: string | null }> {
   const { data, error } = await supabase
-    .from('contacts')
-    .select('id, full_name, email, phone, designation')
+    .from('contacts_with_primary_phone')
+    .select('id, full_name, email, primary_phone, designation')
     .eq('id', contactId)
     .maybeSingle();
 

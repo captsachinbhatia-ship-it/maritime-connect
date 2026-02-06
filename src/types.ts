@@ -57,6 +57,8 @@ export interface Contact {
   country_code: string | null;
   phone: string | null;
   phone_type: string | null;
+  primary_phone?: string | null;
+  primary_phone_type?: string | null;
   email: string | null;
   ice_handle: string | null;
   preferred_channel: string | null;
@@ -64,6 +66,7 @@ export interface Contact {
   is_active: boolean | null;
   updated_at: string | null;
   created_at?: string | null;
+  created_by_crm_user_id?: string | null;
 }
 
 export interface ContactWithCompany extends Contact {
