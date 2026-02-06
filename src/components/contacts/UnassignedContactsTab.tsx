@@ -68,13 +68,13 @@ export function UnassignedContactsTab() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Unassigned query with created_by info via left join on crm_users
-      // We fetch from contacts_with_primary_phone and then resolve created_by
+      // is_active IS DISTINCT FROM false (includes null and true)
       const { data: unassignedData, error } = await supabase
         .from('contacts_with_primary_phone')
         .select('id, full_name, designation, email, primary_phone, primary_phone_type, company_id, created_at, created_by_crm_user_id, is_active')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .not('is_active', 'eq', false)
+        .order('created_at', { ascending: false })
+        .limit(1000);
 
       if (error) {
         console.error('[UnassignedContactsTab] Error fetching contacts:', error);
@@ -103,7 +103,8 @@ export function UnassignedContactsTab() {
         }
       }
 
-      const unassigned = (unassignedData || []).filter(c => !assignedPrimaryIds.has(c.id));
+      // Limit to 200 as per spec
+      const unassigned = (unassignedData || []).filter(c => !assignedPrimaryIds.has(c.id)).slice(0, 200);
 
       // Fetch company names for unassigned contacts
       const companyIds = [...new Set(unassigned.map(c => c.company_id).filter(Boolean))] as string[];
