@@ -282,6 +282,8 @@ export function AssignedContactsTab() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Company</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Added By</TableHead>
                     <TableHead>Primary Owner</TableHead>
                     <TableHead>Secondary Owner</TableHead>
@@ -319,6 +321,24 @@ export function AssignedContactsTab() {
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {contact.primary_phone || contact.phone ? (
+                            <span className="text-xs text-muted-foreground max-w-[120px] truncate block" title={contact.primary_phone || contact.phone || ''}>
+                              {contact.primary_phone || contact.phone}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground/50">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {contact.email ? (
+                            <span className="text-xs text-muted-foreground max-w-[160px] truncate block" title={contact.email}>
+                              {contact.email}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground/50">—</span>
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">

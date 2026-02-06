@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight, MoreHorizontal, Send, Ban } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, PhoneCall, Mail, Video, MessageSquare, FileEdit, CalendarClock, ArrowRight, MoreHorizontal, Send, Ban, Phone } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -70,6 +70,12 @@ export function MyContactsTab() {
   const { toast } = useToast();
   const [activeStage, setActiveStage] = useState<StageType>('COLD_CALLING');
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
+  const [stageCounts, setStageCounts] = useState<Record<StageType, number>>({
+    COLD_CALLING: 0,
+    ASPIRATION: 0,
+    ACHIEVEMENT: 0,
+    INACTIVE: 0,
+  });
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -83,6 +89,27 @@ export function MyContactsTab() {
   const [nudgeContact, setNudgeContact] = useState<{ id: string; name: string } | null>(null);
   const [inactiveContact, setInactiveContact] = useState<{ id: string; name: string } | null>(null);
 
+  const loadStageCounts = useCallback(async () => {
+    if (!session) return;
+    try {
+      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+      if (crmError || !currentCrmUserId) return;
+
+      const { data: allAssignments } = await supabase
+        .from('contact_assignments')
+        .select('stage')
+        .eq('status', 'ACTIVE')
+        .eq('assigned_to_crm_user_id', currentCrmUserId)
+        .eq('assignment_role', 'PRIMARY');
+
+      const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+      (allAssignments || []).forEach(a => {
+        if (a.stage in counts) counts[a.stage as StageType]++;
+      });
+      setStageCounts(counts);
+    } catch { /* keep existing counts */ }
+  }, [session]);
+
   const loadContacts = useCallback(async () => {
     if (!session) {
       setContacts([]);
@@ -94,7 +121,6 @@ export function MyContactsTab() {
     setError(null);
 
     try {
-      // Get current user's CRM ID
       const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
 
       if (crmError || !currentCrmUserId) {
@@ -217,8 +243,9 @@ export function MyContactsTab() {
   useEffect(() => {
     if (!authLoading) {
       loadContacts();
+      loadStageCounts();
     }
-  }, [loadContacts, authLoading]);
+  }, [loadContacts, loadStageCounts, authLoading]);
 
   const handleStageUpdate = async (contactId: string, newStage: StageType) => {
     setIsUpdatingStage(contactId);
@@ -266,8 +293,9 @@ export function MyContactsTab() {
         });
       }
 
-      // Refresh the list
+      // Refresh the list and counts
       loadContacts();
+      loadStageCounts();
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -476,19 +504,17 @@ export function MyContactsTab() {
           <TabsList>
             {STAGES.map((stage) => (
               <TabsTrigger key={stage.value} value={stage.value}>
-                {stage.label}
+                {stage.label} ({stageCounts[stage.value]})
               </TabsTrigger>
             ))}
           </TabsList>
           <ContactsSearch value={search} onChange={setSearch} />
         </div>
-
-        {STAGES.map((stage) => (
-          <TabsContent key={stage.value} value={stage.value} className="mt-4">
-            {renderTable()}
-          </TabsContent>
-        ))}
       </Tabs>
+
+      <div className="mt-4">
+        {renderTable()}
+      </div>
 
       <ContactDetailsDrawer
         contact={selectedContact}
