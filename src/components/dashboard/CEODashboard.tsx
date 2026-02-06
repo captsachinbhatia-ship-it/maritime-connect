@@ -6,6 +6,7 @@ import { RecentCompanies } from './RecentCompanies';
 import { ModeIndicator } from './ModeIndicator';
 import { PendingStageRequests } from './PendingStageRequests';
 import { UnassignedContactsList } from './UnassignedContactsList';
+import { AuthRlsCheck } from './AuthRlsCheck';
 
 interface CEODashboardProps {
   isAdmin: boolean;
@@ -25,6 +26,9 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
         </div>
         {isAdmin && <ModeIndicator isCEO={isCEO} />}
       </div>
+
+      {/* Auth & RLS Debug Check */}
+      <AuthRlsCheck />
 
       {/* Global KPI Row */}
       <CEOKPIRow />
