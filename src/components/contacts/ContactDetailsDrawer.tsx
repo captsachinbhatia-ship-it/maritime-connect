@@ -39,6 +39,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { EditContactModal } from './EditContactModal';
 import { DeleteContactDialog } from './DeleteContactDialog';
 import { Trash2 } from 'lucide-react';
+import { ContactQuickActions } from './ContactQuickActions';
 
 
 interface ContactDetailsDrawerProps {
@@ -84,7 +85,7 @@ export function ContactDetailsDrawer({
   onCompanyChange,
 }: ContactDetailsDrawerProps) {
   const { crmUser, isAdmin: authIsAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab, setActiveTab] = useState('interactions');
   const [assignments, setAssignments] = useState<ContactAssignment[]>([]);
   const [interactions, setInteractions] = useState<ContactInteraction[]>([]);
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
@@ -291,7 +292,7 @@ export function ContactDetailsDrawer({
   // Reset state when drawer closes
   useEffect(() => {
     if (!isOpen) {
-      setActiveTab('details');
+      setActiveTab('interactions');
       setAssignments([]);
       setInteractions([]);
       setFollowups([]);
@@ -469,6 +470,13 @@ export function ContactDetailsDrawer({
                 {currentStage.replace('_', ' ')}
               </Badge>
             )}
+            <ContactQuickActions
+              firstName={contact.full_name}
+              phone={contact.primary_phone || contact.phone || null}
+              email={contact.email}
+              phoneVisible={!!(contact.primary_phone || contact.phone)}
+              emailVisible={!!contact.email}
+            />
             {isAdmin && (
               <div className="flex gap-2 shrink-0 ml-2">
                 <Button
@@ -497,14 +505,14 @@ export function ContactDetailsDrawer({
             <TabsTrigger value="details" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               Details
             </TabsTrigger>
-            <TabsTrigger value="assignments" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-              Assignments
-            </TabsTrigger>
             <TabsTrigger value="interactions" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               Interactions
             </TabsTrigger>
             <TabsTrigger value="followups" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               Follow-ups
+            </TabsTrigger>
+            <TabsTrigger value="assignments" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
+              Assignments
             </TabsTrigger>
           </TabsList>
 

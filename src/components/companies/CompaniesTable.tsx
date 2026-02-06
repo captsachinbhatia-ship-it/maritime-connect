@@ -28,11 +28,11 @@ export function CompaniesTable({
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-            <TableRow>
+          <TableRow>
+              <TableHead className="w-10">#</TableHead>
               <TableHead>Company Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Country</TableHead>
-              <TableHead>City</TableHead>
               <TableHead>Region</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-center">Contacts</TableHead>
@@ -65,11 +65,11 @@ export function CompaniesTable({
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-            <TableRow>
+          <TableRow>
+              <TableHead className="w-10">#</TableHead>
               <TableHead>Company Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Country</TableHead>
-              <TableHead>City</TableHead>
               <TableHead>Region</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-center">Contacts</TableHead>
@@ -94,10 +94,10 @@ export function CompaniesTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10">#</TableHead>
             <TableHead>Company Name</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Country</TableHead>
-            <TableHead>City</TableHead>
             <TableHead>Region</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-center">Contacts</TableHead>
@@ -106,12 +106,13 @@ export function CompaniesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {companies.map((company) => (
+          {companies.map((company, idx) => (
             <TableRow
               key={company.id}
               className="cursor-pointer"
               onClick={() => onRowClick(company)}
             >
+              <TableCell className="text-xs text-muted-foreground tabular-nums">{idx + 1}</TableCell>
               <TableCell className="font-medium">
                 {company.company_name || '—'}
               </TableCell>
@@ -123,7 +124,6 @@ export function CompaniesTable({
                 )}
               </TableCell>
               <TableCell>{company.country || '—'}</TableCell>
-              <TableCell>{company.city || '—'}</TableCell>
               <TableCell>{company.region || '—'}</TableCell>
               <TableCell>
                 {company.status ? (

@@ -59,26 +59,15 @@ export function PendingNudges() {
 
   async function handleAcknowledge(nudge: PendingNudge) {
     setAcknowledging(nudge.followup_id);
-
     try {
       const { error } = await supabase.rpc('acknowledge_nudge', {
         p_followup_id: nudge.followup_id,
       });
-
       if (error) throw error;
-
-      toast({
-        title: 'Acknowledged',
-        description: 'Follow-up acknowledged. Primary contact owner notified.',
-      });
-
+      toast({ title: 'Acknowledged', description: 'Follow-up acknowledged. Primary contact owner notified.' });
       loadPendingNudges();
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Failed to Acknowledge',
-        description: error.message,
-      });
+      toast({ variant: 'destructive', title: 'Failed to Acknowledge', description: error.message });
     } finally {
       setAcknowledging(null);
       setConfirmNudge(null);
@@ -89,7 +78,7 @@ export function PendingNudges() {
     if (status === 'ACKNOWLEDGED') {
       return (
         <Badge variant="secondary" className="text-xs">
-          <CheckCircle2 className="mr-1 h-3 w-3 text-green-600" />
+          <CheckCircle2 className="mr-1 h-3 w-3 text-emerald-600" />
           Acknowledged
         </Badge>
       );
@@ -110,136 +99,83 @@ export function PendingNudges() {
     );
   }
 
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-              <Bell className="h-5 w-5 text-amber-600" />
-            </div>
-            <CardTitle className="text-lg">Pending Follow-ups</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (nudges.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-              <Bell className="h-5 w-5 text-amber-600" />
-            </div>
-            <CardTitle className="text-lg">Pending Follow-ups</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-6 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-              <Bell className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">No pending follow-ups</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <>
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-              <Bell className="h-5 w-5 text-amber-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10">
+              <Bell className="h-4.5 w-4.5 text-amber-600" />
             </div>
-            <div>
-              <CardTitle className="text-lg">Pending Follow-ups</CardTitle>
-            </div>
-            <Badge className="ml-auto bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300">
-              {nudges.length} pending
-            </Badge>
+            <CardTitle className="text-base">Pending Follow-ups</CardTitle>
+            <Badge className="ml-auto" variant="secondary">{loading ? '…' : nudges.length}</Badge>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {nudges.map((nudge) => (
-              <div
-                key={nudge.followup_id}
-                className="rounded-lg border p-4 space-y-3"
-              >
-                {/* Contact Info */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{nudge.contact_name}</p>
-                    {nudge.company_name && (
-                      <p className="text-xs text-muted-foreground">{nudge.company_name}</p>
+          {loading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : nudges.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4 tabular-nums">0 pending follow-ups</p>
+          ) : (
+            <div className="space-y-3">
+              {nudges.map((nudge) => (
+                <div
+                  key={nudge.followup_id}
+                  className="rounded-lg border p-3 space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-sm">{nudge.contact_name}</p>
+                      {nudge.company_name && (
+                        <p className="text-xs text-muted-foreground">{nudge.company_name}</p>
+                      )}
+                    </div>
+                    {getStatusBadge(nudge.display_status)}
+                  </div>
+
+                  <div className="space-y-0.5 text-xs text-muted-foreground">
+                    <p><span className="font-medium text-foreground">Type:</span> {nudge.followup_type?.replace(/_/g, ' ')}</p>
+                    {nudge.followup_reason && (
+                      <p><span className="font-medium text-foreground">Reason:</span> {nudge.followup_reason}</p>
                     )}
                   </div>
-                  {getStatusBadge(nudge.display_status)}
-                </div>
 
-                {/* Follow-up Details */}
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <p>
-                    <span className="font-medium text-foreground">Type:</span> {nudge.followup_type?.replace(/_/g, ' ')}
-                  </p>
-                  {nudge.followup_reason && (
-                    <p>
-                      <span className="font-medium text-foreground">Reason:</span> {nudge.followup_reason}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>From: {nudge.created_by_name || 'Unknown'}</span>
+                    <span>Due: {formatDistanceToNow(new Date(nudge.due_at), { addSuffix: true })}</span>
+                  </div>
+
+                  {nudge.status === 'OPEN' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full h-7 text-xs"
+                      disabled={acknowledging === nudge.followup_id}
+                      onClick={() => setConfirmNudge(nudge)}
+                    >
+                      {acknowledging === nudge.followup_id ? (
+                        <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="mr-1.5 h-3 w-3" />
+                      )}
+                      Acknowledge
+                    </Button>
+                  )}
+
+                  {nudge.acknowledged_at && (
+                    <p className="text-xs text-emerald-600 text-center">
+                      ✓ Acknowledged {formatDistanceToNow(new Date(nudge.acknowledged_at), { addSuffix: true })}
                     </p>
                   )}
-                  {nudge.notes && (
-                    <p className="line-clamp-2">
-                      <span className="font-medium text-foreground">Notes:</span> {nudge.notes}
-                    </p>
-                  )}
                 </div>
-
-                {/* Creator & Due Date */}
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>From: {nudge.created_by_name || 'Unknown'}</span>
-                  <span>Due: {formatDistanceToNow(new Date(nudge.due_at), { addSuffix: true })}</span>
-                </div>
-
-                {/* Action Button */}
-                {nudge.status === 'OPEN' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    disabled={acknowledging === nudge.followup_id}
-                    onClick={() => setConfirmNudge(nudge)}
-                  >
-                    {acknowledging === nudge.followup_id ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                    )}
-                    Acknowledge Receipt
-                  </Button>
-                )}
-
-                {nudge.acknowledged_at && (
-                  <p className="text-xs text-green-600 text-center">
-                    ✓ Acknowledged {formatDistanceToNow(new Date(nudge.acknowledged_at), { addSuffix: true })}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Confirmation Dialog */}
       <AlertDialog open={!!confirmNudge} onOpenChange={(open) => !open && setConfirmNudge(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

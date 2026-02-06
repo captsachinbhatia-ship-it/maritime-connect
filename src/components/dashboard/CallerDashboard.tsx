@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { KPIRow } from './KPIRow';
-import { MyWorkToday } from './MyWorkToday';
-import { RecentInteractions } from './RecentInteractions';
 import { StageSnapshot } from './StageSnapshot';
 import { RecentCompanies } from './RecentCompanies';
+import { RecentInteractions } from './RecentInteractions';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
 import { ModeIndicator } from './ModeIndicator';
-import { PendingNudges } from './PendingNudges';
-import { MyNudges } from './MyNudges';
 import { TouchTargets } from './TouchTargets';
 import { GrowthTargets } from './GrowthTargets';
 import { DailyReport } from './DailyReport';
 import { EnquiriesSummary } from './EnquiriesSummary';
 import { ActivityMatrix } from './ActivityMatrix';
 import { UserVsTeamComparison } from './UserVsTeamComparison';
+import { DashboardLineChart } from './DashboardLineChart';
+import { ContactHealthSnapshot } from './ContactHealthSnapshot';
+import { MyWorkToday } from './MyWorkToday';
 
 interface CallerDashboardProps {
   isAdmin: boolean;
@@ -51,13 +51,19 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* KPI Row */}
       <KPIRow />
 
-      {/* Activity Matrix — replaces Interaction Recency */}
+      {/* Contact Health + Line Chart */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ContactHealthSnapshot />
+        <DashboardLineChart isPersonal />
+      </div>
+
+      {/* Activity Matrix */}
       <ActivityMatrix />
 
       {/* CEO: User vs Team Comparison */}
       <UserVsTeamComparison isCEO={isCEO} isAdmin={isAdmin} />
 
-      {/* Primary Row: Touch Targets + Growth Targets */}
+      {/* Touch Targets + Growth Targets */}
       <div className="grid gap-6 lg:grid-cols-2">
         <TouchTargets onContactClick={handleContactClick} />
         <GrowthTargets />
@@ -65,12 +71,6 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
 
       {/* Stage Snapshot */}
       <StageSnapshot />
-
-      {/* Nudges Row */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <PendingNudges />
-        <MyNudges />
-      </div>
 
       {/* Stale Contacts */}
       <MyWorkToday onContactClick={handleContactClick} />
