@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { 
   PhoneCall, Mail, Video, MessageSquare, MoreHorizontal, 
-  Check, X, Loader2, AlertCircle, CalendarClock
+  Check, X, Loader2, AlertCircle, CalendarClock, RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -99,7 +99,9 @@ export function FollowupsTab({
 
     toast({
       title: 'Follow-up completed',
-      description: 'The follow-up has been marked as completed.',
+      description: result.nextFollowupCreated
+        ? 'Completed! Next recurring follow-up has been auto-created.'
+        : 'The follow-up has been marked as completed.',
     });
     onRefresh();
   };
@@ -208,6 +210,13 @@ export function FollowupsTab({
                       <div className="flex items-center gap-1.5">
                         {TYPE_ICONS[followup.followup_type]}
                         <span className="text-sm">{followup.followup_type}</span>
+                        {followup.recurrence_enabled && (
+                          <Badge variant="outline" className="ml-1 text-xs gap-0.5 px-1.5">
+                            <RefreshCw className="h-2.5 w-2.5" />
+                            {followup.recurrence_frequency?.toLowerCase()}
+                            {(followup.recurrence_count || 0) > 0 && ` #${followup.recurrence_count}`}
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>

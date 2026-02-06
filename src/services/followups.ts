@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabaseClient';
 export type FollowupType = 'CALL' | 'EMAIL' | 'MEETING' | 'WHATSAPP' | 'OTHER';
 export type FollowupStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED';
 
+export type RecurrenceFrequency = 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+
 export interface ContactFollowup {
   id: string;
   contact_id: string;
@@ -16,6 +18,11 @@ export interface ContactFollowup {
   completed_at: string | null;
   created_at: string;
   created_by: string | null;
+  recurrence_enabled: boolean | null;
+  recurrence_frequency: RecurrenceFrequency | null;
+  recurrence_interval: number | null;
+  recurrence_end_date: string | null;
+  recurrence_count: number | null;
 }
 
 export interface FollowupWithContact extends ContactFollowup {
@@ -31,6 +38,10 @@ export interface CreateFollowupPayload {
   followup_reason: string;
   notes?: string | null;
   due_at: string;
+  recurrence_enabled?: boolean;
+  recurrence_frequency?: RecurrenceFrequency | null;
+  recurrence_interval?: number | null;
+  recurrence_end_date?: string | null;
 }
 
 // Q1: Get active assignment for a contact
@@ -120,18 +131,29 @@ export async function createFollowup(payload: CreateFollowupPayload): Promise<{
       return { data: null, error: 'No authenticated session. Please log in again.' };
     }
 
+    const insertPayload: Record<string, unknown> = {
+      contact_id: payload.contact_id,
+      assignment_id: payload.assignment_id,
+      interaction_id: payload.interaction_id || null,
+      followup_type: payload.followup_type,
+      followup_reason: payload.followup_reason,
+      notes: payload.notes || null,
+      due_at: payload.due_at,
+      status: 'OPEN',
+    };
+
+    // Add recurrence fields if enabled
+    if (payload.recurrence_enabled) {
+      insertPayload.recurrence_enabled = true;
+      insertPayload.recurrence_frequency = payload.recurrence_frequency || null;
+      insertPayload.recurrence_interval = payload.recurrence_interval || 1;
+      insertPayload.recurrence_end_date = payload.recurrence_end_date || null;
+      insertPayload.recurrence_count = 0;
+    }
+
     const { data, error } = await supabase
       .from('contact_followups')
-      .insert({
-        contact_id: payload.contact_id,
-        assignment_id: payload.assignment_id,
-        interaction_id: payload.interaction_id || null,
-        followup_type: payload.followup_type,
-        followup_reason: payload.followup_reason,
-        notes: payload.notes || null,
-        due_at: payload.due_at,
-        status: 'OPEN',
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -151,16 +173,33 @@ export async function createFollowup(payload: CreateFollowupPayload): Promise<{
   }
 }
 
-// Q4: Mark follow-up as completed
+// Q4: Mark follow-up as completed (and auto-create next if recurring)
 export async function markFollowupComplete(followupId: string): Promise<{
   error: string | null;
+  nextFollowupCreated?: boolean;
 }> {
   try {
+    // First fetch the followup to check recurrence
+    const { data: followup, error: fetchError } = await supabase
+      .from('contact_followups')
+      .select('*')
+      .eq('id', followupId)
+      .eq('status', 'OPEN')
+      .maybeSingle();
+
+    if (fetchError) {
+      return { error: fetchError.message };
+    }
+
+    if (!followup) {
+      return { error: 'Follow-up not found or already completed.' };
+    }
+
+    // Mark as completed
     const { error } = await supabase
       .from('contact_followups')
-      .update({ status: 'COMPLETED' })
-      .eq('id', followupId)
-      .eq('status', 'OPEN');
+      .update({ status: 'COMPLETED', completed_at: new Date().toISOString() })
+      .eq('id', followupId);
 
     if (error) {
       if (error.message.includes('row-level security')) {
@@ -169,12 +208,81 @@ export async function markFollowupComplete(followupId: string): Promise<{
       return { error: error.message };
     }
 
-    return { error: null };
+    // Auto-create next recurring followup
+    let nextFollowupCreated = false;
+    if (followup.recurrence_enabled && followup.recurrence_frequency) {
+      const nextDue = calculateNextDueDate(
+        followup.due_at,
+        followup.recurrence_frequency,
+        followup.recurrence_interval || 1
+      );
+
+      // Check if we passed the end date
+      const shouldCreate = !followup.recurrence_end_date || 
+        new Date(nextDue) <= new Date(followup.recurrence_end_date);
+
+      if (shouldCreate) {
+        const nextPayload: Record<string, unknown> = {
+          contact_id: followup.contact_id,
+          assignment_id: followup.assignment_id,
+          followup_type: followup.followup_type,
+          followup_reason: followup.followup_reason,
+          notes: followup.notes,
+          due_at: nextDue,
+          status: 'OPEN',
+          recurrence_enabled: true,
+          recurrence_frequency: followup.recurrence_frequency,
+          recurrence_interval: followup.recurrence_interval || 1,
+          recurrence_end_date: followup.recurrence_end_date || null,
+          recurrence_count: (followup.recurrence_count || 0) + 1,
+        };
+
+        const { error: insertError } = await supabase
+          .from('contact_followups')
+          .insert(nextPayload);
+
+        if (!insertError) {
+          nextFollowupCreated = true;
+        }
+      }
+    }
+
+    return { error: null, nextFollowupCreated };
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : 'Failed to complete follow-up',
     };
   }
+}
+
+// Helper: Calculate next due date based on frequency
+function calculateNextDueDate(currentDue: string, frequency: string, interval: number): string {
+  const date = new Date(currentDue);
+  
+  switch (frequency) {
+    case 'DAILY':
+      date.setDate(date.getDate() + interval);
+      break;
+    case 'WEEKLY':
+      date.setDate(date.getDate() + 7 * interval);
+      break;
+    case 'BIWEEKLY':
+      date.setDate(date.getDate() + 14 * interval);
+      break;
+    case 'MONTHLY':
+      date.setMonth(date.getMonth() + interval);
+      break;
+    case 'QUARTERLY':
+      date.setMonth(date.getMonth() + 3 * interval);
+      break;
+    case 'YEARLY':
+      date.setFullYear(date.getFullYear() + interval);
+      break;
+    default:
+      date.setDate(date.getDate() + 7);
+  }
+  
+  return date.toISOString();
 }
 
 // Q5: Cancel a follow-up

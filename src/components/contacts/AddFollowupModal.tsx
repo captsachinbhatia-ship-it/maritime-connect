@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { format, addDays, setHours, setMinutes } from 'date-fns';
-import { CalendarIcon, Loader2, AlertCircle } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ import {
   getActiveAssignmentForContact,
   createFollowup,
   FollowupType,
+  RecurrenceFrequency,
 } from '@/services/followups';
 
 interface AddFollowupModalProps {
@@ -73,6 +75,11 @@ export function AddFollowupModal({
   const [followupReason, setFollowupReason] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Recurrence state
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<RecurrenceFrequency>('WEEKLY');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<Date | undefined>(undefined);
   // Check for active assignment when modal opens
   useEffect(() => {
     if (isOpen && contactId) {
@@ -91,6 +98,10 @@ export function AddFollowupModal({
       setNotes('');
       setError(null);
       setActiveAssignmentId(null);
+      setIsRecurring(false);
+      setRecurrenceFrequency('WEEKLY');
+      setRecurrenceInterval(1);
+      setRecurrenceEndDate(undefined);
     }
   }, [isOpen]);
 
@@ -163,6 +174,10 @@ export function AddFollowupModal({
       followup_reason: followupReason.trim(),
       notes: notes.trim() || null,
       due_at: dueAt.toISOString(),
+      recurrence_enabled: isRecurring,
+      recurrence_frequency: isRecurring ? recurrenceFrequency : null,
+      recurrence_interval: isRecurring ? recurrenceInterval : null,
+      recurrence_end_date: isRecurring && recurrenceEndDate ? recurrenceEndDate.toISOString() : null,
     });
 
     setIsLoading(false);
@@ -173,8 +188,10 @@ export function AddFollowupModal({
     }
 
     toast({
-      title: 'Follow-up scheduled successfully',
-      description: `Scheduled for ${format(dueAt, 'MMM d, yyyy h:mm a')}`,
+      title: isRecurring ? '♻️ Recurring follow-up scheduled' : 'Follow-up scheduled successfully',
+      description: isRecurring
+        ? `Repeats every ${recurrenceInterval > 1 ? recurrenceInterval + ' ' : ''}${recurrenceFrequency.toLowerCase()}${recurrenceInterval > 1 ? 's' : ''}`
+        : `Scheduled for ${format(dueAt, 'MMM d, yyyy h:mm a')}`,
     });
 
     onSuccess();
@@ -294,6 +311,91 @@ export function AddFollowupModal({
                 rows={3}
                 maxLength={1000}
               />
+            </div>
+
+            {/* Recurrence */}
+            <div className="border-t pt-4 space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="recurring"
+                  checked={isRecurring}
+                  onCheckedChange={(checked) => setIsRecurring(checked as boolean)}
+                />
+                <label htmlFor="recurring" className="text-sm font-medium cursor-pointer flex items-center gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Make this recurring
+                </label>
+              </div>
+
+              {isRecurring && (
+                <div className="pl-6 space-y-3 border-l-2 border-primary/20">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Frequency</Label>
+                      <Select value={recurrenceFrequency} onValueChange={(v) => setRecurrenceFrequency(v as RecurrenceFrequency)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DAILY">Daily</SelectItem>
+                          <SelectItem value="WEEKLY">Weekly</SelectItem>
+                          <SelectItem value="BIWEEKLY">Bi-weekly</SelectItem>
+                          <SelectItem value="MONTHLY">Monthly</SelectItem>
+                          <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+                          <SelectItem value="YEARLY">Yearly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Every</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={52}
+                        value={recurrenceInterval}
+                        onChange={(e) => setRecurrenceInterval(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>End Date (optional)</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            'w-full justify-start text-left font-normal',
+                            !recurrenceEndDate && 'text-muted-foreground'
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {recurrenceEndDate ? format(recurrenceEndDate, 'PPP') : 'No end date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={recurrenceEndDate}
+                          onSelect={setRecurrenceEndDate}
+                          initialFocus
+                          disabled={(date) => date < new Date()}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <p className="text-xs text-muted-foreground">Leave blank to continue indefinitely</p>
+                  </div>
+
+                  <div className="text-sm text-primary bg-primary/5 p-2 rounded flex items-start gap-2">
+                    <RefreshCw className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>
+                      When you mark this complete, the next follow-up will auto-create{' '}
+                      {recurrenceInterval > 1 ? `${recurrenceInterval} ` : ''}
+                      {recurrenceFrequency.toLowerCase()}{recurrenceInterval > 1 ? 's' : ''} later.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter>
