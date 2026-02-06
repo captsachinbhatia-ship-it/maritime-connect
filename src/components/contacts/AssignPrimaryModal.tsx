@@ -104,7 +104,7 @@ export function AssignPrimaryModal({
   };
 
   const formatUserLabel = (user: { full_name: string; email: string | null }): string => {
-    return user.email ? `${user.full_name} (${user.email})` : user.full_name;
+    return user.full_name;
   };
 
   return (

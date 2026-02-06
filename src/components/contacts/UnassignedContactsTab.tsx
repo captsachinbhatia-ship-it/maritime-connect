@@ -226,14 +226,11 @@ export function UnassignedContactsTab() {
   };
 
   const formatUserLabel = (user: CrmUserForAssignment): string => {
-    return user.email ? `${user.full_name} (${user.email})` : user.full_name;
+    return user.full_name;
   };
 
   const formatCreatedBy = (contact: UnassignedContact): string => {
-    if (!contact.created_by_name) return 'Unknown';
-    return contact.created_by_email
-      ? `${contact.created_by_name} (${contact.created_by_email})`
-      : contact.created_by_name;
+    return contact.created_by_name || 'Unknown';
   };
 
   return (

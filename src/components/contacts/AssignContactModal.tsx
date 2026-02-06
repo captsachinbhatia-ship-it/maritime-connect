@@ -120,11 +120,7 @@ export function AssignContactModal({
     onOpenChange(newOpen);
   };
 
-  // Format label: full_name (email)
   const formatUserLabel = (user: CrmUserForAssignment): string => {
-    if (user.email) {
-      return `${user.full_name} (${user.email})`;
-    }
     return user.full_name;
   };
 
