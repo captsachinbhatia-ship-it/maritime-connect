@@ -84,7 +84,7 @@ export function ContactDetailsDrawer({
   onOwnersChange,
   onCompanyChange,
 }: ContactDetailsDrawerProps) {
-  const { crmUser } = useAuth();
+  const { crmUser, isAdmin: authIsAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('details');
   const [assignments, setAssignments] = useState<ContactAssignment[]>([]);
   const [interactions, setInteractions] = useState<ContactInteraction[]>([]);
@@ -177,8 +177,12 @@ export function ContactDetailsDrawer({
     return ownerNames[owners.secondary.assigned_to_crm_user_id] || 'Unknown';
   }, [owners, ownerNames]);
 
-  // Check admin status on mount
+  // Check admin status - use context value, with DB fallback
   useEffect(() => {
+    if (authIsAdmin !== undefined) {
+      setIsAdmin(authIsAdmin);
+      return;
+    }
     const checkAdmin = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -193,7 +197,7 @@ export function ContactDetailsDrawer({
     };
     
     checkAdmin();
-  }, []);
+  }, [authIsAdmin]);
 
   // Load contact phones when drawer opens
   const loadContactPhones = useCallback(async () => {
@@ -723,8 +727,8 @@ export function ContactDetailsDrawer({
                   </>
                 )}
 
-                {/* Stage & Coordination Actions */}
-                {currentStage && (
+                {/* Stage & Coordination Actions (Admin only) */}
+                {currentStage && isAdmin && (
                   <>
                     <Separator />
                     <div className="space-y-3">
@@ -739,7 +743,7 @@ export function ContactDetailsDrawer({
                           onClick={() => setIsStageRequestOpen(true)}
                         >
                           <ArrowUpRight className="mr-1 h-3 w-3" />
-                          Request Stage Move
+                          Change Stage
                         </Button>
                       </div>
                     </div>
