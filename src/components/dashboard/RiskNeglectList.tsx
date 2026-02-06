@@ -102,7 +102,7 @@ export function RiskNeglectList() {
           .in('id', assigneeIds);
 
         const crmUserMap = new Map(
-          crmUsers?.map(u => [u.id, u.full_name || u.email || 'Unknown']) || []
+          crmUsers?.map(u => [u.id, u.full_name || 'Unknown']) || []
         );
 
         // Build result

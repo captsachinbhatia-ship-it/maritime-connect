@@ -148,7 +148,7 @@ export function AddAssignmentModal({
                 <SelectContent>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {user.full_name} {user.email ? `(${user.email})` : ''}
+                      {user.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
