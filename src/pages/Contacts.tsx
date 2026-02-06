@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
@@ -7,20 +8,36 @@ import { AssignedContactsTab } from '@/components/contacts/AssignedContactsTab';
 import { MyContactsTab } from '@/components/contacts/MyContactsTab';
 import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
 import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
+import { BulkImportTab } from '@/components/contacts/BulkImportTab';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, UserPlus, Users2 } from 'lucide-react';
+import { Loader2, UserPlus, Users2, FileUp } from 'lucide-react';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
-type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary';
+type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary' | 'bulk-import';
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>('my-contacts'); // Default to My Contacts
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'bulk-import' || tabParam === 'my-added') return tabParam as TabType;
+    return 'my-contacts';
+  });
   const [refreshKey, setRefreshKey] = useState(0);
   const [myAddedCount, setMyAddedCount] = useState(0);
   const [secondaryCount, setSecondaryCount] = useState(0);
+
+  // Sync tab from URL param
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'bulk-import' || tabParam === 'my-added') {
+      setActiveTab(tabParam as TabType);
+      // Clear the param after applying
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const checkRole = async () => {
@@ -90,10 +107,20 @@ export default function Contacts() {
   }, [authLoading, crmUser, loadMyAddedCount, loadSecondaryCount]);
 
   const handleContactAdded = () => {
-    // Trigger refresh by updating key
     setRefreshKey(prev => prev + 1);
     loadMyAddedCount();
     loadSecondaryCount();
+  };
+
+  const handleImportComplete = () => {
+    // Navigate to My Added tab and refresh counts
+    setActiveTab('my-added');
+    setRefreshKey(prev => prev + 1);
+    loadMyAddedCount();
+  };
+
+  const handleTabChange = (val: string) => {
+    setActiveTab(val as TabType);
   };
 
   // Show loading while checking role
@@ -130,9 +157,7 @@ export default function Contacts() {
         <AddContactModal onSuccess={handleContactAdded} />
       </div>
 
-      {/* Tab structure: All Contacts (global), My Contacts (PRIMARY + stage tabs), Secondary, My Added */}
-      {/* Admins additionally see Unassigned tab */}
-      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as TabType)}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="my-contacts" className="font-semibold">
             My Contacts
@@ -159,6 +184,16 @@ export default function Contacts() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger
+            value="bulk-import"
+            className="flex items-center gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+            Bulk Import
+            <Badge variant="outline" className="ml-1 h-5 px-1.5 text-[10px] font-semibold border-amber-500 text-amber-600 dark:text-amber-400">
+              ⭐
+            </Badge>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="my-contacts" className="mt-4">
@@ -181,6 +216,10 @@ export default function Contacts() {
 
         <TabsContent value="my-added" className="mt-4">
           <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadMyAddedCount} />
+        </TabsContent>
+
+        <TabsContent value="bulk-import" className="mt-4">
+          <BulkImportTab key={`import-${refreshKey}`} onImportComplete={handleImportComplete} />
         </TabsContent>
       </Tabs>
     </div>

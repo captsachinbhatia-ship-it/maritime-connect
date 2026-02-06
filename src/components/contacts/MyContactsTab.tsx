@@ -123,24 +123,10 @@ export function MyContactsTab() {
         return;
       }
 
-      // Fetch contacts
+      // Fetch contacts from the view
       const { data: contactsData, error: contactsError } = await supabase
-        .from('contacts')
-        .select(`
-          id,
-          full_name,
-          company_id,
-          designation,
-          country_code,
-          phone,
-          phone_type,
-          email,
-          ice_handle,
-          preferred_channel,
-          notes,
-          is_active,
-          updated_at
-        `)
+        .from('contacts_with_primary_phone')
+        .select('*')
         .in('id', contactIds)
         .eq('is_active', true)
         .order('full_name', { ascending: true });
@@ -215,7 +201,7 @@ export function MyContactsTab() {
       const fullName = (contact.full_name || '').toLowerCase();
       const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
       const email = (contact.email || '').toLowerCase();
-      const phone = (contact.phone || '').toLowerCase();
+      const phone = (contact.primary_phone || '').toLowerCase();
       return fullName.includes(searchLower) || 
              companyName.includes(searchLower) || 
              email.includes(searchLower) || 

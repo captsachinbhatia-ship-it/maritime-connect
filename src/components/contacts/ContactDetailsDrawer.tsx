@@ -407,12 +407,18 @@ export function ContactDetailsDrawer({
   if (!contact) return null;
 
   const formatPhone = () => {
+    // Prefer primary_phone from the view
+    if (contact.primary_phone) {
+      return contact.primary_phone;
+    }
     if (contact.phone) {
       const code = contact.country_code ? `+${contact.country_code} ` : '';
       return `${code}${contact.phone}`;
     }
     return null;
   };
+
+  const primaryPhoneType = contact.primary_phone_type || contact.phone_type || null;
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
@@ -676,8 +682,8 @@ export function ContactDetailsDrawer({
                       ) : formatPhone() ? (
                         <p className="text-foreground">
                           {formatPhone()}
-                          {contact.phone_type && (
-                            <span className="ml-2 text-xs text-muted-foreground">({contact.phone_type})</span>
+                          {primaryPhoneType && (
+                            <span className="ml-2 text-xs text-muted-foreground">({primaryPhoneType})</span>
                           )}
                         </p>
                       ) : (

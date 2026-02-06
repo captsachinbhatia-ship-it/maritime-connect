@@ -59,7 +59,7 @@ export function StagingTable({ rows, isLoading, isAdmin }: StagingTableProps) {
     id: string;
     full_name: string;
     email: string | null;
-    phone: string | null;
+    primary_phone: string | null;
     designation: string | null;
   } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -177,7 +177,7 @@ export function StagingTable({ rows, isLoading, isAdmin }: StagingTableProps) {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Phone</p>
-                <p className="text-foreground">{previewContact.phone || '-'}</p>
+                <p className="text-foreground">{previewContact.primary_phone || '-'}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Designation</p>

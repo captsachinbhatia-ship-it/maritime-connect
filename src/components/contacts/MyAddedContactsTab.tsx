@@ -71,26 +71,10 @@ import { ContactWithCompany } from '@/types';
          return;
        }
  
-        // Fetch contacts created by this user
+        // Fetch contacts created by this user from the view
         let contactsQuery = supabase
-          .from('contacts')
-          .select(`
-            id,
-            full_name,
-            company_id,
-            designation,
-            country_code,
-            phone,
-            phone_type,
-            email,
-            ice_handle,
-            preferred_channel,
-            notes,
-            is_active,
-            updated_at,
-            created_at,
-            created_by_crm_user_id
-          `)
+          .from('contacts_with_primary_phone')
+          .select('*')
           .eq('created_by_crm_user_id', currentCrmUserId)
           .order('created_at', { ascending: false });
 
@@ -234,7 +218,7 @@ import { ContactWithCompany } from '@/types';
       const fullName = (contact.full_name || '').toLowerCase();
       const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
       const email = (contact.email || '').toLowerCase();
-      const phone = (contact.phone || '').toLowerCase();
+      const phone = (contact.primary_phone || '').toLowerCase();
       return fullName.includes(searchLower) || 
              companyName.includes(searchLower) || 
              email.includes(searchLower) || 

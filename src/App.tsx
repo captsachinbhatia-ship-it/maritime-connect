@@ -19,7 +19,7 @@ import MyFollowups from "./pages/MyFollowups";
 import FollowupsOversight from "./pages/FollowupsOversight";
 import AdminUsers from "./pages/AdminUsers";
 import DailyWorkDone from "./pages/DailyWorkDone";
-import BulkImport from "./pages/BulkImport";
+
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
@@ -60,7 +60,7 @@ const App = () => {
                 <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="reporting" element={<Reporting />} />
-                <Route path="bulk-import" element={<BulkImport />} />
+                <Route path="bulk-import" element={<Navigate to="/contacts?tab=bulk-import" replace />} />
                 <Route path="account/security" element={<AccountSecurity />} />
               </Route>
               <Route path="*" element={<NotFound />} />

@@ -31,7 +31,8 @@ interface UnassignedContact {
   company_name: string | null;
   designation: string | null;
   email: string | null;
-  phone: string | null;
+  primary_phone: string | null;
+  primary_phone_type: string | null;
   created_at: string | null;
   created_by_crm_user_id: string | null;
 }
@@ -72,15 +73,16 @@ export function UnassignedContactsTab() {
       const assignedContactIds = new Set((activePrimaryAssignments || []).map(a => a.contact_id));
       console.log('[UnassignedContactsTab] Contacts with ACTIVE PRIMARY:', assignedContactIds.size);
 
-      // Get all active contacts
+      // Get all active contacts from the view
       const { data: allContacts, error: contactsError } = await supabase
-        .from('contacts')
+        .from('contacts_with_primary_phone')
         .select(`
           id,
           full_name,
           designation,
           email,
-          phone,
+          primary_phone,
+          primary_phone_type,
           company_id,
           companies ( company_name ),
           created_at,
@@ -105,7 +107,8 @@ export function UnassignedContactsTab() {
           company_name: c.companies?.company_name || null,
           designation: c.designation,
           email: c.email,
-          phone: c.phone,
+          primary_phone: c.primary_phone || null,
+          primary_phone_type: c.primary_phone_type || null,
           created_at: c.created_at,
           created_by_crm_user_id: c.created_by_crm_user_id,
         }));
@@ -141,7 +144,7 @@ export function UnassignedContactsTab() {
       const fullName = (contact.full_name || '').toLowerCase();
       const companyName = (contact.company_name || '').toLowerCase();
       const email = (contact.email || '').toLowerCase();
-      const phone = (contact.phone || '').toLowerCase();
+      const phone = (contact.primary_phone || '').toLowerCase();
       return fullName.includes(searchLower) || 
              companyName.includes(searchLower) || 
              email.includes(searchLower) || 
