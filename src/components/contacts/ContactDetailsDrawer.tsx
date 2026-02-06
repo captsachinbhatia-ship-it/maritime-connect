@@ -23,7 +23,8 @@ import { getAssignmentsByContact, getContactOwners, ContactAssignment, ContactOw
 import { getInteractionsByContact, getUserNames, ContactInteraction, InteractionFilters } from '@/services/interactions';
 import { getFollowupsByContact, ContactFollowup } from '@/services/followups';
 import { getNudgeStatus, NudgeStatus } from '@/services/nudgeStatus';
-import { AddInteractionModal } from './AddInteractionModal';
+import { LogInteractionDialog } from './LogInteractionDialog';
+import { InteractionTimeline } from './InteractionTimeline';
 import { InteractionsFilters, InteractionsFiltersState } from './InteractionsFilters';
 import { FollowupsTab } from './FollowupsTab';
 import { AddFollowupModal } from './AddFollowupModal';
@@ -59,21 +60,7 @@ const STAGE_COLORS: Record<string, string> = {
   INACTIVE: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
 };
 
-const INTERACTION_ICONS: Record<string, React.ReactNode> = {
-  CALL: <PhoneCall className="h-4 w-4" />,
-  WHATSAPP: <MessageSquare className="h-4 w-4" />,
-  EMAIL: <Mail className="h-4 w-4" />,
-  MEETING: <Video className="h-4 w-4" />,
-  NOTE: <FileEdit className="h-4 w-4" />,
-};
-
-const INTERACTION_COLORS: Record<string, string> = {
-  CALL: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-  WHATSAPP: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-  EMAIL: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
-  MEETING: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
-  NOTE: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',
-};
+// Interaction icons/colors moved to InteractionTimeline component
 
 export function ContactDetailsDrawer({
   contact,
@@ -1014,14 +1001,17 @@ export function ContactDetailsDrawer({
 
             {/* Interactions Tab */}
             <TabsContent value="interactions" className="m-0 p-6">
-              {/* Add Interaction Button */}
-              <div className="mb-4">
+              {/* Header with count + Log button */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Interaction History ({interactions.length})
+                </h3>
                 <Button
+                  size="sm"
                   onClick={() => setIsAddInteractionOpen(true)}
-                  className="w-full"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Interaction
+                  <Plus className="mr-1 h-4 w-4" />
+                  Log Interaction
                 </Button>
               </div>
 
@@ -1052,44 +1042,17 @@ export function ContactDetailsDrawer({
                 <div className="text-center py-12 text-muted-foreground">
                   <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>No interactions yet</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setIsAddInteractionOpen(true)}
+                  >
+                    Log First Interaction
+                  </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {interactions.map((interaction) => (
-                    <div key={interaction.id} className="rounded-lg border p-4">
-                      <div className="flex items-start gap-3">
-                        <div className={`rounded-full p-2 ${INTERACTION_COLORS[interaction.interaction_type] || INTERACTION_COLORS.NOTE}`}>
-                          {INTERACTION_ICONS[interaction.interaction_type] || <FileEdit className="h-4 w-4" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="outline" className="text-xs">
-                              {interaction.interaction_type}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDate(interaction.interaction_at)}
-                            </span>
-                          </div>
-                          {interaction.summary && (
-                            <p className="text-sm text-foreground mb-2">{interaction.summary}</p>
-                          )}
-                          {interaction.next_action && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 pt-2 border-t">
-                              <Clock className="h-3 w-3" />
-                              <span>Next: {interaction.next_action}</span>
-                              {interaction.next_action_date && (
-                                <span>({formatShortDate(interaction.next_action_date)})</span>
-                              )}
-                            </div>
-                          )}
-                          <div className="text-xs text-muted-foreground mt-2">
-                            By: {interaction.creator_full_name || interaction.creator_email || 'System / Admin'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <InteractionTimeline interactions={interactions} />
               )}
             </TabsContent>
 
@@ -1106,12 +1069,13 @@ export function ContactDetailsDrawer({
           </ScrollArea>
         </Tabs>
 
-        {/* Add Interaction Modal */}
+        {/* Log Interaction Dialog */}
         {contact && (
-          <AddInteractionModal
+          <LogInteractionDialog
             contactId={contact.id}
-            isOpen={isAddInteractionOpen}
-            onClose={() => setIsAddInteractionOpen(false)}
+            contactName={contact.full_name || 'Unknown'}
+            open={isAddInteractionOpen}
+            onOpenChange={setIsAddInteractionOpen}
             onSuccess={loadInteractions}
           />
         )}
