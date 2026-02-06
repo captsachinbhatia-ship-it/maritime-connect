@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Loader2, FileText, Copy, Check, ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
@@ -44,7 +43,6 @@ export function DailyReport() {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const todayISO = startOfToday.toISOString();
 
-      // Get user's assigned contacts
       const { data: assignments } = await supabase
         .from('contact_assignments')
         .select('contact_id, stage')
@@ -54,13 +52,11 @@ export function DailyReport() {
 
       const contactIds = [...new Set((assignments || []).map(a => a.contact_id))];
 
-      // Stage breakdown
       const stageBreakdown: Record<string, number> = {};
       (assignments || []).forEach(a => {
         stageBreakdown[a.stage] = (stageBreakdown[a.stage] || 0) + 1;
       });
 
-      // Today's interactions
       let totalInteractions = 0;
       const interactionsByType: Record<string, number> = {};
       const contactInteractionCount: Record<string, number> = {};
@@ -79,14 +75,12 @@ export function DailyReport() {
         });
       }
 
-      // Follow-ups created today
       const { count: followupsCreated } = await supabase
         .from('contact_followups')
         .select('*', { count: 'exact', head: true })
         .eq('created_by_crm_user_id', currentCrmUserId)
         .gte('created_at', todayISO);
 
-      // Follow-ups due/overdue
       const endOfToday = new Date(startOfToday);
       endOfToday.setHours(23, 59, 59, 999);
       let followupsDueOverdue = 0;
@@ -100,10 +94,7 @@ export function DailyReport() {
         followupsDueOverdue = count || 0;
       }
 
-      // Nudges
-      const { data: nudgesRecv } = await supabase
-        .from('v_my_pending_nudges')
-        .select('followup_id');
+      const { data: nudgesRecv } = await supabase.from('v_my_pending_nudges').select('followup_id');
       const nudgesReceived = nudgesRecv?.length || 0;
 
       const { data: nudgesSentData } = await supabase
@@ -113,7 +104,6 @@ export function DailyReport() {
       const nudgesSent = nudgesSentData?.length || 0;
       const nudgesAcknowledged = (nudgesSentData || []).filter(n => n.display_status === 'ACKNOWLEDGED').length;
 
-      // New contacts & companies today
       const { count: contactsAdded } = await supabase
         .from('contacts')
         .select('*', { count: 'exact', head: true })
@@ -126,7 +116,6 @@ export function DailyReport() {
         .eq('created_by_crm_user_id', currentCrmUserId)
         .gte('created_at', todayISO);
 
-      // Top 10 contacts interacted with today
       const topContactIds = Object.entries(contactInteractionCount)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 10);
@@ -161,7 +150,6 @@ export function DailyReport() {
 
       setReport(data);
 
-      // Generate text
       const userName = crmUser?.full_name || 'User';
       const dateStr = format(now, 'dd MMM yyyy');
       const typeSummary = Object.entries(interactionsByType)
@@ -225,20 +213,20 @@ ${topList}`;
   };
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-              <FileText className="h-5 w-5 text-accent-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent">
+              <FileText className="h-4.5 w-4.5 text-accent-foreground" />
             </div>
-            <CardTitle className="text-lg">Daily Report</CardTitle>
+            <CardTitle className="text-base">Daily Report</CardTitle>
           </div>
-          <Button size="sm" onClick={generateReport} disabled={isGenerating}>
+          <Button size="sm" variant="outline" onClick={generateReport} disabled={isGenerating} className="h-8 text-xs">
             {isGenerating ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Generating…
               </>
             ) : (
               'Generate Report'
@@ -246,37 +234,37 @@ ${topList}`;
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {!report ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
+          <p className="text-sm text-muted-foreground text-center py-6">
             Click "Generate Report" to create your end-of-day summary.
           </p>
         ) : (
           <div className="space-y-3">
-            <pre className="whitespace-pre-wrap rounded-lg bg-muted/50 p-4 text-sm font-mono leading-relaxed max-h-80 overflow-y-auto">
+            <pre className="whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-xs font-mono leading-relaxed max-h-72 overflow-y-auto border">
               {reportText}
             </pre>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleCopy}>
+              <Button variant="outline" size="sm" onClick={handleCopy} className="h-7 text-xs">
                 {copied ? (
                   <>
-                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    <Check className="mr-1 h-3 w-3" />
                     Copied
                   </>
                 ) : (
                   <>
-                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    <Copy className="mr-1 h-3 w-3" />
                     Copy for WhatsApp
                   </>
                 )}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleWhatsApp}>
-                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              <Button variant="outline" size="sm" onClick={handleWhatsApp} className="h-7 text-xs">
+                <ExternalLink className="mr-1 h-3 w-3" />
                 Open WhatsApp
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Note: WhatsApp will open in a new tab with the report pre-filled. It does not send automatically.
+            <p className="text-[11px] text-muted-foreground">
+              WhatsApp opens in a new tab with the report pre-filled. It does not send automatically.
             </p>
           </div>
         )}

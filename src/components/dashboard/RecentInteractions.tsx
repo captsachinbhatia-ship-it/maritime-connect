@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
-import { Loader2, MessageSquare, Phone, Mail, Video, StickyNote } from 'lucide-react';
+import { MessageSquare, Phone, Mail, Video, StickyNote } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface RecentInteraction {
@@ -30,19 +31,14 @@ export function RecentInteractions() {
   useEffect(() => {
     const fetchRecentInteractions = async () => {
       setIsLoading(true);
-
       try {
-        // Get current user's CRM ID for filtering
         const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-        
         if (crmError || !currentCrmUserId) {
-          console.error('Failed to get CRM user ID:', crmError);
           setInteractions([]);
           setIsLoading(false);
           return;
         }
 
-        // Fetch only assignments where current user is PRIMARY or SECONDARY owner
         const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
@@ -58,7 +54,6 @@ export function RecentInteractions() {
           return;
         }
 
-        // Fetch recent interactions from timeline view (only for my contacts)
         const { data: interactionsData } = await supabase
           .from('v_contact_interactions_timeline')
           .select('id, contact_id, interaction_type, interaction_at, subject')
@@ -72,7 +67,6 @@ export function RecentInteractions() {
           return;
         }
 
-        // Fetch contact names
         const uniqueContactIds = [...new Set(interactionsData.map(i => i.contact_id))];
         const { data: contacts } = await supabase
           .from('contacts')
@@ -81,63 +75,57 @@ export function RecentInteractions() {
 
         const contactMap = new Map(contacts?.map(c => [c.id, c.full_name || 'Unknown']) || []);
 
-        const enriched = interactionsData.map(i => ({
+        setInteractions(interactionsData.map(i => ({
           ...i,
           contact_name: contactMap.get(i.contact_id) || 'Unknown',
-        }));
-
-        setInteractions(enriched);
+        })));
       } catch (error) {
         console.error('Failed to fetch recent interactions:', error);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchRecentInteractions();
   }, []);
 
   return (
-    <Card className="h-full">
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <MessageSquare className="h-5 w-5 text-primary" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+            <MessageSquare className="h-4.5 w-4.5 text-primary" />
           </div>
-          <div>
-            <CardTitle className="text-lg">My Recent Interactions</CardTitle>
-            <CardDescription>Last 5 activities on your assigned contacts</CardDescription>
-          </div>
+          <CardTitle className="text-base">Recent Interactions</CardTitle>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
           </div>
         ) : interactions.length === 0 ? (
-          <div className="py-8 text-center text-muted-foreground">
-            No recent interactions
-          </div>
+          <p className="py-6 text-center text-sm text-muted-foreground">No recent interactions</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {interactions.map((interaction) => {
               const Icon = typeIcons[interaction.interaction_type] || MessageSquare;
               return (
                 <div
                   key={interaction.id}
-                  className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3"
+                  className="flex items-center gap-3 rounded-lg border p-2.5"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-sm">{interaction.contact_name}</p>
-                    <div className="mt-0.5 flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs">
+                    <p className="truncate text-sm font-medium leading-tight">{interaction.contact_name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Badge variant="secondary" className="text-[11px] py-0">
                         {interaction.interaction_type}
                       </Badge>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground">
                         {formatDistanceToNow(new Date(interaction.interaction_at), { addSuffix: true })}
                       </span>
                     </div>

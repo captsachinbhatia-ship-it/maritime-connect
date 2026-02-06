@@ -35,12 +35,12 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">My Dashboard</h1>
-          <p className="mt-1 text-muted-foreground">
+          <h1 className="text-2xl font-bold text-foreground">My Dashboard</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             Your personal work and assigned contacts
           </p>
         </div>
@@ -50,16 +50,19 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* KPI Row */}
       <KPIRow />
 
-      {/* Touch Targets + Growth Targets */}
+      {/* Primary Row: Touch Targets + Growth Targets */}
       <div className="grid gap-6 lg:grid-cols-2">
         <TouchTargets onContactClick={handleContactClick} />
         <GrowthTargets />
       </div>
 
-      {/* Interaction Recency */}
-      <InteractionRecency />
+      {/* Interaction Recency + Stage Snapshot */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <InteractionRecency />
+        <StageSnapshot />
+      </div>
 
-      {/* Nudges Grid */}
+      {/* Nudges Row */}
       <div className="grid gap-6 md:grid-cols-2">
         <PendingNudges />
         <MyNudges />
@@ -68,10 +71,10 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* Stale Contacts */}
       <MyWorkToday onContactClick={handleContactClick} />
 
-      {/* Secondary Panels */}
+      {/* Recent Interactions + Recent Companies */}
       <div className="grid gap-6 lg:grid-cols-2">
         <RecentInteractions />
-        <StageSnapshot />
+        <RecentCompanies />
       </div>
 
       {/* Enquiries + Daily Report */}
@@ -79,9 +82,6 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         <EnquiriesSummary />
         <DailyReport />
       </div>
-
-      {/* Recent Companies */}
-      <RecentCompanies />
 
       {/* Contact Details Drawer */}
       <ContactDetailsDrawer

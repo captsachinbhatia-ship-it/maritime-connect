@@ -1,29 +1,32 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, TrendingUp, Building2, Users } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Building2, Users, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from '@/services/profiles';
 import { format, subDays } from 'date-fns';
+import { WeeklyProgressChart } from './WeeklyProgressChart';
 
 const COMPANY_TARGET = 5;
 const CONTACT_TARGET = 10;
 
-interface DayData {
-  date: string;
-  label: string;
-  contacts: number;
-  companies: number;
+export interface WeeklyDayData {
+  dateLabel: string;
+  touchTarget: number;
+  touchDone: number;
+  contactsTarget: number;
+  contactsAdded: number;
+  companiesTarget: number;
+  companiesAdded: number;
 }
 
 export function GrowthTargets() {
   const navigate = useNavigate();
   const [companiesFound, setCompaniesFound] = useState(0);
   const [contactsAdded, setContactsAdded] = useState(0);
-  const [weeklyData, setWeeklyData] = useState<DayData[]>([]);
+  const [weeklyData, setWeeklyData] = useState<WeeklyDayData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -45,7 +48,7 @@ export function GrowthTargets() {
         .eq('created_by_crm_user_id', currentCrmUserId)
         .gte('created_at', startOfToday.toISOString());
 
-      setCompaniesFound(compCount || 0);
+      setCompaniesFound(compCount ?? 0);
 
       // Today's contacts
       const { count: contCount } = await supabase
@@ -54,38 +57,47 @@ export function GrowthTargets() {
         .eq('created_by_crm_user_id', currentCrmUserId)
         .gte('created_at', startOfToday.toISOString());
 
-      setContactsAdded(contCount || 0);
+      setContactsAdded(contCount ?? 0);
 
-      // Weekly data (last 7 days)
-      const days: DayData[] = [];
-      const sevenDaysAgo = subDays(startOfToday, 7);
+      // Weekly data (last 7 days including today)
+      const sevenDaysAgo = subDays(startOfToday, 6);
 
-      const { data: weekContacts } = await supabase
-        .from('contacts')
-        .select('created_at')
-        .eq('created_by_crm_user_id', currentCrmUserId)
-        .gte('created_at', sevenDaysAgo.toISOString());
+      const [{ data: weekContacts }, { data: weekCompanies }] = await Promise.all([
+        supabase
+          .from('contacts')
+          .select('created_at')
+          .eq('created_by_crm_user_id', currentCrmUserId)
+          .gte('created_at', sevenDaysAgo.toISOString()),
+        supabase
+          .from('companies')
+          .select('created_at')
+          .eq('created_by_crm_user_id', currentCrmUserId)
+          .gte('created_at', sevenDaysAgo.toISOString()),
+      ]);
 
-      const { data: weekCompanies } = await supabase
-        .from('companies')
-        .select('created_at')
-        .eq('created_by_crm_user_id', currentCrmUserId)
-        .gte('created_at', sevenDaysAgo.toISOString());
-
+      const days: WeeklyDayData[] = [];
       for (let i = 6; i >= 0; i--) {
         const day = subDays(now, i);
         const dayStr = format(day, 'yyyy-MM-dd');
         const label = format(day, 'EEE dd');
 
-        const contactCount = (weekContacts || []).filter(c => {
-          return c.created_at && format(new Date(c.created_at), 'yyyy-MM-dd') === dayStr;
-        }).length;
+        const contactCount = (weekContacts ?? []).filter(c =>
+          c.created_at && format(new Date(c.created_at), 'yyyy-MM-dd') === dayStr
+        ).length;
 
-        const companyCount = (weekCompanies || []).filter(c => {
-          return c.created_at && format(new Date(c.created_at), 'yyyy-MM-dd') === dayStr;
-        }).length;
+        const companyCount = (weekCompanies ?? []).filter(c =>
+          c.created_at && format(new Date(c.created_at), 'yyyy-MM-dd') === dayStr
+        ).length;
 
-        days.push({ date: dayStr, label, contacts: contactCount, companies: companyCount });
+        days.push({
+          dateLabel: label,
+          touchTarget: 0,
+          touchDone: 0,
+          contactsTarget: CONTACT_TARGET,
+          contactsAdded: contactCount,
+          companiesTarget: COMPANY_TARGET,
+          companiesAdded: companyCount,
+        });
       }
 
       setWeeklyData(days);
@@ -106,19 +118,27 @@ export function GrowthTargets() {
   const contactPct = Math.min(100, (contactsAdded / CONTACT_TARGET) * 100);
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-            <TrendingUp className="h-5 w-5 text-emerald-600" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
+            <TrendingUp className="h-4.5 w-4.5 text-emerald-600" />
           </div>
-          <CardTitle className="text-lg">Growth Targets</CardTitle>
+          <CardTitle className="text-base">Growth Targets</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex-1 space-y-5">
         {isLoading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-2 w-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-2 w-full" />
+            </div>
+            <Skeleton className="h-[260px] w-full rounded-lg" />
           </div>
         ) : (
           <>
@@ -126,81 +146,51 @@ export function GrowthTargets() {
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5">
-                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Building2 className="h-3.5 w-3.5" />
                     Companies Found
                   </span>
-                  <span className="font-medium">
+                  <span className="font-medium tabular-nums">
                     <span
                       className="cursor-pointer text-primary hover:underline"
                       onClick={() => navigate('/companies')}
                     >
                       {companiesFound}
                     </span>
-                    /{COMPANY_TARGET}
+                    <span className="text-muted-foreground">/{COMPANY_TARGET}</span>
                     {companyPending > 0 && (
-                      <span className="text-muted-foreground ml-1">({companyPending} left)</span>
+                      <span className="text-muted-foreground ml-1 text-xs">({companyPending} left)</span>
                     )}
                   </span>
                 </div>
-                <Progress value={companyPct} className="h-2" />
+                <Progress value={companyPct} className="h-1.5" />
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Users className="h-3.5 w-3.5" />
                     Contacts Added
                   </span>
-                  <span className="font-medium">
+                  <span className="font-medium tabular-nums">
                     <span
                       className="cursor-pointer text-primary hover:underline"
                       onClick={() => navigate('/contacts?tab=my-added')}
                     >
                       {contactsAdded}
                     </span>
-                    /{CONTACT_TARGET}
+                    <span className="text-muted-foreground">/{CONTACT_TARGET}</span>
                     {contactPending > 0 && (
-                      <span className="text-muted-foreground ml-1">({contactPending} left)</span>
+                      <span className="text-muted-foreground ml-1 text-xs">({contactPending} left)</span>
                     )}
                   </span>
                 </div>
-                <Progress value={contactPct} className="h-2" />
+                <Progress value={contactPct} className="h-1.5" />
               </div>
             </div>
 
-            {/* Weekly Table */}
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-2">Last 7 Days</p>
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Day</TableHead>
-                      <TableHead className="text-center">Contacts</TableHead>
-                      <TableHead className="text-center">Companies</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {weeklyData.map((day) => (
-                      <TableRow key={day.date}>
-                        <TableCell className="text-sm">{day.label}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={day.contacts >= CONTACT_TARGET ? 'default' : 'outline'} className="text-xs">
-                            {day.contacts}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={day.companies >= COMPANY_TARGET ? 'default' : 'outline'} className="text-xs">
-                            {day.companies}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            {/* Weekly Progress */}
+            <WeeklyProgressChart data={weeklyData} />
           </>
         )}
       </CardContent>
