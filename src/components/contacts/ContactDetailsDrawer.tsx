@@ -32,8 +32,7 @@ import { StageRequestModal } from './StageRequestModal';
 import { StageHistoryPanel } from './StageHistoryPanel';
 import { AddAssignmentModal } from './AddAssignmentModal';
 import { EditCompanyModal } from './EditCompanyModal';
-import { NudgeSecondaryModal } from './NudgeSecondaryModal';
-import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
+import { SendNudgeDialog } from './SendNudgeDialog';
 import { getContactPhones, ContactPhone } from '@/services/contactPhones';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -775,18 +774,8 @@ export function ContactDetailsDrawer({
                               onClick={() => setIsNudgeModalOpen(true)}
                             >
                               <Bell className="mr-1 h-3 w-3" />
-                              Nudge Secondary
+                              Send Nudge
                             </Button>
-                          )}
-                          {isSecondaryOwner && nudgeStatus?.hasActiveNudge && (
-                            <AcknowledgeNudgeButton
-                              contactId={contact.id}
-                              contactName={contact.full_name || 'Unknown'}
-                              onSuccess={() => {
-                                loadNudgeStatus();
-                                loadInteractions();
-                              }}
-                            />
                           )}
                         </div>
                       </div>
@@ -1221,14 +1210,13 @@ export function ContactDetailsDrawer({
           />
         )}
 
-        {/* Nudge Secondary Modal */}
-        {contact && canNudgeSecondary && (
-          <NudgeSecondaryModal
+        {/* Send Nudge Dialog */}
+        {contact && (
+          <SendNudgeDialog
+            open={isNudgeModalOpen}
+            onOpenChange={setIsNudgeModalOpen}
             contactId={contact.id}
             contactName={contact.full_name || 'Unknown'}
-            secondaryOwnerName={secondaryOwnerName}
-            isOpen={isNudgeModalOpen}
-            onClose={() => setIsNudgeModalOpen(false)}
             onSuccess={() => {
               loadNudgeStatus();
               loadInteractions();
