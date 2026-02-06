@@ -7,6 +7,13 @@ import { RecentCompanies } from './RecentCompanies';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
 import { ModeIndicator } from './ModeIndicator';
+import { PendingNudges } from './PendingNudges';
+import { MyNudges } from './MyNudges';
+import { InteractionRecency } from './InteractionRecency';
+import { TouchTargets } from './TouchTargets';
+import { GrowthTargets } from './GrowthTargets';
+import { DailyReport } from './DailyReport';
+import { EnquiriesSummary } from './EnquiriesSummary';
 
 interface CallerDashboardProps {
   isAdmin: boolean;
@@ -43,13 +50,34 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* KPI Row */}
       <KPIRow />
 
-      {/* My Work Today */}
+      {/* Touch Targets + Growth Targets */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TouchTargets onContactClick={handleContactClick} />
+        <GrowthTargets />
+      </div>
+
+      {/* Interaction Recency */}
+      <InteractionRecency />
+
+      {/* Nudges Grid */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <PendingNudges />
+        <MyNudges />
+      </div>
+
+      {/* Stale Contacts */}
       <MyWorkToday onContactClick={handleContactClick} />
 
       {/* Secondary Panels */}
       <div className="grid gap-6 lg:grid-cols-2">
         <RecentInteractions />
         <StageSnapshot />
+      </div>
+
+      {/* Enquiries + Daily Report */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <EnquiriesSummary />
+        <DailyReport />
       </div>
 
       {/* Recent Companies */}
