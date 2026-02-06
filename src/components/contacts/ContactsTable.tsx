@@ -65,6 +65,8 @@ export function ContactsTable({
             <TableRow>
               <TableHead>Full Name</TableHead>
               <TableHead>Company</TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Email</TableHead>
               <TableHead>Primary Owner</TableHead>
               <TableHead>Secondary Owner</TableHead>
               <TableHead>Stage</TableHead>
@@ -77,6 +79,8 @@ export function ContactsTable({
             {Array.from({ length: 5 }).map((_, i) => (
               <TableRow key={i}>
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
@@ -127,6 +131,8 @@ export function ContactsTable({
           <TableRow>
             <TableHead>Full Name</TableHead>
             <TableHead>Company</TableHead>
+            <TableHead>Phone</TableHead>
+            <TableHead>Email</TableHead>
             <TableHead>Primary Owner</TableHead>
             <TableHead>Secondary Owner</TableHead>
             <TableHead>Stage</TableHead>
@@ -157,6 +163,24 @@ export function ContactsTable({
                 </TableCell>
                 <TableCell>
                   {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
+                </TableCell>
+                <TableCell>
+                  {contact.primary_phone || contact.phone ? (
+                    <span className="text-xs text-muted-foreground max-w-[120px] truncate block" title={contact.primary_phone || contact.phone || ''}>
+                      {contact.primary_phone || contact.phone}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/50">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {contact.email ? (
+                    <span className="text-xs text-muted-foreground max-w-[160px] truncate block" title={contact.email}>
+                      {contact.email}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/50">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-sm">
                   {primaryOwnerId 

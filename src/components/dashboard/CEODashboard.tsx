@@ -3,7 +3,7 @@ import { ContactHealthSnapshot } from './ContactHealthSnapshot';
 import { DashboardLineChart } from './DashboardLineChart';
 import { ActivityMatrix } from './ActivityMatrix';
 import { TouchTargets } from './TouchTargets';
-import { GrowthTargets } from './GrowthTargets';
+
 import { RecentCompanies } from './RecentCompanies';
 import { RecentInteractions } from './RecentInteractions';
 import { EnquiriesSummary } from './EnquiriesSummary';
@@ -110,9 +110,6 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
 
           {/* Touch Targets — full width */}
           <TouchTargets crmUserId={selectedUserId} onContactClick={handleContactClick} />
-
-          {/* Growth Targets — full width */}
-          <GrowthTargets crmUserId={selectedUserId} />
 
           {/* Stale Contacts */}
           <MyWorkToday crmUserId={selectedUserId} onContactClick={handleContactClick} />

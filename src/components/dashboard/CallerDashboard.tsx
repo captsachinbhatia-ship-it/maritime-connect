@@ -3,7 +3,7 @@ import { ContactHealthSnapshot } from './ContactHealthSnapshot';
 import { DashboardLineChart } from './DashboardLineChart';
 import { ActivityMatrix } from './ActivityMatrix';
 import { TouchTargets } from './TouchTargets';
-import { GrowthTargets } from './GrowthTargets';
+
 import { RecentCompanies } from './RecentCompanies';
 import { RecentInteractions } from './RecentInteractions';
 import { EnquiriesSummary } from './EnquiriesSummary';
@@ -60,9 +60,6 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
 
       {/* Touch Targets — full width (includes Follow-ups / Nudges KPI cards) */}
       <TouchTargets onContactClick={handleContactClick} isAdmin={isAdmin} />
-
-      {/* Growth Targets — full width */}
-      <GrowthTargets />
 
       {/* Stale Contacts */}
       <MyWorkToday onContactClick={handleContactClick} />
