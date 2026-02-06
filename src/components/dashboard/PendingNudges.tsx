@@ -1,15 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useState, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Bell, ExternalLink, CheckCircle2, User } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
-import { getCurrentCrmUserId } from '@/services/profiles';
-import { getUserNames } from '@/services/interactions';
-import { createInteraction } from '@/services/interactions';
-import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
-import { ContactWithCompany } from '@/types';
+import { supabase } from '@/lib/supabaseClient';
+import { CheckCircle2, Clock, AlertCircle, Loader2, Bell } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,305 +18,241 @@ import {
 } from '@/components/ui/alert-dialog';
 
 interface PendingNudge {
-  contactId: string;
-  contactName: string;
-  primaryOwnerId: string | null;
-  primaryOwnerName: string;
-  nudgeTime: string;
-  nudgeNotes: string | null;
+  followup_id: string;
+  contact_id: string;
+  contact_name: string;
+  company_name: string | null;
+  followup_type: string;
+  followup_reason: string | null;
+  notes: string | null;
+  due_at: string;
+  status: string;
+  display_status: string;
+  created_by_name: string | null;
+  acknowledged_at: string | null;
 }
 
-interface PendingNudgesProps {
-  onContactClick: (contact: ContactWithCompany) => void;
-}
-
-export function PendingNudges({ onContactClick }: PendingNudgesProps) {
+export function PendingNudges() {
   const [nudges, setNudges] = useState<PendingNudge[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [acknowledging, setAcknowledging] = useState<string | null>(null);
-  const [confirmContact, setConfirmContact] = useState<PendingNudge | null>(null);
+  const [confirmNudge, setConfirmNudge] = useState<PendingNudge | null>(null);
 
-  const fetchNudges = useCallback(async () => {
-    setIsLoading(true);
+  const loadPendingNudges = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('v_my_pending_nudges')
+      .select('*')
+      .order('due_at', { ascending: true });
 
-    try {
-      // Get current user's CRM ID
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-
-      if (crmError || !currentCrmUserId) {
-        setNudges([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Get contacts where current user is SECONDARY owner
-      const { data: secondaryAssignments, error: secondaryError } = await supabase
-        .from('contact_assignments')
-        .select('contact_id')
-        .eq('status', 'ACTIVE')
-        .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .eq('assignment_role', 'SECONDARY');
-
-      if (secondaryError || !secondaryAssignments?.length) {
-        setNudges([]);
-        setIsLoading(false);
-        return;
-      }
-
-      const contactIds = secondaryAssignments.map(a => a.contact_id);
-
-      // Get all NUDGE and ACK interactions for these contacts
-      const { data: interactions, error: interactionsError } = await supabase
-        .from('v_contact_interactions_timeline')
-        .select('contact_id, subject, notes, interaction_at')
-        .in('contact_id', contactIds)
-        .or('subject.ilike.[NUDGE]%,subject.ilike.[ACK]%')
-        .order('interaction_at', { ascending: false });
-
-      if (interactionsError) {
-        console.error('Failed to fetch nudge interactions:', interactionsError);
-        setNudges([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // For each contact, find the latest NUDGE and check if there's an ACK after it
-      const pendingNudgeContacts: { contactId: string; nudgeTime: string; nudgeNotes: string | null }[] = [];
-      const processedContacts = new Set<string>();
-
-      for (const interaction of interactions || []) {
-        if (processedContacts.has(interaction.contact_id)) continue;
-        processedContacts.add(interaction.contact_id);
-
-        const subject = (interaction.subject || '').toUpperCase();
-        
-        // If the latest relevant interaction is a NUDGE, it's pending
-        if (subject.startsWith('[NUDGE]')) {
-          pendingNudgeContacts.push({
-            contactId: interaction.contact_id,
-            nudgeTime: interaction.interaction_at,
-            nudgeNotes: interaction.notes,
-          });
-        }
-        // If the latest is an ACK, the nudge has been acknowledged (skip)
-      }
-
-      if (pendingNudgeContacts.length === 0) {
-        setNudges([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Get contact details
-      const pendingContactIds = pendingNudgeContacts.map(n => n.contactId);
-      const { data: contacts } = await supabase
-        .from('contacts')
-        .select('id, full_name')
-        .in('id', pendingContactIds);
-
-      const contactNameMap: Record<string, string> = {};
-      (contacts || []).forEach(c => {
-        contactNameMap[c.id] = c.full_name || 'Unknown';
-      });
-
-      // Get PRIMARY owner for each contact
-      const { data: primaryAssignments } = await supabase
-        .from('contact_assignments')
-        .select('contact_id, assigned_to_crm_user_id')
-        .in('contact_id', pendingContactIds)
-        .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'PRIMARY');
-
-      const primaryOwnerMap: Record<string, string | null> = {};
-      (primaryAssignments || []).forEach(a => {
-        primaryOwnerMap[a.contact_id] = a.assigned_to_crm_user_id;
-      });
-
-      // Get primary owner names
-      const primaryOwnerIds = Object.values(primaryOwnerMap).filter(Boolean) as string[];
-      let ownerNamesMap: Record<string, string> = {};
-      if (primaryOwnerIds.length > 0) {
-        const namesResult = await getUserNames(primaryOwnerIds);
-        if (namesResult.data) {
-          ownerNamesMap = namesResult.data;
-        }
-      }
-
-      // Build final nudges list
-      const nudgesList: PendingNudge[] = pendingNudgeContacts.map(n => ({
-        contactId: n.contactId,
-        contactName: contactNameMap[n.contactId] || 'Unknown',
-        primaryOwnerId: primaryOwnerMap[n.contactId] || null,
-        primaryOwnerName: primaryOwnerMap[n.contactId]
-          ? ownerNamesMap[primaryOwnerMap[n.contactId]!] || 'Unknown'
-          : 'Unassigned',
-        nudgeTime: n.nudgeTime,
-        nudgeNotes: n.nudgeNotes,
-      }));
-
-      // Sort by most recent nudge first
-      nudgesList.sort((a, b) => new Date(b.nudgeTime).getTime() - new Date(a.nudgeTime).getTime());
-
-      setNudges(nudgesList);
-    } catch (error) {
-      console.error('Failed to fetch nudges:', error);
-      setNudges([]);
-    } finally {
-      setIsLoading(false);
+    if (error) {
+      console.error('Failed to load nudges:', error);
+    } else {
+      setNudges(data || []);
     }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchNudges();
-  }, [fetchNudges]);
+    loadPendingNudges();
+  }, [loadPendingNudges]);
 
-  const handleAcknowledge = async (nudge: PendingNudge) => {
-    setAcknowledging(nudge.contactId);
+  async function handleAcknowledge(nudge: PendingNudge) {
+    setAcknowledging(nudge.followup_id);
 
-    const result = await createInteraction({
-      contact_id: nudge.contactId,
-      interaction_type: 'NOTE',
-      outcome: null,
-      subject: '[ACK] Backup accepted',
-      notes: 'Secondary acknowledged and will follow up.',
-      interaction_at: new Date().toISOString(),
-    });
-
-    setAcknowledging(null);
-    setConfirmContact(null);
-
-    if (result.error) {
-      toast({
-        title: 'Error',
-        description: result.error,
-        variant: 'destructive',
+    try {
+      const { error } = await supabase.rpc('acknowledge_nudge', {
+        p_followup_id: nudge.followup_id,
       });
-      return;
+
+      if (error) throw error;
+
+      toast({
+        title: 'Acknowledged',
+        description: 'Follow-up acknowledged. Primary contact owner notified.',
+      });
+
+      loadPendingNudges();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to Acknowledge',
+        description: error.message,
+      });
+    } finally {
+      setAcknowledging(null);
+      setConfirmNudge(null);
     }
+  }
 
-    toast({
-      title: 'Acknowledged',
-      description: `You've accepted the backup request for ${nudge.contactName}.`,
-    });
+  function getStatusBadge(status: string) {
+    if (status === 'ACKNOWLEDGED') {
+      return (
+        <Badge variant="secondary" className="text-xs">
+          <CheckCircle2 className="mr-1 h-3 w-3 text-green-600" />
+          Acknowledged
+        </Badge>
+      );
+    }
+    if (status === 'OVERDUE') {
+      return (
+        <Badge variant="destructive" className="text-xs">
+          <AlertCircle className="mr-1 h-3 w-3" />
+          Overdue
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-xs">
+        <Clock className="mr-1 h-3 w-3 text-amber-600" />
+        Pending
+      </Badge>
+    );
+  }
 
-    // Refetch nudges
-    fetchNudges();
-  };
-
-  const handleOpenContact = (nudge: PendingNudge) => {
-    onContactClick({
-      id: nudge.contactId,
-      full_name: nudge.contactName,
-    } as ContactWithCompany);
-  };
-
-  const truncateNotes = (notes: string | null, maxLength: number = 80) => {
-    if (!notes) return '';
-    if (notes.length <= maxLength) return notes;
-    return notes.substring(0, maxLength) + '...';
-  };
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-            <Bell className="h-5 w-5 text-amber-600" />
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+              <Bell className="h-5 w-5 text-amber-600" />
+            </div>
+            <CardTitle className="text-lg">Pending Follow-ups</CardTitle>
           </div>
-          <div>
-            <CardTitle className="text-lg">Nudges</CardTitle>
-            <CardDescription>Backup requests from Primary owners</CardDescription>
-          </div>
-          {!isLoading && nudges.length > 0 && (
-            <Badge className="ml-auto bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300">
-              {nudges.length} pending
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
+        </CardHeader>
+        <CardContent>
           <div className="flex items-center justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : nudges.length === 0 ? (
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (nudges.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+              <Bell className="h-5 w-5 text-amber-600" />
+            </div>
+            <CardTitle className="text-lg">Pending Follow-ups</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
           <div className="flex flex-col items-center justify-center py-6 text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
               <Bell className="h-5 w-5 text-muted-foreground" />
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">No nudges pending</p>
+            <p className="mt-2 text-sm text-muted-foreground">No pending follow-ups</p>
           </div>
-        ) : (
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+              <Bell className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Pending Follow-ups</CardTitle>
+            </div>
+            <Badge className="ml-auto bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300">
+              {nudges.length} pending
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
           <div className="space-y-3">
             {nudges.map((nudge) => (
               <div
-                key={nudge.contactId}
-                className="flex items-start justify-between gap-3 rounded-lg border p-3"
+                key={nudge.followup_id}
+                className="rounded-lg border p-4 space-y-3"
               >
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium truncate">{nudge.contactName}</span>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {formatDistanceToNow(new Date(nudge.nudgeTime), { addSuffix: true })}
-                    </Badge>
+                {/* Contact Info */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{nudge.contact_name}</p>
+                    {nudge.company_name && (
+                      <p className="text-xs text-muted-foreground">{nudge.company_name}</p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <User className="h-3 w-3" />
-                    <span>From: {nudge.primaryOwnerName}</span>
-                  </div>
-                  {nudge.nudgeNotes && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {truncateNotes(nudge.nudgeNotes)}
+                  {getStatusBadge(nudge.display_status)}
+                </div>
+
+                {/* Follow-up Details */}
+                <div className="space-y-1 text-sm text-muted-foreground">
+                  <p>
+                    <span className="font-medium text-foreground">Type:</span> {nudge.followup_type?.replace(/_/g, ' ')}
+                  </p>
+                  {nudge.followup_reason && (
+                    <p>
+                      <span className="font-medium text-foreground">Reason:</span> {nudge.followup_reason}
+                    </p>
+                  )}
+                  {nudge.notes && (
+                    <p className="line-clamp-2">
+                      <span className="font-medium text-foreground">Notes:</span> {nudge.notes}
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => handleOpenContact(nudge)}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Button>
+
+                {/* Creator & Due Date */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>From: {nudge.created_by_name || 'Unknown'}</span>
+                  <span>Due: {formatDistanceToNow(new Date(nudge.due_at), { addSuffix: true })}</span>
+                </div>
+
+                {/* Action Button */}
+                {nudge.status === 'OPEN' && (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8"
-                    disabled={acknowledging === nudge.contactId}
-                    onClick={() => setConfirmContact(nudge)}
+                    className="w-full"
+                    disabled={acknowledging === nudge.followup_id}
+                    onClick={() => setConfirmNudge(nudge)}
                   >
-                    {acknowledging === nudge.contactId ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {acknowledging === nudge.followup_id ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
-                      <>
-                        <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                        Acknowledge
-                      </>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
                     )}
+                    Acknowledge Receipt
                   </Button>
-                </div>
+                )}
+
+                {nudge.acknowledged_at && (
+                  <p className="text-xs text-green-600 text-center">
+                    ✓ Acknowledged {formatDistanceToNow(new Date(nudge.acknowledged_at), { addSuffix: true })}
+                  </p>
+                )}
               </div>
             ))}
           </div>
-        )}
-      </CardContent>
+        </CardContent>
+      </Card>
 
       {/* Confirmation Dialog */}
-      <AlertDialog open={!!confirmContact} onOpenChange={(open) => !open && setConfirmContact(null)}>
+      <AlertDialog open={!!confirmNudge} onOpenChange={(open) => !open && setConfirmNudge(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Acknowledge Backup Request</AlertDialogTitle>
+            <AlertDialogTitle>Acknowledge Follow-up</AlertDialogTitle>
             <AlertDialogDescription>
-              Confirm that you accept the backup request for{' '}
-              <strong>{confirmContact?.contactName}</strong>. This will be logged as an interaction
-              visible to the Primary owner.
+              Confirm that you accept the follow-up request for{' '}
+              <strong>{confirmNudge?.contact_name}</strong>. The Primary owner will be notified.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={!!acknowledging}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => confirmContact && handleAcknowledge(confirmContact)}
+              onClick={() => confirmNudge && handleAcknowledge(confirmNudge)}
               disabled={!!acknowledging}
             >
               {acknowledging ? (
@@ -335,6 +267,6 @@ export function PendingNudges({ onContactClick }: PendingNudgesProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </>
   );
 }
