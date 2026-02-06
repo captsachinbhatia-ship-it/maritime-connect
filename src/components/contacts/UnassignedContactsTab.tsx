@@ -27,6 +27,7 @@ import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/prof
 import { adminAssignContacts, adminAssignUnassigned } from '@/services/adminAssignments';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
+import { AssignPrimaryModal } from './AssignPrimaryModal';
 import { ContactWithCompany } from '@/types';
 
 interface UnassignedContact {
@@ -60,6 +61,10 @@ export function UnassignedContactsTab() {
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Assign primary modal state
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignModalContact, setAssignModalContact] = useState<UnassignedContact | null>(null);
+
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -78,10 +83,10 @@ export function UnassignedContactsTab() {
         return;
       }
 
-      // Filter unassigned (no ACTIVE assignment)
+      // Filter unassigned: no ACTIVE PRIMARY assignment
       const allContactIds = (unassignedData || []).map(c => c.id);
 
-      let assignedIds = new Set<string>();
+      let assignedPrimaryIds = new Set<string>();
       if (allContactIds.length > 0) {
         // Batch fetch in chunks to avoid URL size limits
         const chunkSize = 200;
@@ -91,13 +96,14 @@ export function UnassignedContactsTab() {
             .from('contact_assignments')
             .select('contact_id')
             .in('contact_id', chunk)
-            .eq('status', 'ACTIVE');
+            .eq('status', 'ACTIVE')
+            .eq('assignment_role', 'PRIMARY');
           
-          (activeAssignments || []).forEach(a => assignedIds.add(a.contact_id));
+          (activeAssignments || []).forEach(a => assignedPrimaryIds.add(a.contact_id));
         }
       }
 
-      const unassigned = (unassignedData || []).filter(c => !assignedIds.has(c.id));
+      const unassigned = (unassignedData || []).filter(c => !assignedPrimaryIds.has(c.id));
 
       // Fetch company names for unassigned contacts
       const companyIds = [...new Set(unassigned.map(c => c.company_id).filter(Boolean))] as string[];
@@ -382,6 +388,7 @@ export function UnassignedContactsTab() {
                     <TableHead>Phone</TableHead>
                     <TableHead>Added By</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -423,6 +430,20 @@ export function UnassignedContactsTab() {
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {formatCreatedDate(contact.created_at)}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAssignModalContact(contact);
+                            setAssignModalOpen(true);
+                          }}
+                        >
+                          <UserPlus className="mr-1 h-4 w-4" />
+                          Assign
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -444,6 +465,19 @@ export function UnassignedContactsTab() {
         onOwnersChange={fetchData}
         onCompanyChange={() => fetchData()}
       />
+
+      {assignModalContact && (
+        <AssignPrimaryModal
+          open={assignModalOpen}
+          onOpenChange={setAssignModalOpen}
+          contactId={assignModalContact.id}
+          contactName={assignModalContact.full_name || 'Unknown'}
+          onSuccess={() => {
+            fetchData();
+            setAssignModalContact(null);
+          }}
+        />
+      )}
     </>
   );
 }

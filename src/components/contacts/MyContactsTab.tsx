@@ -63,7 +63,7 @@ const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
 
 // My Contacts tab shows only PRIMARY ownership contacts with stage sub-tabs
 export function MyContactsTab() {
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, isAdmin } = useAuth();
   const { toast } = useToast();
   const [activeStage, setActiveStage] = useState<StageType>('COLD_CALLING');
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
@@ -342,7 +342,7 @@ export function MyContactsTab() {
               <TableHead>Company</TableHead>
               <TableHead>Next Follow-up</TableHead>
               <TableHead>Last Activity</TableHead>
-              <TableHead>Move Stage</TableHead>
+              {isAdmin && <TableHead>Move Stage</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -396,38 +396,40 @@ export function MyContactsTab() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={isUpdatingStage === contact.id}
-                          className="h-7"
-                        >
-                          {isUpdatingStage === contact.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <>
-                              Move to
-                              <ArrowRight className="ml-1 h-3 w-3" />
-                            </>
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {availableStages.map((stage) => (
-                          <DropdownMenuItem
-                            key={stage.value}
-                            onClick={() => handleStageUpdate(contact.id, stage.value)}
+                    {isAdmin ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isUpdatingStage === contact.id}
+                            className="h-7"
                           >
-                            <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
-                              {stage.label}
-                            </Badge>
-                            Move to {stage.label}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                            {isUpdatingStage === contact.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                Move to
+                                <ArrowRight className="ml-1 h-3 w-3" />
+                              </>
+                            )}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {availableStages.map((stage) => (
+                            <DropdownMenuItem
+                              key={stage.value}
+                              onClick={() => handleStageUpdate(contact.id, stage.value)}
+                            >
+                              <Badge className={`mr-2 ${STAGE_COLORS[stage.value]}`}>
+                                {stage.label}
+                              </Badge>
+                              Move to {stage.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               );

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { PhoneCall, Mail, Video, MessageSquare, FileEdit, ArrowRight, Users, Bell } from 'lucide-react';
+import { PhoneCall, Mail, Video, MessageSquare, FileEdit, Users, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -22,7 +22,7 @@ import { getCompanyNamesMap } from '@/services/contacts';
 import { getUserNames } from '@/services/interactions';
 import { getNudgeStatusMap } from '@/services/nudgeStatus';
 import { ContactsSearch } from './ContactsSearch';
-import { StageRequestModal } from './StageRequestModal';
+
 import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
 import { ContactWithCompany } from '@/types';
 
@@ -65,9 +65,8 @@ export function SecondaryContactsTab() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
-  // Stage request modal state
-  const [stageRequestContact, setStageRequestContact] = useState<SecondaryContact | null>(null);
-  const [stageRequestModalOpen, setStageRequestModalOpen] = useState(false);
+
+
   const loadContacts = useCallback(async () => {
     if (!session) {
       setContacts([]);
@@ -396,19 +395,6 @@ export function SecondaryContactsTab() {
                                 onSuccess={loadContacts}
                               />
                             )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setStageRequestContact(contact);
-                                setStageRequestModalOpen(true);
-                              }}
-                            >
-                              Request Move
-                              <ArrowRight className="ml-1 h-3 w-3" />
-                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -421,17 +407,6 @@ export function SecondaryContactsTab() {
         </CardContent>
       </Card>
 
-      <StageRequestModal
-        contactId={stageRequestContact?.id || ''}
-        contactName={stageRequestContact?.full_name || 'Unknown'}
-        currentStage={stageRequestContact?.stage as StageType || 'ASPIRATION'}
-        isOpen={stageRequestModalOpen}
-        onClose={() => {
-          setStageRequestModalOpen(false);
-          setStageRequestContact(null);
-        }}
-        onSuccess={loadContacts}
-      />
     </>
   );
 }
