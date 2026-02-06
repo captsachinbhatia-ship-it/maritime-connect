@@ -10,12 +10,13 @@ import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
 import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
 import { BulkImportTab } from '@/components/contacts/BulkImportTab';
 import { DuplicateRiskTab } from '@/components/contacts/DuplicateRiskTab';
+import { PendingInactiveRequestsTab } from '@/components/contacts/PendingInactiveRequestsTab';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, UserPlus, Users2, FileUp, AlertTriangle } from 'lucide-react';
+import { Loader2, UserPlus, Users2, FileUp, AlertTriangle, Clock } from 'lucide-react';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
-type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary' | 'bulk-import' | 'duplicate-risk';
+type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary' | 'bulk-import' | 'duplicate-risk' | 'pending-requests';
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -182,6 +183,12 @@ export default function Contacts() {
               Duplicate Risk
             </TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="pending-requests" className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              Pending Requests
+            </TabsTrigger>
+          )}
           <TabsTrigger value="my-added" className="flex items-center gap-1.5">
             <UserPlus className="h-3.5 w-3.5" />
             My Added
@@ -224,6 +231,12 @@ export default function Contacts() {
         {isAdmin && (
           <TabsContent value="duplicate-risk" className="mt-4">
             <DuplicateRiskTab key={`duplicate-risk-${refreshKey}`} />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="pending-requests" className="mt-4">
+            <PendingInactiveRequestsTab key={`pending-requests-${refreshKey}`} />
           </TabsContent>
         )}
 

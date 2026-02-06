@@ -68,78 +68,31 @@ export function UnassignedContactsTab() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // is_active IS DISTINCT FROM false (includes null and true)
-      const { data: unassignedData, error } = await supabase
-        .from('contacts_with_primary_phone')
-        .select('id, full_name, designation, email, primary_phone, primary_phone_type, company_id, created_at, created_by_crm_user_id, is_active')
-        .not('is_active', 'eq', false)
-        .order('created_at', { ascending: false })
-        .limit(1000);
+      // Use the v_unassigned_contacts view which handles NOT EXISTS logic server-side
+      const { data: viewData, error } = await supabase
+        .from('v_unassigned_contacts')
+        .select('*')
+        .limit(200);
 
       if (error) {
-        console.error('[UnassignedContactsTab] Error fetching contacts:', error);
+        console.error('[UnassignedContactsTab] Error fetching from view:', error);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      // Filter unassigned: no ACTIVE PRIMARY assignment
-      const allContactIds = (unassignedData || []).map(c => c.id);
-
-      let assignedPrimaryIds = new Set<string>();
-      if (allContactIds.length > 0) {
-        // Batch fetch in chunks to avoid URL size limits
-        const chunkSize = 200;
-        for (let i = 0; i < allContactIds.length; i += chunkSize) {
-          const chunk = allContactIds.slice(i, i + chunkSize);
-          const { data: activeAssignments } = await supabase
-            .from('contact_assignments')
-            .select('contact_id')
-            .in('contact_id', chunk)
-            .eq('status', 'ACTIVE')
-            .eq('assignment_role', 'PRIMARY');
-          
-          (activeAssignments || []).forEach(a => assignedPrimaryIds.add(a.contact_id));
-        }
-      }
-
-      // Limit to 200 as per spec
-      const unassigned = (unassignedData || []).filter(c => !assignedPrimaryIds.has(c.id)).slice(0, 200);
-
-      // Fetch company names for unassigned contacts
-      const companyIds = [...new Set(unassigned.map(c => c.company_id).filter(Boolean))] as string[];
-      let companyMap: Record<string, string> = {};
-      if (companyIds.length > 0) {
-        const { data: companies } = await supabase
-          .from('companies')
-          .select('id, company_name')
-          .in('id', companyIds);
-        (companies || []).forEach(c => { companyMap[c.id] = c.company_name; });
-      }
-
-      // Fetch creator names
-      const creatorIds = [...new Set(unassigned.map(c => c.created_by_crm_user_id).filter(Boolean))] as string[];
-      let creatorMap: Record<string, { full_name: string; email: string | null }> = {};
-      if (creatorIds.length > 0) {
-        const { data: creators } = await supabase
-          .from('crm_users')
-          .select('id, full_name, email')
-          .in('id', creatorIds);
-        (creators || []).forEach(c => { creatorMap[c.id] = { full_name: c.full_name, email: c.email }; });
-      }
-
-      const mapped: UnassignedContact[] = unassigned.map((c: any) => ({
-        id: c.id,
+      const mapped: UnassignedContact[] = (viewData || []).map((c: any) => ({
+        id: c.id || c.contact_id,
         full_name: c.full_name,
-        company_name: c.company_id ? companyMap[c.company_id] || null : null,
+        company_name: c.company_name,
         designation: c.designation,
         email: c.email,
-        primary_phone: c.primary_phone || null,
-        primary_phone_type: c.primary_phone_type || null,
+        primary_phone: c.primary_phone || c.phone,
+        primary_phone_type: c.primary_phone_type || c.phone_type,
         created_at: c.created_at,
         created_by_crm_user_id: c.created_by_crm_user_id,
-        created_by_name: c.created_by_crm_user_id ? creatorMap[c.created_by_crm_user_id]?.full_name || null : null,
-        created_by_email: c.created_by_crm_user_id ? creatorMap[c.created_by_crm_user_id]?.email || null : null,
+        created_by_name: c.created_by_name,
+        created_by_email: c.created_by_email,
       }));
 
       setContacts(mapped);
