@@ -47,6 +47,11 @@ export interface ImportResult {
   failed_count: number;
 }
 
+export interface ImportValidatedResult {
+  imported_count: number;
+  skipped_duplicate_count: number;
+}
+
 // Resolve current CRM user ID via RPC
 export async function getCurrentCrmUserIdViaRpc(): Promise<{
   data: string | null;
@@ -117,7 +122,7 @@ export async function validateImportBatch(
   return { data: data as ValidationResult, error: null };
 }
 
-// Import validated rows via RPC
+// Import validated rows via RPC (legacy)
 export async function importValidatedBatch(
   batchId: string,
   skipDuplicates: boolean
@@ -129,6 +134,21 @@ export async function importValidatedBatch(
 
   if (error) return { data: null, error: error.message };
   return { data: data as ImportResult, error: null };
+}
+
+// Import validated rows via new single-query RPC
+export async function importValidatedContacts(
+  batchId: string
+): Promise<{ data: ImportValidatedResult | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('import_validated_contacts', {
+    p_batch_id: batchId,
+  });
+
+  if (error) return { data: null, error: error.message };
+
+  // RPC returns a table, so data is an array with one row
+  const row = Array.isArray(data) ? data[0] : data;
+  return { data: row as ImportValidatedResult, error: null };
 }
 
 // Fetch a contact by ID for duplicate preview

@@ -1,8 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -30,9 +28,9 @@ import {
   insertStagingRows,
   fetchStagingRows,
   validateImportBatch,
-  importValidatedBatch,
+  importValidatedContacts,
 } from '@/services/bulkImport';
-import type { ParsedCsvRow, StagingRow, ValidationResult } from '@/services/bulkImport';
+import type { ParsedCsvRow, StagingRow, ValidationResult, ImportValidatedResult } from '@/services/bulkImport';
 
 export default function BulkImport() {
   const { isAdmin, crmUser } = useAuth();
@@ -45,7 +43,7 @@ export default function BulkImport() {
   const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [stagingRows, setStagingRows] = useState<StagingRow[]>([]);
   const [stagingLoading, setStagingLoading] = useState(false);
-  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  // skipDuplicates removed — new RPC always marks them SKIPPED_DUPLICATE
   const [activeTab, setActiveTab] = useState('all');
   const [crmUserId, setCrmUserId] = useState<string | null>(null);
   const [crmIdError, setCrmIdError] = useState<string | null>(null);
@@ -184,7 +182,7 @@ export default function BulkImport() {
   const handleImport = async () => {
     if (!activeBatchId) return;
     setImporting(true);
-    const { data, error } = await importValidatedBatch(activeBatchId, skipDuplicates);
+    const { data, error } = await importValidatedContacts(activeBatchId);
 
     if (error) {
       toast({ title: 'Import failed', description: error, variant: 'destructive' });
@@ -197,10 +195,11 @@ export default function BulkImport() {
     if (data) {
       toast({
         title: 'Import complete',
-        description: `Imported: ${data.imported_count}, Skipped: ${data.skipped_count}, Failed: ${data.failed_count}`,
+        description: `Imported ${data.imported_count} contacts (${data.skipped_duplicate_count} duplicates skipped)`,
       });
-      if (data.failed_count > 0) {
-        setActiveTab('failed');
+      // Switch to appropriate tab after import
+      if (data.skipped_duplicate_count > 0) {
+        setActiveTab('duplicates');
       }
     }
     setImporting(false);
@@ -314,17 +313,6 @@ export default function BulkImport() {
             loading={importing}
             onConfirm={handleImport}
           />
-
-          <div className="ml-auto flex items-center gap-2">
-            <Switch
-              id="skip-dup"
-              checked={skipDuplicates}
-              onCheckedChange={setSkipDuplicates}
-            />
-            <Label htmlFor="skip-dup" className="text-sm">
-              Skip duplicates
-            </Label>
-          </div>
         </CardContent>
       </Card>
 
