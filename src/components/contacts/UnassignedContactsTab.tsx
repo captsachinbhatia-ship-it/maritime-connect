@@ -1,8 +1,10 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
-import { Loader2, UserPlus, RefreshCw, Users } from 'lucide-react';
+import { Loader2, UserPlus, RefreshCw, Users, CheckSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -22,8 +24,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
-import { upsertOwners } from '@/services/assignments';
+import { adminAssignContacts, adminAssignUnassigned } from '@/services/adminAssignments';
 import { ContactsSearch } from './ContactsSearch';
+import { ContactDetailsDrawer } from './ContactDetailsDrawer';
+import { ContactWithCompany } from '@/types';
 
 interface UnassignedContact {
   id: string;
@@ -35,264 +39,365 @@ interface UnassignedContact {
   primary_phone_type: string | null;
   created_at: string | null;
   created_by_crm_user_id: string | null;
+  created_by_name: string | null;
+  created_by_email: string | null;
 }
-
-const NONE_VALUE = '__none__';
 
 export function UnassignedContactsTab() {
   const [contacts, setContacts] = useState<UnassignedContact[]>([]);
   const [crmUsers, setCrmUsers] = useState<CrmUserForAssignment[]>([]);
-  const [crmUsersMap, setCrmUsersMap] = useState<Record<string, CrmUserForAssignment>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [primarySelections, setPrimarySelections] = useState<Record<string, string>>({});
-  const [secondarySelections, setSecondarySelections] = useState<Record<string, string>>({});
+  const [isAssigning, setIsAssigning] = useState(false);
   const { toast } = useToast();
   const [search, setSearch] = useState('');
 
-  const fetchData = async () => {
+  // Bulk assignment state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [targetUserId, setTargetUserId] = useState('');
+  const [assignNextN, setAssignNextN] = useState(50);
+
+  // Drawer state
+  const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Get all contact IDs that have an ACTIVE PRIMARY assignment with a non-null assigned_to_crm_user_id
-      // A contact is considered "assigned" only if it has an ACTIVE PRIMARY owner
-      const { data: activePrimaryAssignments, error: assignmentsError } = await supabase
-        .from('contact_assignments')
-        .select('contact_id')
-        .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'PRIMARY')
-        .not('assigned_to_crm_user_id', 'is', null);
+      // Unassigned query with created_by info via left join on crm_users
+      // We fetch from contacts_with_primary_phone and then resolve created_by
+      const { data: unassignedData, error } = await supabase
+        .from('contacts_with_primary_phone')
+        .select('id, full_name, designation, email, primary_phone, primary_phone_type, company_id, created_at, created_by_crm_user_id, is_active')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
 
-      if (assignmentsError) {
-        console.error('[UnassignedContactsTab] Error fetching active PRIMARY assignments:', assignmentsError);
+      if (error) {
+        console.error('[UnassignedContactsTab] Error fetching contacts:', error);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      // Only contacts with ACTIVE PRIMARY are considered assigned
-      const assignedContactIds = new Set((activePrimaryAssignments || []).map(a => a.contact_id));
-      console.log('[UnassignedContactsTab] Contacts with ACTIVE PRIMARY:', assignedContactIds.size);
+      // Filter unassigned (no ACTIVE assignment)
+      const allContactIds = (unassignedData || []).map(c => c.id);
 
-      // Get all active contacts from the view
-      const { data: allContacts, error: contactsError } = await supabase
-        .from('contacts_with_primary_phone')
-        .select(`
-          id,
-          full_name,
-          designation,
-          email,
-          primary_phone,
-          primary_phone_type,
-          company_id,
-          companies ( company_name ),
-          created_at,
-          created_by_crm_user_id
-        `)
-        .eq('is_active', true)
-        .order('full_name')
-        .limit(500);
-
-      if (contactsError) {
-        console.error('[UnassignedContactsTab] Error fetching contacts:', contactsError);
-        setContacts([]);
-      } else {
-        // Filter unassigned contacts
-        const unassignedContacts = (allContacts || []).filter(
-          (c: any) => !assignedContactIds.has(c.id)
-        );
-
-        const mappedContacts: UnassignedContact[] = unassignedContacts.map((c: any) => ({
-          id: c.id,
-          full_name: c.full_name,
-          company_name: c.companies?.company_name || null,
-          designation: c.designation,
-          email: c.email,
-          primary_phone: c.primary_phone || null,
-          primary_phone_type: c.primary_phone_type || null,
-          created_at: c.created_at,
-          created_by_crm_user_id: c.created_by_crm_user_id,
-        }));
-
-        setContacts(mappedContacts);
+      let assignedIds = new Set<string>();
+      if (allContactIds.length > 0) {
+        // Batch fetch in chunks to avoid URL size limits
+        const chunkSize = 200;
+        for (let i = 0; i < allContactIds.length; i += chunkSize) {
+          const chunk = allContactIds.slice(i, i + chunkSize);
+          const { data: activeAssignments } = await supabase
+            .from('contact_assignments')
+            .select('contact_id')
+            .in('contact_id', chunk)
+            .eq('status', 'ACTIVE');
+          
+          (activeAssignments || []).forEach(a => assignedIds.add(a.contact_id));
+        }
       }
 
+      const unassigned = (unassignedData || []).filter(c => !assignedIds.has(c.id));
+
+      // Fetch company names for unassigned contacts
+      const companyIds = [...new Set(unassigned.map(c => c.company_id).filter(Boolean))] as string[];
+      let companyMap: Record<string, string> = {};
+      if (companyIds.length > 0) {
+        const { data: companies } = await supabase
+          .from('companies')
+          .select('id, company_name')
+          .in('id', companyIds);
+        (companies || []).forEach(c => { companyMap[c.id] = c.company_name; });
+      }
+
+      // Fetch creator names
+      const creatorIds = [...new Set(unassigned.map(c => c.created_by_crm_user_id).filter(Boolean))] as string[];
+      let creatorMap: Record<string, { full_name: string; email: string | null }> = {};
+      if (creatorIds.length > 0) {
+        const { data: creators } = await supabase
+          .from('crm_users')
+          .select('id, full_name, email')
+          .in('id', creatorIds);
+        (creators || []).forEach(c => { creatorMap[c.id] = { full_name: c.full_name, email: c.email }; });
+      }
+
+      const mapped: UnassignedContact[] = unassigned.map((c: any) => ({
+        id: c.id,
+        full_name: c.full_name,
+        company_name: c.company_id ? companyMap[c.company_id] || null : null,
+        designation: c.designation,
+        email: c.email,
+        primary_phone: c.primary_phone || null,
+        primary_phone_type: c.primary_phone_type || null,
+        created_at: c.created_at,
+        created_by_crm_user_id: c.created_by_crm_user_id,
+        created_by_name: c.created_by_crm_user_id ? creatorMap[c.created_by_crm_user_id]?.full_name || null : null,
+        created_by_email: c.created_by_crm_user_id ? creatorMap[c.created_by_crm_user_id]?.email || null : null,
+      }));
+
+      setContacts(mapped);
+      setSelectedIds(new Set());
+
       // Fetch CRM users for assignment dropdown
-      const { data: crmUsersData, error: crmError } = await listCrmUsersForAssignment();
-      if (!crmError && crmUsersData) {
+      const { data: crmUsersData } = await listCrmUsersForAssignment();
+      if (crmUsersData) {
         setCrmUsers(crmUsersData);
-        // Build a map for quick lookups
-        const usersMap: Record<string, CrmUserForAssignment> = {};
-        crmUsersData.forEach(u => { usersMap[u.id] = u; });
-        setCrmUsersMap(usersMap);
       }
     } catch (error) {
       console.error('[UnassignedContactsTab] Failed to fetch data:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   // Filter contacts based on search
   const filteredContacts = useMemo(() => {
     if (!search.trim()) return contacts;
     const searchLower = search.toLowerCase().trim();
     return contacts.filter(contact => {
-      const fullName = (contact.full_name || '').toLowerCase();
-      const companyName = (contact.company_name || '').toLowerCase();
-      const email = (contact.email || '').toLowerCase();
-      const phone = (contact.primary_phone || '').toLowerCase();
-      return fullName.includes(searchLower) || 
-             companyName.includes(searchLower) || 
-             email.includes(searchLower) || 
-             phone.includes(searchLower);
+      return (contact.full_name || '').toLowerCase().includes(searchLower) ||
+             (contact.company_name || '').toLowerCase().includes(searchLower) ||
+             (contact.email || '').toLowerCase().includes(searchLower) ||
+             (contact.primary_phone || '').toLowerCase().includes(searchLower);
     });
   }, [contacts, search]);
 
   const formatCreatedDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
     try {
-      return format(new Date(dateStr), 'dd MMM yyyy, HH:mm');
+      return format(new Date(dateStr), 'dd MMM yyyy');
     } catch {
       return '-';
     }
   };
 
-  const handleSave = async (contactId: string) => {
-    const primaryId = primarySelections[contactId];
-    const secondaryId = secondarySelections[contactId];
-
-    if (!primaryId) {
-      toast({
-        title: 'Primary Owner Required',
-        description: 'Please select a Primary Owner.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (secondaryId && secondaryId !== NONE_VALUE && primaryId === secondaryId) {
-      toast({
-        title: 'Invalid Selection',
-        description: 'Primary and Secondary owner cannot be the same.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setSavingId(contactId);
-
-    const result = await upsertOwners({
-      contact_id: contactId,
-      primary_owner_id: primaryId,
-      secondary_owner_id: secondaryId && secondaryId !== NONE_VALUE ? secondaryId : null,
-      stage: 'COLD_CALLING', // New assignments start at Cold Calling
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
+  };
 
-    if (result.error) {
-      toast({
-        title: 'Assignment Failed',
-        description: result.error,
-        variant: 'destructive',
-      });
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredContacts.length) {
+      setSelectedIds(new Set());
     } else {
-      toast({
-        title: 'Assigned Successfully',
-        description: 'The contact has been assigned.',
-      });
+      setSelectedIds(new Set(filteredContacts.map(c => c.id)));
+    }
+  };
 
-      // Clear selections
-      setPrimarySelections(prev => {
-        const updated = { ...prev };
-        delete updated[contactId];
-        return updated;
-      });
-      setSecondarySelections(prev => {
-        const updated = { ...prev };
-        delete updated[contactId];
-        return updated;
-      });
+  const handleAssignSelected = async () => {
+    if (!targetUserId) {
+      toast({ title: 'Select a user', description: 'Please select a user to assign contacts to.', variant: 'destructive' });
+      return;
+    }
+    if (selectedIds.size === 0) {
+      toast({ title: 'No contacts selected', description: 'Please select at least one contact.', variant: 'destructive' });
+      return;
+    }
 
-      // Refresh list
+    setIsAssigning(true);
+    const { data, error } = await adminAssignContacts(targetUserId, Array.from(selectedIds));
+    setIsAssigning(false);
+
+    if (error) {
+      toast({ title: 'Assignment failed', description: error, variant: 'destructive' });
+    } else {
+      const count = data?.assigned_count ?? selectedIds.size;
+      toast({ title: 'Assigned successfully', description: `Assigned ${count} contacts.` });
       await fetchData();
     }
+  };
 
-    setSavingId(null);
+  const handleAssignNextN = async () => {
+    if (!targetUserId) {
+      toast({ title: 'Select a user', description: 'Please select a user to assign contacts to.', variant: 'destructive' });
+      return;
+    }
+    if (assignNextN < 1) {
+      toast({ title: 'Invalid count', description: 'Please enter a valid number.', variant: 'destructive' });
+      return;
+    }
+
+    setIsAssigning(true);
+    const { data, error } = await adminAssignUnassigned(targetUserId, assignNextN);
+    setIsAssigning(false);
+
+    if (error) {
+      toast({ title: 'Assignment failed', description: error, variant: 'destructive' });
+    } else {
+      const count = data?.assigned_count ?? assignNextN;
+      toast({ title: 'Assigned successfully', description: `Assigned ${count} contacts.` });
+      await fetchData();
+    }
+  };
+
+  const handleRowClick = (e: React.MouseEvent, contact: UnassignedContact) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('[role="checkbox"]') || target.closest('input')) {
+      return;
+    }
+    setSelectedContact({
+      id: contact.id,
+      full_name: contact.full_name,
+      company_id: null,
+      designation: contact.designation,
+      country_code: null,
+      phone: null,
+      phone_type: null,
+      primary_phone: contact.primary_phone,
+      primary_phone_type: contact.primary_phone_type,
+      email: contact.email,
+      ice_handle: null,
+      preferred_channel: null,
+      notes: null,
+      is_active: true,
+      updated_at: null,
+      created_at: contact.created_at,
+      company_name: contact.company_name || undefined,
+    });
+    setDrawerOpen(true);
   };
 
   const formatUserLabel = (user: CrmUserForAssignment): string => {
-    if (user.email) {
-      return `${user.full_name} (${user.email})`;
-    }
-    return user.full_name;
-  };
-
-  const formatAddedBy = (creatorId: string | null): string => {
-    if (!creatorId) return 'Unknown';
-    const user = crmUsersMap[creatorId];
-    if (!user) return 'Unknown';
     return user.email ? `${user.full_name} (${user.email})` : user.full_name;
   };
 
+  const formatCreatedBy = (contact: UnassignedContact): string => {
+    if (!contact.created_by_name) return 'Unknown';
+    return contact.created_by_email
+      ? `${contact.created_by_name} (${contact.created_by_email})`
+      : contact.created_by_name;
+  };
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-              <Users className="h-5 w-5 text-accent-foreground" />
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+                <Users className="h-5 w-5 text-accent-foreground" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Unassigned Contacts</CardTitle>
+                <CardDescription>
+                  {isLoading ? 'Loading...' : `${filteredContacts.length} contacts need assignment`}
+                </CardDescription>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Bulk assignment controls */}
+          <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-dashed p-3 bg-muted/30">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Assign to user</label>
+              <Select value={targetUserId} onValueChange={setTargetUserId}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {crmUsers.map(user => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {formatUserLabel(user)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <CardTitle className="text-lg">Unassigned Contacts</CardTitle>
-              <CardDescription>
-                {isLoading ? 'Loading...' : `${filteredContacts.length} contacts need assignment`}
-              </CardDescription>
+              <Button
+                size="sm"
+                onClick={handleAssignSelected}
+                disabled={isAssigning || selectedIds.size === 0 || !targetUserId}
+              >
+                {isAssigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckSquare className="mr-2 h-4 w-4" />}
+                Assign Selected ({selectedIds.size})
+              </Button>
+            </div>
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Next N</label>
+                <Input
+                  type="number"
+                  value={assignNextN}
+                  onChange={(e) => setAssignNextN(parseInt(e.target.value) || 0)}
+                  className="h-9 w-20"
+                  min={1}
+                  max={500}
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleAssignNextN}
+                disabled={isAssigning || !targetUserId || assignNextN < 1}
+              >
+                {isAssigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                Assign Next {assignNextN}
+              </Button>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-4">
-          <ContactsSearch value={search} onChange={setSearch} />
-        </div>
-        
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : contacts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <UserPlus className="mb-2 h-10 w-10 text-muted-foreground/50" />
-            <p className="text-muted-foreground">All contacts are assigned</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-              <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Added By</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-[200px]">Primary Owner *</TableHead>
-                  <TableHead className="w-[200px]">Secondary Owner</TableHead>
-                  <TableHead className="w-[100px] text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredContacts.map((contact) => {
-                  const primaryId = primarySelections[contact.id] || '';
-                  const secondaryId = secondarySelections[contact.id] || NONE_VALUE;
 
-                  return (
-                    <TableRow key={contact.id}>
+          <div className="mb-4">
+            <ContactsSearch value={search} onChange={setSearch} />
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : contacts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <UserPlus className="mb-2 h-10 w-10 text-muted-foreground/50" />
+              <p className="text-muted-foreground">All contacts are assigned</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={filteredContacts.length > 0 && selectedIds.size === filteredContacts.length}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
+                    <TableHead>Full Name</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Designation</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Added By</TableHead>
+                    <TableHead>Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredContacts.map((contact) => (
+                    <TableRow
+                      key={contact.id}
+                      className="cursor-pointer"
+                      onClick={(e) => handleRowClick(e, contact)}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(contact.id)}
+                          onCheckedChange={() => toggleSelect(contact.id)}
+                          aria-label={`Select ${contact.full_name}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         {contact.full_name || '—'}
                       </TableCell>
@@ -304,75 +409,41 @@ export function UnassignedContactsTab() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {formatAddedBy(contact.created_by_crm_user_id)}
+                        {contact.designation || '—'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
+                        {contact.email || '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {contact.primary_phone || '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatCreatedBy(contact)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {formatCreatedDate(contact.created_at)}
                       </TableCell>
-                      <TableCell>
-                        <Select
-                          value={primaryId}
-                          onValueChange={(value) =>
-                            setPrimarySelections(prev => ({ ...prev, [contact.id]: value }))
-                          }
-                        >
-                          <SelectTrigger className="h-8">
-                            <SelectValue placeholder="Select primary..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {crmUsers.map((user) => (
-                              <SelectItem key={user.id} value={user.id}>
-                                {formatUserLabel(user)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={secondaryId}
-                          onValueChange={(value) =>
-                            setSecondarySelections(prev => ({ ...prev, [contact.id]: value }))
-                          }
-                        >
-                          <SelectTrigger className="h-8">
-                            <SelectValue placeholder="Select secondary..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE_VALUE}>None</SelectItem>
-                            {crmUsers.map((user) => (
-                              <SelectItem
-                                key={user.id}
-                                value={user.id}
-                                disabled={user.id === primaryId}
-                              >
-                                {formatUserLabel(user)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          onClick={() => handleSave(contact.id)}
-                          disabled={savingId === contact.id || !primaryId}
-                        >
-                          {savingId === contact.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            'Save'
-                          )}
-                        </Button>
-                      </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <ContactDetailsDrawer
+        contact={selectedContact}
+        companyName={selectedContact?.company_name || null}
+        currentStage={null}
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedContact(null);
+        }}
+        onOwnersChange={fetchData}
+        onCompanyChange={() => fetchData()}
+      />
+    </>
   );
 }

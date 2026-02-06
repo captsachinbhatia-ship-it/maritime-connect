@@ -9,12 +9,13 @@ import { MyContactsTab } from '@/components/contacts/MyContactsTab';
 import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
 import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
 import { BulkImportTab } from '@/components/contacts/BulkImportTab';
+import { DuplicateRiskTab } from '@/components/contacts/DuplicateRiskTab';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, UserPlus, Users2, FileUp } from 'lucide-react';
+import { Loader2, UserPlus, Users2, FileUp, AlertTriangle } from 'lucide-react';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
-type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary' | 'bulk-import';
+type TabType = 'all-contacts' | 'unassigned' | 'my-contacts' | 'my-added' | 'secondary' | 'bulk-import' | 'duplicate-risk';
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -175,6 +176,12 @@ export default function Contacts() {
           {isAdmin && (
             <TabsTrigger value="unassigned">Unassigned</TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="duplicate-risk" className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Duplicate Risk
+            </TabsTrigger>
+          )}
           <TabsTrigger value="my-added" className="flex items-center gap-1.5">
             <UserPlus className="h-3.5 w-3.5" />
             My Added
@@ -211,6 +218,12 @@ export default function Contacts() {
         {isAdmin && (
           <TabsContent value="unassigned" className="mt-4">
             <UnassignedContactsTab key={`unassigned-${refreshKey}`} />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="duplicate-risk" className="mt-4">
+            <DuplicateRiskTab key={`duplicate-risk-${refreshKey}`} />
           </TabsContent>
         )}
 
