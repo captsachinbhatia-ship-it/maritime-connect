@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { UnassignedContactsTab } from '@/components/contacts/UnassignedContactsTab';
 import { AssignedContactsTab } from '@/components/contacts/AssignedContactsTab';
@@ -189,52 +188,74 @@ export default function Contacts() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="grid grid-cols-4 gap-0 h-auto p-1 w-full min-w-[600px] overflow-x-auto">
-          {/* Row 1 */}
-          <TabsTrigger value="all-contacts" className="h-10 text-sm whitespace-nowrap">
-            All Contacts ({allContactsCount})
-          </TabsTrigger>
-          {isAdmin ? (
-            <TabsTrigger value="unassigned" className="h-10 text-sm whitespace-nowrap">
-              Unassigned ({unassignedCount})
-            </TabsTrigger>
-          ) : <span />}
-          {isAdmin ? (
-            <TabsTrigger value="duplicate-risk" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Duplicate Risk ({duplicateRiskCount})
-            </TabsTrigger>
-          ) : <span />}
-          {isAdmin ? (
-            <TabsTrigger value="pending-requests" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" />
-              Pending Requests ({pendingRequestsCount})
-            </TabsTrigger>
-          ) : <span />}
+        <div className="overflow-x-auto">
+          <div className="grid grid-cols-4 gap-1 p-1 rounded-lg bg-muted min-w-[640px]">
+            {/* Row 1 */}
+            <TabsList className="contents">
+              <TabsTrigger
+                value="all-contacts"
+                className="h-10 text-sm whitespace-nowrap justify-center data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md"
+              >
+                All Contacts ({allContactsCount})
+              </TabsTrigger>
+              {isAdmin ? (
+                <TabsTrigger
+                  value="unassigned"
+                  className="h-10 text-sm whitespace-nowrap justify-center data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md"
+                >
+                  Unassigned ({unassignedCount})
+                </TabsTrigger>
+              ) : <div />}
+              {isAdmin ? (
+                <TabsTrigger
+                  value="duplicate-risk"
+                  className="h-10 text-sm whitespace-nowrap justify-center gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Duplicate Risk ({duplicateRiskCount})
+                </TabsTrigger>
+              ) : <div />}
+              {isAdmin ? (
+                <TabsTrigger
+                  value="pending-requests"
+                  className="h-10 text-sm whitespace-nowrap justify-center gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  Pending ({pendingRequestsCount})
+                </TabsTrigger>
+              ) : <div />}
 
-          {/* Row 2 */}
-          <TabsTrigger value="my-contacts" className="h-10 text-sm whitespace-nowrap font-semibold">
-            My Contacts ({myContactsCount})
-          </TabsTrigger>
-          <TabsTrigger value="secondary" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
-            <Users2 className="h-3.5 w-3.5" />
-            Secondary ({secondaryCount})
-          </TabsTrigger>
-          <TabsTrigger value="my-added" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
-            <UserPlus className="h-3.5 w-3.5" />
-            My Added ({myAddedCount})
-          </TabsTrigger>
-          <TabsTrigger
-            value="bulk-import"
-            className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-          >
-            <FileUp className="h-3.5 w-3.5" />
-            Bulk Import
-            <Badge variant="outline" className="ml-1 h-5 px-1.5 text-[10px] font-semibold border-warning text-warning-foreground">
-              ⭐
-            </Badge>
-          </TabsTrigger>
-        </TabsList>
+              {/* Row 2 */}
+              <TabsTrigger
+                value="my-contacts"
+                className="h-10 text-sm whitespace-nowrap justify-center font-semibold data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md"
+              >
+                My Contacts ({myContactsCount})
+              </TabsTrigger>
+              <TabsTrigger
+                value="secondary"
+                className="h-10 text-sm whitespace-nowrap justify-center gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md"
+              >
+                <Users2 className="h-3.5 w-3.5" />
+                Secondary ({secondaryCount})
+              </TabsTrigger>
+              <TabsTrigger
+                value="my-added"
+                className="h-10 text-sm whitespace-nowrap justify-center gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                My Added ({myAddedCount})
+              </TabsTrigger>
+              <TabsTrigger
+                value="bulk-import"
+                className="h-10 text-sm whitespace-nowrap justify-center gap-1.5 font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md"
+              >
+                <FileUp className="h-3.5 w-3.5" />
+                Bulk Import
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
         <TabsContent value="my-contacts" className="mt-4">
           <MyContactsTab key={`my-${refreshKey}`} />

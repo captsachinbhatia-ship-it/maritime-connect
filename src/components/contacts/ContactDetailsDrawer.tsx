@@ -464,8 +464,22 @@ export function ContactDetailsDrawer({
               phoneVisible={!!(contact.primary_phone || contact.phone)}
               emailVisible={!!contact.email}
             />
+            {/* Quick Assign Buttons */}
+            <div className="flex gap-1.5 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsAddAssignmentOpen(true);
+                }}
+                title="Assign to Me or Teammate"
+              >
+                <UserPlus className="mr-1 h-3 w-3" />
+                Assign
+              </Button>
+            </div>
             {isAdmin && (
-              <div className="flex gap-2 shrink-0 ml-2">
+              <div className="flex gap-2 shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
