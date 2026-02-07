@@ -52,7 +52,7 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
         .from('contact_assignments')
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
-        .in('assignment_role', ['PRIMARY', 'SECONDARY']);
+        .eq('assignment_role', 'PRIMARY');
 
       if (userId) {
         assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { LinkedContactsList } from './LinkedContactsList';
 import type { CompanyWithContactCount } from '@/types';
 
 interface CompanyDetailsDrawerProps {
@@ -23,6 +24,11 @@ export function CompanyDetailsDrawer({
   onOpenChange,
 }: CompanyDetailsDrawerProps) {
   if (!company) return null;
+
+  const handleContactClick = (contactId: string) => {
+    // Navigate to the contact
+    window.open(`/contacts?open=${contactId}`, '_blank');
+  };
 
   const DetailRow = ({
     icon: Icon,
@@ -184,6 +190,12 @@ export function CompanyDetailsDrawer({
             </div>
           </>
         )}
+
+        {/* Linked Contacts Section */}
+        <LinkedContactsList
+          companyId={company.id}
+          onContactClick={handleContactClick}
+        />
       </SheetContent>
     </Sheet>
   );

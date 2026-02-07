@@ -509,8 +509,9 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
                       placeholder="Search companies..."
                       value={companySearch}
                       onValueChange={setCompanySearch}
+                      className="sticky top-0 z-10"
                     />
-                    <CommandList>
+                    <CommandList className="max-h-[200px] overflow-y-auto">
                       <CommandEmpty>
                         {showAddCompanyOption ? (
                           <button
