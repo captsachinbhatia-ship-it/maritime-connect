@@ -189,45 +189,48 @@ export default function Contacts() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="my-contacts" className="font-semibold">
-            My Contacts ({myContactsCount})
-          </TabsTrigger>
-          <TabsTrigger value="secondary" className="flex items-center gap-1.5">
-            <Users2 className="h-3.5 w-3.5" />
-            Secondary ({secondaryCount})
-          </TabsTrigger>
-          <TabsTrigger value="all-contacts">
+        <TabsList className="grid grid-cols-4 gap-0 h-auto p-1 w-full min-w-[600px] overflow-x-auto">
+          {/* Row 1 */}
+          <TabsTrigger value="all-contacts" className="h-10 text-sm whitespace-nowrap">
             All Contacts ({allContactsCount})
           </TabsTrigger>
-          {isAdmin && (
-            <TabsTrigger value="unassigned">
+          {isAdmin ? (
+            <TabsTrigger value="unassigned" className="h-10 text-sm whitespace-nowrap">
               Unassigned ({unassignedCount})
             </TabsTrigger>
-          )}
-          {isAdmin && (
-            <TabsTrigger value="duplicate-risk" className="flex items-center gap-1.5">
+          ) : <span />}
+          {isAdmin ? (
+            <TabsTrigger value="duplicate-risk" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />
               Duplicate Risk ({duplicateRiskCount})
             </TabsTrigger>
-          )}
-          {isAdmin && (
-            <TabsTrigger value="pending-requests" className="flex items-center gap-1.5">
+          ) : <span />}
+          {isAdmin ? (
+            <TabsTrigger value="pending-requests" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
               Pending Requests ({pendingRequestsCount})
             </TabsTrigger>
-          )}
-          <TabsTrigger value="my-added" className="flex items-center gap-1.5">
+          ) : <span />}
+
+          {/* Row 2 */}
+          <TabsTrigger value="my-contacts" className="h-10 text-sm whitespace-nowrap font-semibold">
+            My Contacts ({myContactsCount})
+          </TabsTrigger>
+          <TabsTrigger value="secondary" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
+            <Users2 className="h-3.5 w-3.5" />
+            Secondary ({secondaryCount})
+          </TabsTrigger>
+          <TabsTrigger value="my-added" className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5">
             <UserPlus className="h-3.5 w-3.5" />
             My Added ({myAddedCount})
           </TabsTrigger>
           <TabsTrigger
             value="bulk-import"
-            className="flex items-center gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+            className="h-10 text-sm whitespace-nowrap flex items-center gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
             <FileUp className="h-3.5 w-3.5" />
             Bulk Import
-            <Badge variant="outline" className="ml-1 h-5 px-1.5 text-[10px] font-semibold border-amber-500 text-amber-600 dark:text-amber-400">
+            <Badge variant="outline" className="ml-1 h-5 px-1.5 text-[10px] font-semibold border-warning text-warning-foreground">
               ⭐
             </Badge>
           </TabsTrigger>

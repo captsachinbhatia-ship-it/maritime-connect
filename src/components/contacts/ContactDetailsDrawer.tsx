@@ -31,7 +31,7 @@ import { AddFollowupModal } from './AddFollowupModal';
 import { AssignOwnersModal } from './AssignOwnersModal';
 import { StageRequestModal } from './StageRequestModal';
 import { StageHistoryPanel } from './StageHistoryPanel';
-import { AddAssignmentModal } from './AddAssignmentModal';
+import { AssignContactModal } from './AssignContactModal';
 import { EditCompanyModal } from './EditCompanyModal';
 import { SendNudgeDialog } from './SendNudgeDialog';
 import { getContactPhones, ContactPhone } from '@/services/contactPhones';
@@ -1121,17 +1121,12 @@ export function ContactDetailsDrawer({
         )}
 
         {/* Add Assignment Modal (Admin only) */}
-        {contact && currentStage && (
-          <AddAssignmentModal
+        {contact && (
+          <AssignContactModal
+            open={isAddAssignmentOpen}
+            onOpenChange={setIsAddAssignmentOpen}
             contactId={contact.id}
             contactName={contact.full_name || 'Unknown'}
-            currentStage={currentStage}
-            existingAssigneeIds={[
-              ...(owners?.primary?.assigned_to_crm_user_id ? [owners.primary.assigned_to_crm_user_id] : []),
-              ...(owners?.secondary?.assigned_to_crm_user_id ? [owners.secondary.assigned_to_crm_user_id] : []),
-            ]}
-            isOpen={isAddAssignmentOpen}
-            onClose={() => setIsAddAssignmentOpen(false)}
             onSuccess={() => {
               loadOwners();
               loadAssignments();
