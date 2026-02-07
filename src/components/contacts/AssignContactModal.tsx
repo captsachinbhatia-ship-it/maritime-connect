@@ -18,24 +18,25 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
-import { upsertAssignment, AssignmentStage, ContactAssignment } from '@/services/assignments';
-import { toast } from '@/hooks/use-toast';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { getActiveCrmUsers } from '@/services/assignPrimary';
+import { addAssignment, getContactOwners, type AssignmentStage, type AssignmentRole } from '@/services/assignments';
+import { useToast } from '@/hooks/use-toast';
 
 interface AssignContactModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contactId: string;
   contactName: string;
-  currentAssignment: ContactAssignment | null;
-  onSuccess: () => void;
+  /** When provided, pre-selects the assignment role and locks it */
+  defaultRole?: AssignmentRole;
+  onSuccess: (assigneeName?: string) => void;
 }
 
 const STAGES: { value: AssignmentStage; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
-  { value: 'INACTIVE', label: 'Inactive' },
 ];
 
 export function AssignContactModal({
@@ -43,58 +44,75 @@ export function AssignContactModal({
   onOpenChange,
   contactId,
   contactName,
-  currentAssignment,
+  defaultRole,
   onSuccess,
 }: AssignContactModalProps) {
-  const [crmUsers, setCrmUsers] = useState<CrmUserForAssignment[]>([]);
-  const [selectedCrmUserId, setSelectedCrmUserId] = useState<string>('');
+  const { toast } = useToast();
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string; email: string | null }>>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [assignmentRole, setAssignmentRole] = useState<AssignmentRole>(defaultRole || 'PRIMARY');
   const [selectedStage, setSelectedStage] = useState<AssignmentStage>('COLD_CALLING');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasPrimaryOwner, setHasPrimaryOwner] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (open) {
-      loadCrmUsers();
-      // Pre-fill with current assignment if exists
-      if (currentAssignment) {
-        setSelectedCrmUserId(currentAssignment.assigned_to_crm_user_id || '');
-        setSelectedStage(currentAssignment.stage);
-      } else {
-        setSelectedCrmUserId('');
-        setSelectedStage('COLD_CALLING');
-      }
+      loadData();
+      setSelectedUserId('');
+      setAssignmentRole(defaultRole || 'PRIMARY');
+      setSelectedStage('COLD_CALLING');
+      setError(null);
     }
-  }, [open, currentAssignment]);
+  }, [open, defaultRole]);
 
-  const loadCrmUsers = async () => {
+  const loadData = async () => {
     setIsLoading(true);
     setError(null);
-    
-    const result = await listCrmUsersForAssignment();
-    
-    if (result.error) {
-      setError(result.error);
+
+    // Load users and check for existing primary owner in parallel
+    const [usersResult, ownersResult] = await Promise.all([
+      getActiveCrmUsers(),
+      getContactOwners(contactId),
+    ]);
+
+    if (usersResult.error) {
+      setError(usersResult.error);
     } else {
-      setCrmUsers(result.data || []);
+      setUsers(usersResult.data || []);
     }
-    
+
+    if (ownersResult.data) {
+      setHasPrimaryOwner(!!ownersResult.data.primary);
+    } else {
+      setHasPrimaryOwner(null);
+    }
+
     setIsLoading(false);
   };
 
+  const canSubmitSecondary = assignmentRole !== 'SECONDARY' || hasPrimaryOwner === true;
+
   const handleSave = async () => {
-    if (!selectedCrmUserId) {
+    if (!selectedUserId) {
       setError('Please select a user to assign');
+      return;
+    }
+
+    if (assignmentRole === 'SECONDARY' && !hasPrimaryOwner) {
+      setError('Primary owner must be assigned first.');
       return;
     }
 
     setIsSaving(true);
     setError(null);
 
-    const result = await upsertAssignment({
+    const result = await addAssignment({
       contact_id: contactId,
-      assigned_to_crm_user_id: selectedCrmUserId,
-      stage: selectedStage,
+      assigned_to_crm_user_id: selectedUserId,
+      assignment_role: assignmentRole,
+      stage: assignmentRole === 'PRIMARY' ? selectedStage : 'COLD_CALLING',
     });
 
     if (result.error) {
@@ -103,37 +121,30 @@ export function AssignContactModal({
       return;
     }
 
+    const assigneeName = users.find(u => u.id === selectedUserId)?.full_name || 'User';
+
     toast({
-      title: 'Success',
-      description: 'Assigned successfully',
+      title: 'Assignment successful',
+      description: `${assigneeName} assigned as ${assignmentRole.toLowerCase()} owner`,
     });
 
     setIsSaving(false);
     onOpenChange(false);
-    onSuccess();
+    onSuccess(assigneeName);
   };
 
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) {
-      setError(null);
-    }
-    onOpenChange(newOpen);
-  };
-
-  const formatUserLabel = (user: CrmUserForAssignment): string => {
-    return user.full_name;
-  };
+  const buttonLabel = assignmentRole === 'PRIMARY' ? 'Assign Primary' : 'Assign Secondary';
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            {currentAssignment ? 'Reassign Contact' : 'Assign Contact'}
+            Assign Contact
           </DialogTitle>
           <DialogDescription>
-            {currentAssignment ? 'Update assignment for' : 'Assign'} <strong>{contactName}</strong>
+            Assign an owner to <strong>{contactName}</strong>
           </DialogDescription>
         </DialogHeader>
 
@@ -150,52 +161,99 @@ export function AssignContactModal({
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Assignment Role Toggle */}
+            <div className="space-y-2">
+              <Label>Assignment Type *</Label>
+              <ToggleGroup
+                type="single"
+                value={assignmentRole}
+                onValueChange={(val) => {
+                  if (val) setAssignmentRole(val as AssignmentRole);
+                }}
+                className="w-full"
+              >
+                <ToggleGroupItem
+                  value="PRIMARY"
+                  className="flex-1 h-9 text-sm font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                >
+                  Primary
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="SECONDARY"
+                  className="flex-1 h-9 text-sm font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                >
+                  Secondary
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <p className="text-xs text-muted-foreground">
+                {assignmentRole === 'PRIMARY'
+                  ? 'Primary owners manage the contact pipeline and can change stages.'
+                  : 'Secondary owners have read access and can add interactions.'}
+              </p>
+            </div>
+
+            {/* Secondary warning if no primary */}
+            {assignmentRole === 'SECONDARY' && hasPrimaryOwner === false && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Primary owner must be assigned first.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Assign To */}
             <div className="space-y-2">
               <Label>Assign To *</Label>
-              <Select value={selectedCrmUserId} onValueChange={setSelectedCrmUserId}>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select user..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {crmUsers.map((user) => (
+                  {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {formatUserLabel(user)}
+                      {user.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Stage *</Label>
-              <Select value={selectedStage} onValueChange={(val) => setSelectedStage(val as AssignmentStage)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STAGES.map((stage) => (
-                    <SelectItem key={stage.value} value={stage.value}>
-                      {stage.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Stage - only for PRIMARY */}
+            {assignmentRole === 'PRIMARY' && (
+              <div className="space-y-2">
+                <Label>Stage *</Label>
+                <Select value={selectedStage} onValueChange={(v) => setSelectedStage(v as AssignmentStage)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STAGES.map((stage) => (
+                      <SelectItem key={stage.value} value={stage.value}>
+                        {stage.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         )}
 
         <DialogFooter>
           <Button
-            type="button"
             variant="outline"
-            onClick={() => handleOpenChange(false)}
+            onClick={() => onOpenChange(false)}
             disabled={isSaving}
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSaving || isLoading || !selectedCrmUserId}>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving || isLoading || !selectedUserId || !canSubmitSecondary}
+          >
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {currentAssignment ? 'Update Assignment' : 'Assign Contact'}
+            {buttonLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

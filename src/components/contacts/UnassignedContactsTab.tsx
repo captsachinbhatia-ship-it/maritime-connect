@@ -27,7 +27,7 @@ import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/prof
 import { adminAssignContacts, adminAssignUnassigned } from '@/services/adminAssignments';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
-import { AssignPrimaryModal } from './AssignPrimaryModal';
+import { AssignContactModal } from './AssignContactModal';
 import { ContactWithCompany } from '@/types';
 
 interface UnassignedContact {
@@ -418,7 +418,7 @@ export function UnassignedContactsTab() {
       />
 
       {assignModalContact && (
-        <AssignPrimaryModal
+        <AssignContactModal
           open={assignModalOpen}
           onOpenChange={setAssignModalOpen}
           contactId={assignModalContact.id}
