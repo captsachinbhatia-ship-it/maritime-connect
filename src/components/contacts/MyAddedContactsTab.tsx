@@ -22,6 +22,18 @@ import { ContactsSearch } from './ContactsSearch';
 import { ContactWithCompany } from '@/types';
 import { toast } from '@/hooks/use-toast';
 
+function formatDaysSince(createdAt: string | null): string {
+  if (!createdAt) return '—';
+  const diffMs = Date.now() - new Date(createdAt).getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return 'Just now';
+  if (diffHours < 1) return `${diffMins} min`;
+  if (diffDays < 1) return `${diffHours} hr`;
+  return `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+}
+
 interface MyAddedUnassigned {
   id: string;
   full_name: string | null;
@@ -274,13 +286,9 @@ export function MyAddedContactsTab({ onRefresh }: MyAddedContactsTabProps) {
                     {contact.email || '—'}
                   </TableCell>
                   <TableCell>
-                    {contact.days_since_added != null ? (
-                      <Badge variant="outline" className="text-xs">
-                        {contact.days_since_added} day{contact.days_since_added !== 1 ? 's' : ''}
-                      </Badge>
-                    ) : (
-                      '—'
-                    )}
+                    <Badge variant="outline" className="text-xs">
+                      {formatDaysSince(contact.created_at)}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
