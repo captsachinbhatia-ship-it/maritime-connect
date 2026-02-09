@@ -156,7 +156,7 @@ export function AddFollowupModal({
     }
 
     if (!followupReason.trim()) {
-      setError('Please enter a reason for the follow-up.');
+      setError('Next Action is required. Please specify what needs to be done.');
       return;
     }
 
@@ -287,17 +287,18 @@ export function AddFollowupModal({
               </Select>
             </div>
 
-            {/* Reason */}
+            {/* Next Action (mandatory) */}
             <div className="space-y-2">
-              <Label htmlFor="reason">Reason *</Label>
+              <Label htmlFor="reason">Next Action *</Label>
               <Input
                 id="reason"
                 value={followupReason}
                 onChange={(e) => setFollowupReason(e.target.value)}
-                placeholder="Why is this follow-up needed?"
+                placeholder="e.g., Send rate sheet, Call back for pricing"
                 required
                 maxLength={255}
               />
+              <p className="text-xs text-muted-foreground">What specific action needs to be taken?</p>
             </div>
 
             {/* Notes */}

@@ -183,7 +183,7 @@ export function FollowupsTab({
               <TableRow>
                 <TableHead className="w-[140px]">Due</TableHead>
                 <TableHead className="w-[100px]">Type</TableHead>
-                <TableHead className="min-w-[180px]">Reason</TableHead>
+                <TableHead className="min-w-[180px]">Next Action</TableHead>
                 <TableHead className="w-[90px]">Status</TableHead>
                 <TableHead className="w-[50px] text-right"></TableHead>
               </TableRow>
