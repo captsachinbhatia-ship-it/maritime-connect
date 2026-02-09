@@ -29,6 +29,7 @@ import {
   fetchStagingRows,
   validateImportBatch,
   importValidatedContacts,
+  importValidatedContactsClientSide,
 } from '@/services/bulkImport';
 import type { ParsedCsvRow, StagingRow, ValidationResult, ImportValidatedResult } from '@/services/bulkImport';
 
@@ -180,9 +181,19 @@ export default function BulkImport() {
 
   // Import validated
   const handleImport = async () => {
-    if (!activeBatchId) return;
+    if (!activeBatchId || !crmUserId) return;
     setImporting(true);
-    const { data, error } = await importValidatedContacts(activeBatchId);
+
+    // Try RPC first
+    let { data, error } = await importValidatedContacts(activeBatchId);
+
+    // If RPC fails, fall back to client-side import
+    if (error || (data && data.imported_count === 0 && validatedRows.length > 0)) {
+      console.warn('[BulkImport] RPC failed or imported 0, falling back to client-side import. Error:', error);
+      const fallback = await importValidatedContactsClientSide(activeBatchId, crmUserId);
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       toast({ title: 'Import failed', description: error, variant: 'destructive' });
@@ -195,9 +206,8 @@ export default function BulkImport() {
     if (data) {
       toast({
         title: 'Import complete',
-        description: `Imported ${data.imported_count} contacts (${data.skipped_duplicate_count} duplicates skipped)`,
+        description: `Imported ${data.imported_count} contacts${data.skipped_duplicate_count > 0 ? ` (${data.skipped_duplicate_count} duplicates skipped)` : ''}`,
       });
-      // Switch to appropriate tab after import
       if (data.skipped_duplicate_count > 0) {
         setActiveTab('duplicates');
       }

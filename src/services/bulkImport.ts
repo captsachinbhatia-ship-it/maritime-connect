@@ -140,15 +140,126 @@ export async function importValidatedBatch(
 export async function importValidatedContacts(
   batchId: string
 ): Promise<{ data: ImportValidatedResult | null; error: string | null }> {
+  console.log('[BulkImport] Calling import_validated_contacts RPC for batch:', batchId);
   const { data, error } = await supabase.rpc('import_validated_contacts', {
     p_batch_id: batchId,
   });
+
+  console.log('[BulkImport] RPC response:', { data, error });
 
   if (error) return { data: null, error: error.message };
 
   // RPC returns a table, so data is an array with one row
   const row = Array.isArray(data) ? data[0] : data;
   return { data: row as ImportValidatedResult, error: null };
+}
+
+// Client-side fallback: directly insert validated staging rows into contacts
+export async function importValidatedContactsClientSide(
+  batchId: string,
+  crmUserId: string
+): Promise<{ data: ImportValidatedResult | null; error: string | null }> {
+  console.log('[BulkImport] Starting client-side import for batch:', batchId);
+
+  // 1. Fetch all VALIDATED staging rows
+  const { data: rows, error: fetchErr } = await supabase
+    .from('contact_import_staging')
+    .select('*')
+    .eq('batch_id', batchId)
+    .eq('status', 'VALIDATED');
+
+  if (fetchErr) return { data: null, error: fetchErr.message };
+  if (!rows || rows.length === 0) {
+    return { data: { imported_count: 0, skipped_duplicate_count: 0 }, error: null };
+  }
+
+  console.log(`[BulkImport] Found ${rows.length} validated rows to import`);
+
+  let importedCount = 0;
+  let skippedDuplicateCount = 0;
+  const errors: string[] = [];
+
+  for (const row of rows) {
+    try {
+      // Resolve or create company if company_name is provided
+      let companyId: string | null = null;
+      if (row.company_name) {
+        const { data: existingCompany } = await supabase
+          .from('companies')
+          .select('id')
+          .ilike('company_name', row.company_name.trim())
+          .limit(1)
+          .maybeSingle();
+
+        if (existingCompany) {
+          companyId = existingCompany.id;
+        } else {
+          const { data: newCompany, error: companyErr } = await supabase
+            .from('companies')
+            .insert({ company_name: row.company_name.trim(), is_active: true })
+            .select('id')
+            .single();
+          if (!companyErr && newCompany) {
+            companyId = newCompany.id;
+          }
+        }
+      }
+
+      // Insert contact
+      const { data: contact, error: insertErr } = await supabase
+        .from('contacts')
+        .insert({
+          full_name: row.full_name?.trim() || 'Unknown',
+          company_id: companyId,
+          designation: row.designation || null,
+          country_code: row.country_code || null,
+          phone: row.phone || null,
+          phone_type: row.phone_type || null,
+          email: row.email || null,
+          ice_handle: row.ice_handle || null,
+          preferred_channel: row.preferred_channel || null,
+          notes: row.notes || null,
+          is_active: true,
+        })
+        .select('id')
+        .single();
+
+      if (insertErr) {
+        console.error(`[BulkImport] Failed to insert ${row.full_name}:`, insertErr.message);
+        errors.push(`${row.full_name}: ${insertErr.message}`);
+        continue;
+      }
+
+      // Insert primary phone if phone exists
+      if (row.phone && contact) {
+        await supabase.from('contact_phones').insert({
+          contact_id: contact.id,
+          phone_type: row.phone_type || 'MOBILE',
+          phone_number: row.phone,
+          is_primary: true,
+        });
+      }
+
+      // Update staging row to IMPORTED
+      await supabase
+        .from('contact_import_staging')
+        .update({ status: 'IMPORTED', created_contact_id: contact.id })
+        .eq('id', row.id);
+
+      importedCount++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[BulkImport] Exception for ${row.full_name}:`, msg);
+      errors.push(`${row.full_name}: ${msg}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    console.warn('[BulkImport] Import completed with errors:', errors);
+  }
+
+  console.log(`[BulkImport] Client-side import done: ${importedCount} imported, ${skippedDuplicateCount} skipped`);
+  return { data: { imported_count: importedCount, skipped_duplicate_count: skippedDuplicateCount }, error: null };
 }
 
 // Fetch a contact by ID for duplicate preview
