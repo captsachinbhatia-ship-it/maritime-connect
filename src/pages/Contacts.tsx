@@ -13,7 +13,6 @@ import { PendingInactiveRequestsTab } from '@/components/contacts/PendingInactiv
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, UserPlus, Users2, FileUp, AlertTriangle, Clock, BookOpen } from 'lucide-react';
-import { getCurrentCrmUserId } from '@/services/profiles';
 
 type TabType = 'directory' | 'my-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
 
@@ -78,7 +77,7 @@ export default function Contacts() {
   const loadCounts = useCallback(async () => {
     if (!crmUser) return;
 
-    const { data: currentCrmUserId } = await getCurrentCrmUserId();
+    const currentCrmUserId = crmUser.id;
     if (!currentCrmUserId) return;
 
     // Secondary
