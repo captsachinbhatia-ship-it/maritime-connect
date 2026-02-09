@@ -22,7 +22,7 @@ import { getCompanyNamesMap } from '@/services/contacts';
 import { getUserNames } from '@/services/interactions';
 import { getNudgeStatusMap } from '@/services/nudgeStatus';
 import { ContactsSearch } from './ContactsSearch';
-
+import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
 import { ContactWithCompany } from '@/types';
 
@@ -65,8 +65,9 @@ export function SecondaryContactsTab() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
-
-
+  // Drawer state
+  const [drawerContact, setDrawerContact] = useState<SecondaryContact | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const loadContacts = useCallback(async () => {
     if (!session) {
       setContacts([]);
@@ -240,7 +241,12 @@ export function SecondaryContactsTab() {
   }, [contacts, search, companyNamesMap]);
 
   // Row click disabled for secondary contacts to protect private details
-
+  const handleRowClick = (e: React.MouseEvent, contact: SecondaryContact) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('[role="menu"]') || target.closest('[role="checkbox"]')) return;
+    setDrawerContact(contact);
+    setDrawerOpen(true);
+  };
   const formatLastInteraction = (contact: SecondaryContact) => {
     if (!contact.last_interaction_at) return null;
     const type = contact.last_interaction_type || '';
@@ -339,7 +345,7 @@ export function SecondaryContactsTab() {
                     const hasActiveNudge = nudgeStatusMap[contact.id] || false;
 
                     return (
-                      <TableRow key={contact.id}>
+                      <TableRow key={contact.id} className="cursor-pointer" onClick={(e) => handleRowClick(e, contact)}>
                         <TableCell className="font-medium">
                           <div className="flex flex-col gap-1">
                             <span>{contact.full_name || '-'}</span>
@@ -407,6 +413,21 @@ export function SecondaryContactsTab() {
         </CardContent>
       </Card>
 
+      <ContactDetailsDrawer
+        contact={drawerContact}
+        companyName={drawerContact?.company_id ? companyNamesMap[drawerContact.company_id] || null : null}
+        currentStage={drawerContact?.stage || null}
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDrawerContact(null);
+        }}
+        onOwnersChange={loadContacts}
+        onCompanyChange={(newCompanyId, newCompanyName) => {
+          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
+          loadContacts();
+        }}
+      />
     </>
   );
 }

@@ -24,6 +24,7 @@ import { ContactOwners, getOwnersForContacts } from '@/services/assignments';
 import { getUserNames } from '@/services/interactions';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { AssignOwnersModal } from './AssignOwnersModal';
+import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ColumnFiltersBar, SortableHeader, type ColumnFilters, type SortColumn, type SortDirection } from './ColumnFilters';
 import { ContactWithCompany } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -70,6 +71,10 @@ export function AssignedContactsTab() {
   // Modal state
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<AssignedContact | null>(null);
+
+  // Drawer state
+  const [drawerContact, setDrawerContact] = useState<AssignedContact | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -213,6 +218,13 @@ export function AssignedContactsTab() {
     e.stopPropagation();
     setSelectedContact(contact);
     setReassignModalOpen(true);
+  };
+
+  const handleRowClick = (e: React.MouseEvent, contact: AssignedContact) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('[role="menu"]') || target.closest('[role="checkbox"]')) return;
+    setDrawerContact(contact);
+    setDrawerOpen(true);
   };
 
   const handleReassignSuccess = () => {
@@ -406,7 +418,7 @@ export function AssignedContactsTab() {
                     };
 
                     return (
-                      <TableRow key={contact.id}>
+                      <TableRow key={contact.id} className="cursor-pointer" onClick={(e) => handleRowClick(e, contact)}>
                         <TableCell className="font-medium">
                           {contact.full_name || '—'}
                         </TableCell>
@@ -496,6 +508,22 @@ export function AssignedContactsTab() {
           onSuccess={handleReassignSuccess}
         />
       )}
+
+      <ContactDetailsDrawer
+        contact={drawerContact}
+        companyName={drawerContact?.company_id ? companyNamesMap[drawerContact.company_id] || null : null}
+        currentStage={drawerContact?.stage || null}
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDrawerContact(null);
+        }}
+        onOwnersChange={fetchData}
+        onCompanyChange={(newCompanyId, newCompanyName) => {
+          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
+          fetchData();
+        }}
+      />
     </>
   );
 }
