@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { UnassignedContactsTab } from '@/components/contacts/UnassignedContactsTab';
 import { AssignedContactsTab } from '@/components/contacts/AssignedContactsTab';
+import { MyContactsTab } from '@/components/contacts/MyContactsTab';
 import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
 import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
 import { DuplicateRiskTab } from '@/components/contacts/DuplicateRiskTab';
@@ -14,9 +15,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, UserPlus, Users2, FileUp, AlertTriangle, Clock } from 'lucide-react';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
-type TabType = 'all-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
+type TabType = 'all-contacts' | 'my-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
 
-const ALL_TABS: TabType[] = ['all-contacts', 'secondary', 'my-added', 'unassigned', 'duplicate-risk', 'pending-requests'];
+const ALL_TABS: TabType[] = ['all-contacts', 'my-contacts', 'secondary', 'my-added', 'unassigned', 'duplicate-risk', 'pending-requests'];
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -37,6 +38,7 @@ export default function Contacts() {
   const [duplicateRiskCount, setDuplicateRiskCount] = useState(0);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [myAddedCount, setMyAddedCount] = useState(0);
+  const [myContactsCount, setMyContactsCount] = useState(0);
 
   // Sync tab from URL param
   useEffect(() => {
@@ -95,6 +97,15 @@ export default function Contacts() {
       .eq('status', 'ACTIVE')
       .eq('assignment_role', 'PRIMARY');
     setAllContactsCount(allCount || 0);
+
+    // My Contacts (primary owned by current user)
+    const { count: myCount } = await supabase
+      .from('contact_assignments')
+      .select('contact_id', { count: 'exact', head: true })
+      .eq('status', 'ACTIVE')
+      .eq('assigned_to_crm_user_id', currentCrmUserId)
+      .eq('assignment_role', 'PRIMARY');
+    setMyContactsCount(myCount || 0);
 
     // My Added
     const { count: addedCount } = await supabase
@@ -187,6 +198,12 @@ export default function Contacts() {
               All Contacts ({allContactsCount})
             </TabsTrigger>
             <TabsTrigger
+              value="my-contacts"
+              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              My Contacts ({myContactsCount})
+            </TabsTrigger>
+            <TabsTrigger
               value="secondary"
               className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
@@ -231,6 +248,10 @@ export default function Contacts() {
 
         <TabsContent value="all-contacts" className="mt-4">
           <AssignedContactsTab key={`assigned-${refreshKey}`} />
+        </TabsContent>
+
+        <TabsContent value="my-contacts" className="mt-4">
+          <MyContactsTab key={`mycontacts-${refreshKey}`} />
         </TabsContent>
 
         <TabsContent value="secondary" className="mt-4">
