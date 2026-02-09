@@ -38,10 +38,26 @@ export default function BulkImport() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const BATCH_KEY = 'contact_import_last_batch_id';
+
   // State
   const [parsedRows, setParsedRows] = useState<ParsedCsvRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const [activeBatchId, setActiveBatchIdRaw] = useState<string | null>(() => {
+    return localStorage.getItem(BATCH_KEY);
+  });
+
+  // Wrapper that syncs to localStorage
+  const setActiveBatchId = (id: string | null) => {
+    setActiveBatchIdRaw(id);
+    if (id) {
+      localStorage.setItem(BATCH_KEY, id);
+      console.log('[BulkImport] Persisted batch_id:', id);
+    } else {
+      localStorage.removeItem(BATCH_KEY);
+      console.log('[BulkImport] Cleared batch_id from localStorage');
+    }
+  };
   const [stagingRows, setStagingRows] = useState<StagingRow[]>([]);
   const [stagingLoading, setStagingLoading] = useState(false);
   // skipDuplicates removed — new RPC always marks them SKIPPED_DUPLICATE
@@ -69,6 +85,13 @@ export default function BulkImport() {
     }
     if (crmUser) resolve();
   }, [crmUser]);
+
+  // Restore staging rows if we have a persisted batch_id
+  useEffect(() => {
+    if (activeBatchId && stagingRows.length === 0 && !stagingLoading) {
+      loadStagingRows();
+    }
+  }, [activeBatchId]);
 
   // Filtered staging rows
   const validatedRows = stagingRows.filter((r) => r.status === 'VALIDATED');
@@ -156,6 +179,7 @@ export default function BulkImport() {
   // Validate batch
   const handleValidate = async () => {
     if (!activeBatchId) return;
+    console.log('[BulkImport] Validating batch_id:', activeBatchId);
     setValidating(true);
     const { data, error } = await validateImportBatch(activeBatchId);
 
@@ -182,6 +206,7 @@ export default function BulkImport() {
   // Import validated
   const handleImport = async () => {
     if (!activeBatchId || !crmUserId) return;
+    console.log('[BulkImport] Importing batch_id:', activeBatchId);
     setImporting(true);
 
     // Try RPC first
@@ -260,6 +285,11 @@ export default function BulkImport() {
           <p className="mt-1 text-muted-foreground">
             Upload CSV, validate for errors/duplicates, then import.
           </p>
+          {activeBatchId && (
+            <p className="mt-1 text-xs font-mono text-muted-foreground">
+              Active batch: {activeBatchId}
+            </p>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
           <Download className="mr-2 h-4 w-4" />

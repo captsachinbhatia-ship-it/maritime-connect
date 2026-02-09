@@ -114,10 +114,12 @@ export async function fetchStagingRows(
 export async function validateImportBatch(
   batchId: string
 ): Promise<{ data: ValidationResult | null; error: string | null }> {
+  console.log('[BulkImport] RPC validate_import_batch called with p_batch_id:', batchId);
   const { data, error } = await supabase.rpc('validate_import_batch', {
     p_batch_id: batchId,
   });
 
+  console.log('[BulkImport] validate_import_batch response:', { data, error });
   if (error) return { data: null, error: error.message };
   return { data: data as ValidationResult, error: null };
 }
