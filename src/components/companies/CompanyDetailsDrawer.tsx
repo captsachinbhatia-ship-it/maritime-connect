@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { Building2, Globe, Mail, Phone, MapPin, Calendar, Tag, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { CompanyActionsBar } from './CompanyActionsBar';
 import {
   Sheet,
   SheetContent,
@@ -79,6 +80,14 @@ export function CompanyDetailsDrawer({
             </div>
           </div>
         </SheetHeader>
+
+        <Separator className="my-4" />
+
+        {/* Company Actions */}
+        <CompanyActionsBar
+          companyId={company.id}
+          companyName={company.company_name || 'Company'}
+        />
 
         <Separator className="my-4" />
 
