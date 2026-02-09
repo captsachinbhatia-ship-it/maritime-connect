@@ -74,7 +74,7 @@ export async function getContactOwners(contactId: string): Promise<{
       .select('*')
       .eq('contact_id', contactId)
       .eq('status', 'ACTIVE')
-      .in('assignment_role', ['PRIMARY', 'SECONDARY']);
+      .in('assignment_role', ['PRIMARY', 'SECONDARY', 'primary', 'secondary']);
 
     if (error) {
       return { data: null, error: error.message };
@@ -86,9 +86,10 @@ export async function getContactOwners(contactId: string): Promise<{
     };
 
     data?.forEach(assignment => {
-      if (assignment.assignment_role === 'PRIMARY') {
+      const role = (assignment.assignment_role || '').toUpperCase();
+      if (role === 'PRIMARY') {
         owners.primary = assignment as ContactAssignment;
-      } else if (assignment.assignment_role === 'SECONDARY') {
+      } else if (role === 'SECONDARY') {
         owners.secondary = assignment as ContactAssignment;
       }
     });
@@ -117,7 +118,7 @@ export async function getOwnersForContacts(contactIds: string[]): Promise<{
       .select('*')
       .in('contact_id', contactIds)
       .eq('status', 'ACTIVE')
-      .in('assignment_role', ['PRIMARY', 'SECONDARY']);
+      .in('assignment_role', ['PRIMARY', 'SECONDARY', 'primary', 'secondary']);
 
     if (error) {
       return { data: null, error: error.message };
@@ -135,9 +136,10 @@ export async function getOwnersForContacts(contactIds: string[]): Promise<{
       if (!ownersMap[contactId]) {
         ownersMap[contactId] = { primary: null, secondary: null };
       }
-      if (assignment.assignment_role === 'PRIMARY') {
+      const role = (assignment.assignment_role || '').toUpperCase();
+      if (role === 'PRIMARY') {
         ownersMap[contactId].primary = assignment as ContactAssignment;
-      } else if (assignment.assignment_role === 'SECONDARY') {
+      } else if (role === 'SECONDARY') {
         ownersMap[contactId].secondary = assignment as ContactAssignment;
       }
     });

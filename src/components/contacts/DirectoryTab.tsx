@@ -70,7 +70,7 @@ export function DirectoryTab() {
         .from('contact_assignments')
         .select('contact_id, stage, assigned_to_crm_user_id')
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'PRIMARY')
+        .in('assignment_role', ['PRIMARY', 'primary'])
         .not('assigned_to_crm_user_id', 'is', null);
 
       if (assignmentsError) {
@@ -345,12 +345,12 @@ export function DirectoryTab() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {creatorId
-                          ? ownerNamesMap[creatorId] || 'Unknown'
-                          : <span className="text-muted-foreground/50">Unknown</span>}
+                          ? ownerNamesMap[creatorId] || 'System'
+                          : <span className="text-muted-foreground/50">System</span>}
                       </TableCell>
                       <TableCell className="text-sm">
                         {primaryOwnerId
-                          ? ownerNamesMap[primaryOwnerId] || 'Unknown'
+                          ? ownerNamesMap[primaryOwnerId] || 'Unassigned'
                           : <span className="text-muted-foreground">Unassigned</span>}
                       </TableCell>
                       <TableCell className="text-sm">
