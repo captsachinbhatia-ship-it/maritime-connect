@@ -394,24 +394,56 @@ export async function changeContactStage(params: {
   try {
     const { contact_id, to_stage, note } = params;
 
-    const { data, error } = await supabase.rpc('change_contact_stage', {
-      p_contact_id: contact_id,
-      p_to_stage: to_stage,
-      p_note: note || null,
-    });
-
-    if (error) {
-      console.error('[changeContactStage] RPC error:', error);
-      if (error.message.includes('row-level security')) {
-        return { data: null, error: 'Permission denied. You may not have access to change this stage.' };
-      }
-      return { data: null, error: error.message };
+    // Get current CRM user ID
+    const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
+    if (crmError || !currentCrmUserId) {
+      return { data: null, error: crmError || 'Could not resolve current CRM user' };
     }
 
-    // RPC returns { action: 'UPDATED' | 'REQUESTED' }
-    const action = (data as { action: string })?.action as 'UPDATED' | 'REQUESTED';
-    
-    return { data: { action: action || 'UPDATED' }, error: null };
+    // INACTIVE transitions require admin approval
+    if (to_stage === 'INACTIVE') {
+      const { error: requestError } = await supabase
+        .from('contact_stage_requests')
+        .insert({
+          contact_id,
+          requested_stage: to_stage,
+          requested_by_crm_user_id: currentCrmUserId,
+          note: note || null,
+          status: 'PENDING',
+        });
+
+      if (requestError) {
+        console.error('[changeContactStage] Request insert error:', requestError);
+        return { data: null, error: requestError.message };
+      }
+
+      return { data: { action: 'REQUESTED' }, error: null };
+    }
+
+    // Direct update to contacts.stage (no RPC, no alias)
+    const { error: contactUpdateError } = await supabase
+      .from('contacts')
+      .update({ stage: to_stage })
+      .eq('id', contact_id);
+
+    if (contactUpdateError) {
+      console.error('[changeContactStage] contacts.stage update error:', contactUpdateError);
+      return { data: null, error: contactUpdateError.message };
+    }
+
+    // Also update active contact_assignments.stage for consistency
+    const now = new Date().toISOString();
+    await supabase
+      .from('contact_assignments')
+      .update({
+        stage: to_stage,
+        stage_changed_at: now,
+        stage_changed_by_crm_user_id: currentCrmUserId,
+      })
+      .eq('contact_id', contact_id)
+      .eq('status', 'ACTIVE');
+
+    return { data: { action: 'UPDATED' }, error: null };
   } catch (err) {
     return {
       data: null,
