@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { UnassignedContactsTab } from '@/components/contacts/UnassignedContactsTab';
-import { AssignedContactsTab } from '@/components/contacts/AssignedContactsTab';
+import { DirectoryTab } from '@/components/contacts/DirectoryTab';
 import { MyContactsTab } from '@/components/contacts/MyContactsTab';
 import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
 import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
@@ -12,12 +12,12 @@ import { DuplicateRiskTab } from '@/components/contacts/DuplicateRiskTab';
 import { PendingInactiveRequestsTab } from '@/components/contacts/PendingInactiveRequestsTab';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, UserPlus, Users2, FileUp, AlertTriangle, Clock } from 'lucide-react';
+import { Loader2, UserPlus, Users2, FileUp, AlertTriangle, Clock, BookOpen } from 'lucide-react';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
-type TabType = 'all-contacts' | 'my-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
+type TabType = 'directory' | 'my-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
 
-const ALL_TABS: TabType[] = ['all-contacts', 'my-contacts', 'secondary', 'my-added', 'unassigned', 'duplicate-risk', 'pending-requests'];
+const ALL_TABS: TabType[] = ['directory', 'my-contacts', 'secondary', 'my-added', 'unassigned', 'duplicate-risk', 'pending-requests'];
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -27,13 +27,13 @@ export default function Contacts() {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam && ALL_TABS.includes(tabParam as TabType)) return tabParam as TabType;
-    return 'all-contacts';
+    return 'directory';
   });
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Counts
   const [secondaryCount, setSecondaryCount] = useState(0);
-  const [allContactsCount, setAllContactsCount] = useState(0);
+  const [directoryCount, setDirectoryCount] = useState(0);
   const [unassignedCount, setUnassignedCount] = useState(0);
   const [duplicateRiskCount, setDuplicateRiskCount] = useState(0);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -90,13 +90,13 @@ export default function Contacts() {
       .eq('assignment_role', 'SECONDARY');
     setSecondaryCount(secCount || 0);
 
-    // All Contacts (with active primary assignment)
-    const { count: allCount } = await supabase
+    // Directory (all contacts with active primary assignment)
+    const { count: dirCount } = await supabase
       .from('contact_assignments')
       .select('contact_id', { count: 'exact', head: true })
       .eq('status', 'ACTIVE')
       .eq('assignment_role', 'PRIMARY');
-    setAllContactsCount(allCount || 0);
+    setDirectoryCount(dirCount || 0);
 
     // My Contacts (primary owned by current user)
     const { count: myCount } = await supabase
@@ -192,10 +192,11 @@ export default function Contacts() {
         <div className="overflow-x-auto">
           <TabsList className="inline-flex h-10 items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground">
             <TabsTrigger
-              value="all-contacts"
-              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+              value="directory"
+              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
             >
-              All Contacts ({allContactsCount})
+              <BookOpen className="h-3.5 w-3.5" />
+              Directory ({directoryCount})
             </TabsTrigger>
             <TabsTrigger
               value="my-contacts"
@@ -246,8 +247,8 @@ export default function Contacts() {
           </TabsList>
         </div>
 
-        <TabsContent value="all-contacts" className="mt-4">
-          <AssignedContactsTab key={`assigned-${refreshKey}`} />
+        <TabsContent value="directory" className="mt-4">
+          <DirectoryTab key={`directory-${refreshKey}`} />
         </TabsContent>
 
         <TabsContent value="my-contacts" className="mt-4">
