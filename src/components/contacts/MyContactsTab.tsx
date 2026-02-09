@@ -25,8 +25,9 @@ import { AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { getCurrentCrmUserId } from '@/services/profiles'; // Used for loadContacts
+import { getCurrentCrmUserId } from '@/services/profiles';
 import { getCompanyNamesMap } from '@/services/contacts';
+import { changeContactStage } from '@/services/assignments';
 import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
@@ -256,42 +257,27 @@ export function MyContactsTab() {
     setIsUpdatingStage(contactId);
 
     try {
-      // Call the RPC for stage changes
-      const { data, error } = await supabase.rpc('change_contact_stage', {
-        p_contact_id: contactId,
-        p_to_stage: newStage,
-        p_note: null,
+      const result = await changeContactStage({
+        contact_id: contactId,
+        to_stage: newStage,
       });
 
-      if (error) {
-        if (error.message.includes('row-level security')) {
-          toast({
-            variant: 'destructive',
-            title: 'Permission denied',
-            description: 'You do not have permission to update this contact\'s stage.',
-          });
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Failed to update stage',
-            description: error.message,
-          });
-        }
+      if (result.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Failed to update stage',
+          description: result.error,
+        });
         setIsUpdatingStage(null);
         return;
       }
 
-      // Handle response based on action type
-      const action = (data as { action: string })?.action;
-      
-      if (action === 'REQUESTED') {
-        // INACTIVE transition created a request for admin approval
+      if (result.data?.action === 'REQUESTED') {
         toast({
           title: 'Inactive request sent for admin approval',
           description: 'An administrator will review this request.',
         });
       } else {
-        // Direct update succeeded
         toast({
           title: 'Stage updated',
           description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}`,
