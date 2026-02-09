@@ -125,11 +125,18 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
   return (
     <Card className="flex flex-col">
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <MessageSquare className="h-4.5 w-4.5 text-primary" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <MessageSquare className="h-4.5 w-4.5 text-primary" />
+            </div>
+            <CardTitle className="text-base">Recent Interactions</CardTitle>
           </div>
-          <CardTitle className="text-base">Recent Interactions</CardTitle>
+          {!isLoading && interactions.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {interactions.length} total
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex-1">
@@ -142,17 +149,12 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
         ) : interactions.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">No recent interactions</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
             {interactions.map((interaction) => {
               const Icon = typeIcons[interaction.interaction_type] || MessageSquare;
               const commercialChips = extractCommercialChips(
                 (interaction.subject || '') + ' ' + (interaction.notes || '')
               );
-              const notesPreview = interaction.notes
-                ? interaction.notes.length > 80
-                  ? interaction.notes.substring(0, 80) + '…'
-                  : interaction.notes
-                : null;
 
               return (
                 <div
@@ -165,13 +167,13 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium leading-tight">{interaction.contact_name}</p>
                     {interaction.subject && (
-                      <p className="truncate text-[11px] text-foreground/80 leading-tight mt-0.5">
+                      <p className="text-[11px] text-foreground/80 leading-tight mt-0.5">
                         {interaction.subject}
                       </p>
                     )}
-                    {notesPreview && (
-                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">
-                        {notesPreview}
+                    {interaction.notes && (
+                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5 line-clamp-3">
+                        {interaction.notes}
                       </p>
                     )}
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">

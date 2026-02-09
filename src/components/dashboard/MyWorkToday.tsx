@@ -128,16 +128,23 @@ export function MyWorkToday({ onContactClick, crmUserId: crmUserIdProp }: MyWork
   }, [crmUserIdProp]);
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/10">
-            <AlertTriangle className="h-4.5 w-4.5 text-orange-600" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/10">
+              <AlertTriangle className="h-4.5 w-4.5 text-orange-600" />
+            </div>
+            <CardTitle className="text-base">Stale Contacts</CardTitle>
           </div>
-          <CardTitle className="text-base">Stale Contacts</CardTitle>
+          {!isLoading && contacts.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {contacts.length} need attention
+            </Badge>
+          )}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => (
@@ -154,13 +161,13 @@ export function MyWorkToday({ onContactClick, crmUserId: crmUserIdProp }: MyWork
           </div>
         ) : (
           <>
-            <div className="rounded-md border overflow-x-auto">
+            <div className="rounded-md border overflow-x-auto max-h-[400px] overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs">Contact</TableHead>
-                    <TableHead className="text-xs">Company</TableHead>
-                    <TableHead className="text-xs text-right">Last Activity</TableHead>
+                    <TableHead className="text-xs sticky top-0 bg-background">Contact</TableHead>
+                    <TableHead className="text-xs sticky top-0 bg-background">Company</TableHead>
+                    <TableHead className="text-xs text-right sticky top-0 bg-background">Last Activity</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

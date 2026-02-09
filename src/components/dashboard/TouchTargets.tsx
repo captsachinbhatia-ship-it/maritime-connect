@@ -406,14 +406,14 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp, isAdmin
                     </button>
                   )}
                 </div>
-                <div className="rounded-md border overflow-x-auto">
+                <div className="rounded-md border max-h-[350px] overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-xs">Contact</TableHead>
-                        <TableHead className="text-xs">Stage</TableHead>
-                        <TableHead className="text-xs">Reason</TableHead>
-                        <TableHead className="text-xs text-right">Last Touch</TableHead>
+                        <TableHead className="text-xs sticky top-0 bg-background">Contact</TableHead>
+                        <TableHead className="text-xs sticky top-0 bg-background">Stage</TableHead>
+                        <TableHead className="text-xs sticky top-0 bg-background">Reason</TableHead>
+                        <TableHead className="text-xs text-right sticky top-0 bg-background">Last Touch</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
