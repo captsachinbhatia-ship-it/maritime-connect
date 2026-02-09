@@ -17,7 +17,7 @@ import { ContactOwners, getOwnersForContacts } from '@/services/assignments';
 import { getUserNames } from '@/services/interactions';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { AssignOwnersModal } from './AssignOwnersModal';
-import { ContactsSearch } from './ContactsSearch';
+import { ColumnFiltersBar, SortableHeader, type ColumnFilters, type SortColumn, type SortDirection } from './ColumnFilters';
 import { ContactWithCompany } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -56,7 +56,8 @@ export function AssignedContactsTab() {
   const [ownerNamesMap, setOwnerNamesMap] = useState<Record<string, string>>({});
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({ fullName: '', company: '', designation: '', email: '' });
+  const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({ column: 'full_name', direction: 'asc' });
 
   // Modal state
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
@@ -221,24 +222,79 @@ export function AssignedContactsTab() {
     return { type, timeAgo, outcome };
   };
 
-  // Client-side search filter for multi-field search
+  // Column filter + sort logic
   const filteredContacts = useMemo(() => {
-    if (!search.trim()) return contacts;
-    const searchLower = search.toLowerCase().trim();
-    return contacts.filter(contact => {
-      const fullName = (contact.full_name || '').toLowerCase();
-      const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
-      const email = (contact.email || '').toLowerCase();
-      const phone = (contact.primary_phone || '').toLowerCase();
-      const primaryOwnerId = ownersMap[contact.id]?.primary?.assigned_to_crm_user_id;
-      const primaryOwnerName = primaryOwnerId ? (ownerNamesMap[primaryOwnerId] || '').toLowerCase() : '';
-      return fullName.includes(searchLower) || 
-             companyName.includes(searchLower) || 
-             email.includes(searchLower) || 
-             phone.includes(searchLower) ||
-             primaryOwnerName.includes(searchLower);
+    let filtered = contacts;
+
+    if (columnFilters.fullName.trim()) {
+      const s = columnFilters.fullName.toLowerCase().trim();
+      filtered = filtered.filter(c => (c.full_name || '').toLowerCase().includes(s));
+    }
+    if (columnFilters.company.trim()) {
+      const s = columnFilters.company.toLowerCase().trim();
+      filtered = filtered.filter(c => {
+        const name = c.company_id ? (companyNamesMap[c.company_id] || '') : '';
+        return name.toLowerCase().includes(s);
+      });
+    }
+    if (columnFilters.designation.trim()) {
+      const s = columnFilters.designation.toLowerCase().trim();
+      filtered = filtered.filter(c => (c.designation || '').toLowerCase().includes(s));
+    }
+    if (columnFilters.email.trim()) {
+      const s = columnFilters.email.toLowerCase().trim();
+      filtered = filtered.filter(c => (c.email || '').toLowerCase().includes(s));
+    }
+
+    // Sort
+    filtered = [...filtered].sort((a, b) => {
+      const dir = sortConfig.direction === 'asc' ? 1 : -1;
+      let aVal = '';
+      let bVal = '';
+
+      switch (sortConfig.column) {
+        case 'full_name':
+          aVal = (a.full_name || '').toLowerCase();
+          bVal = (b.full_name || '').toLowerCase();
+          break;
+        case 'company':
+          aVal = (a.company_id ? companyNamesMap[a.company_id] || '' : '').toLowerCase();
+          bVal = (b.company_id ? companyNamesMap[b.company_id] || '' : '').toLowerCase();
+          break;
+        case 'designation':
+          aVal = (a.designation || '').toLowerCase();
+          bVal = (b.designation || '').toLowerCase();
+          break;
+        case 'email':
+          aVal = (a.email || '').toLowerCase();
+          bVal = (b.email || '').toLowerCase();
+          break;
+        case 'created_at':
+          aVal = a.created_at || '';
+          bVal = b.created_at || '';
+          break;
+        case 'stage':
+          aVal = (a.stage || '').toLowerCase();
+          bVal = (b.stage || '').toLowerCase();
+          break;
+      }
+
+      if (aVal < bVal) return -1 * dir;
+      if (aVal > bVal) return 1 * dir;
+      return 0;
     });
-  }, [contacts, search, companyNamesMap, ownersMap, ownerNamesMap]);
+
+    return filtered;
+  }, [contacts, columnFilters, sortConfig, companyNamesMap]);
+
+  const handleSort = (column: SortColumn) => {
+    setSortConfig(prev => ({
+      column,
+      direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const hasActiveFilters = Object.values(columnFilters).some(v => v.trim() !== '');
 
   return (
     <>
@@ -263,9 +319,7 @@ export function AssignedContactsTab() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <ContactsSearch value={search} onChange={setSearch} />
-          </div>
+          <ColumnFiltersBar filters={columnFilters} onFiltersChange={setColumnFilters} />
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -274,7 +328,7 @@ export function AssignedContactsTab() {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Users className="mb-2 h-10 w-10 text-muted-foreground/50" />
               <p className="text-muted-foreground">
-                {search.trim() ? 'No contacts match your search.' : 'No contacts found'}
+                {hasActiveFilters ? 'No contacts match your filters.' : 'No contacts found'}
               </p>
             </div>
           ) : (
@@ -282,15 +336,25 @@ export function AssignedContactsTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Company</TableHead>
+                    <TableHead>
+                      <SortableHeader label="Name" column="full_name" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
+                    <TableHead>
+                      <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
                     <TableHead>Phone</TableHead>
-                    <TableHead>Email</TableHead>
+                    <TableHead>
+                      <SortableHeader label="Email" column="email" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
                     <TableHead>Added By</TableHead>
                     <TableHead>Primary Owner</TableHead>
                     <TableHead>Secondary Owner</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Stage</TableHead>
+                    <TableHead>
+                      <SortableHeader label="Created" column="created_at" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
+                    <TableHead>
+                      <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
                     <TableHead>Status</TableHead>
                     {isAdmin && <TableHead className="text-right">Action</TableHead>}
                   </TableRow>
