@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
 import Enquiries from "./pages/Enquiries";
+import EnquiryDetail from "./pages/EnquiryDetail";
 import Reporting from "./pages/Reporting";
 import MyFollowups from "./pages/MyFollowups";
 import FollowupsOversight from "./pages/FollowupsOversight";
@@ -59,6 +60,7 @@ const App = () => {
                 <Route path="admin/daily-work-done" element={<DailyWorkDone />} />
                 <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
+                <Route path="enquiries/:id" element={<EnquiryDetail />} />
                 <Route path="reporting" element={<Reporting />} />
                 <Route path="bulk-import" element={<Navigate to="/contacts?tab=bulk-import" replace />} />
                 <Route path="account/security" element={<AccountSecurity />} />
