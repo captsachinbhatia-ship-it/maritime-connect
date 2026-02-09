@@ -98,12 +98,24 @@ export default function BulkImport() {
   const failedRows = stagingRows.filter((r) => r.status === 'FAILED');
   const duplicateRows = stagingRows.filter((r) => r.status === 'DUPLICATE');
 
+  // Compute stats from staging rows (single source of truth)
+  const computeStatsFromRows = (rows: StagingRow[]): ValidationResult => ({
+    total_rows: rows.length,
+    valid_rows: rows.filter((r) => r.status === 'VALIDATED').length,
+    failed_rows: rows.filter((r) => r.status === 'FAILED').length,
+    duplicate_rows: rows.filter((r) => r.status === 'DUPLICATE').length,
+  });
+
   // Load staging rows for active batch
   const loadStagingRows = useCallback(async () => {
     if (!activeBatchId) return;
     setStagingLoading(true);
     const { data } = await fetchStagingRows(activeBatchId);
     setStagingRows(data);
+    // Always sync counters from actual DB rows
+    if (data.length > 0) {
+      setValidationResult(computeStatsFromRows(data));
+    }
     setStagingLoading(false);
   }, [activeBatchId]);
 
@@ -179,9 +191,9 @@ export default function BulkImport() {
   // Validate batch
   const handleValidate = async () => {
     if (!activeBatchId) return;
-    console.log('[BulkImport] Validating batch_id:', activeBatchId);
+    console.log('[BULK_IMPORT] batchId used for validate:', activeBatchId);
     setValidating(true);
-    const { data, error } = await validateImportBatch(activeBatchId);
+    const { error } = await validateImportBatch(activeBatchId);
 
     if (error) {
       toast({ title: 'Validation failed', description: error, variant: 'destructive' });
@@ -189,24 +201,29 @@ export default function BulkImport() {
       return;
     }
 
-    setValidationResult(data);
-    await loadStagingRows();
+    // Refetch staging rows and derive counters from DB (single source of truth)
+    setStagingLoading(true);
+    const { data: freshRows } = await fetchStagingRows(activeBatchId);
+    setStagingRows(freshRows);
+    const stats = computeStatsFromRows(freshRows);
+    setValidationResult(stats);
+    setStagingLoading(false);
 
     // Auto-switch tab
-    if (data && data.failed_rows > 0) {
+    if (stats.failed_rows > 0) {
       setActiveTab('failed');
     } else {
       setActiveTab('validated');
     }
 
-    toast({ title: 'Validation complete', description: `${data?.valid_rows || 0} valid, ${data?.failed_rows || 0} failed, ${data?.duplicate_rows || 0} duplicates.` });
+    toast({ title: 'Validation complete', description: `${stats.valid_rows} valid, ${stats.failed_rows} failed, ${stats.duplicate_rows} duplicates.` });
     setValidating(false);
   };
 
   // Import validated
   const handleImport = async () => {
     if (!activeBatchId || !crmUserId) return;
-    console.log('[BulkImport] Importing batch_id:', activeBatchId);
+    console.log('[BULK_IMPORT] batchId used for import:', activeBatchId);
     setImporting(true);
 
     // Try RPC first
@@ -214,7 +231,7 @@ export default function BulkImport() {
 
     // If RPC fails, fall back to client-side import
     if (error || (data && data.imported_count === 0 && validatedRows.length > 0)) {
-      console.warn('[BulkImport] RPC failed or imported 0, falling back to client-side import. Error:', error);
+      console.warn('[BULK_IMPORT] RPC failed or imported 0, falling back to client-side import. Error:', error);
       const fallback = await importValidatedContactsClientSide(activeBatchId, crmUserId);
       data = fallback.data;
       error = fallback.error;
@@ -226,7 +243,12 @@ export default function BulkImport() {
       return;
     }
 
-    await loadStagingRows();
+    // Refetch staging rows to reflect IMPORTED status
+    setStagingLoading(true);
+    const { data: freshRows } = await fetchStagingRows(activeBatchId);
+    setStagingRows(freshRows);
+    setValidationResult(computeStatsFromRows(freshRows));
+    setStagingLoading(false);
 
     if (data) {
       toast({
