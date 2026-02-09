@@ -2,24 +2,16 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { createEnquiryQuote, QuoteStatus } from '@/services/enquiries';
+import { createEnquiryQuote, addEnquiryNote, QuoteStatus } from '@/services/enquiries';
 import { getCurrentCrmUserId } from '@/services/profiles';
 
 interface CreateQuoteModalProps {
@@ -32,28 +24,28 @@ interface CreateQuoteModalProps {
 }
 
 export function CreateQuoteModal({
-  open,
-  onOpenChange,
-  enquiryId,
-  contactId,
-  onSuccess,
-  allowDraft = false,
+  open, onOpenChange, enquiryId, contactId, onSuccess, allowDraft = false,
 }: CreateQuoteModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
   const [status, setStatus] = useState<QuoteStatus>(allowDraft ? 'DRAFT' : 'SENT');
   const [sentVia, setSentVia] = useState('EMAIL');
   const [sentMessage, setSentMessage] = useState('');
+
+  // Tanker pricing
   const [rate, setRate] = useState('');
-  const [rateUnit, setRateUnit] = useState('');
+  const [rateUnit, setRateUnit] = useState('WS');
   const [baseAmount, setBaseAmount] = useState('');
   const [additionalCharges, setAdditionalCharges] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
+
+  // Vessel
   const [vesselName, setVesselName] = useState('');
   const [vesselImo, setVesselImo] = useState('');
   const [vesselDwt, setVesselDwt] = useState('');
+
+  // Terms
   const [validityDate, setValidityDate] = useState('');
   const [paymentTerms, setPaymentTerms] = useState('');
   const [laycanFrom, setLaycanFrom] = useState('');
@@ -65,21 +57,12 @@ export function CreateQuoteModal({
     setStatus(allowDraft ? 'DRAFT' : 'SENT');
     setSentVia('EMAIL');
     setSentMessage('');
-    setRate('');
-    setRateUnit('');
-    setBaseAmount('');
-    setAdditionalCharges('');
-    setTotalAmount('');
-    setCurrency('USD');
-    setVesselName('');
-    setVesselImo('');
-    setVesselDwt('');
-    setValidityDate('');
-    setPaymentTerms('');
-    setLaycanFrom('');
-    setLaycanTo('');
-    setSpecialConditions('');
-    setTerms('');
+    setRate(''); setRateUnit('WS'); setBaseAmount(''); setAdditionalCharges('');
+    setTotalAmount(''); setCurrency('USD');
+    setVesselName(''); setVesselImo(''); setVesselDwt('');
+    setValidityDate(''); setPaymentTerms('');
+    setLaycanFrom(''); setLaycanTo('');
+    setSpecialConditions(''); setTerms('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -116,32 +99,42 @@ export function CreateQuoteModal({
         sent_message: status === 'SENT' ? sentMessage : null,
       },
       crmUserId,
-      contactId
+      contactId,
     );
-
-    setIsSubmitting(false);
 
     if (result.error) {
       toast({ title: 'Error', description: result.error, variant: 'destructive' });
+      setIsSubmitting(false);
       return;
     }
 
+    // Log activity for sent offers
+    if (status === 'SENT') {
+      const quoteNum = result.data?.quote_number || 'offer';
+      await addEnquiryNote(
+        enquiryId,
+        `Offer sent: ${quoteNum} via ${sentVia}`,
+        crmUserId,
+      ).catch(() => {});
+    }
+
     toast({
-      title: status === 'SENT' ? 'Quote Sent' : 'Quote Draft Created',
-      description: 'Quote has been saved successfully.',
+      title: status === 'SENT' ? 'Offer Sent' : 'Draft Saved',
+      description: 'Offer has been saved successfully.',
     });
 
     resetForm();
     onOpenChange(false);
     onSuccess?.(enquiryId);
+    setIsSubmitting(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) resetForm(); onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={o => { if (!o) resetForm(); onOpenChange(o); }}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Send Offer / Quote</DialogTitle>
-          <DialogDescription>Create and send a quote for this enquiry.</DialogDescription>
+          <DialogDescription>Create a tanker offer with pricing details.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -149,7 +142,7 @@ export function CreateQuoteModal({
           {allowDraft && (
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as QuoteStatus)}>
+              <Select value={status} onValueChange={v => setStatus(v as QuoteStatus)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="DRAFT">Draft</SelectItem>
@@ -176,12 +169,7 @@ export function CreateQuoteModal({
               </div>
               <div className="space-y-2">
                 <Label>Message</Label>
-                <Textarea
-                  value={sentMessage}
-                  onChange={(e) => setSentMessage(e.target.value)}
-                  placeholder="Message sent with the quote..."
-                  rows={3}
-                />
+                <Textarea value={sentMessage} onChange={e => setSentMessage(e.target.value)} placeholder="Message sent with the offer..." rows={3} maxLength={2000} />
               </div>
             </>
           )}
@@ -191,24 +179,33 @@ export function CreateQuoteModal({
             <h4 className="text-sm font-medium text-foreground">Pricing</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Rate</Label>
-                <Input type="number" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="0.00" step="0.01" />
+                <Label className="text-xs">Rate / Idea</Label>
+                <Input type="number" value={rate} onChange={e => setRate(e.target.value)} placeholder="0.00" step="0.01" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Rate Unit</Label>
-                <Input value={rateUnit} onChange={(e) => setRateUnit(e.target.value)} placeholder="e.g., per MT" />
+                <Label className="text-xs">Rate Style</Label>
+                <Select value={rateUnit} onValueChange={setRateUnit}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="WS">WS (Worldscale)</SelectItem>
+                    <SelectItem value="LS">Lumpsum</SelectItem>
+                    <SelectItem value="TC">TC $/day</SelectItem>
+                    <SelectItem value="per MT">per MT</SelectItem>
+                    <SelectItem value="per BBL">per BBL</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Base Amount</Label>
-                <Input type="number" value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} placeholder="0.00" step="0.01" />
+                <Input type="number" value={baseAmount} onChange={e => setBaseAmount(e.target.value)} placeholder="0.00" step="0.01" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Additional Charges</Label>
-                <Input type="number" value={additionalCharges} onChange={(e) => setAdditionalCharges(e.target.value)} placeholder="0.00" step="0.01" />
+                <Input type="number" value={additionalCharges} onChange={e => setAdditionalCharges(e.target.value)} placeholder="0.00" step="0.01" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Total Amount</Label>
-                <Input type="number" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} placeholder="0.00" step="0.01" />
+                <Input type="number" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} placeholder="0.00" step="0.01" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Currency</Label>
@@ -225,64 +222,62 @@ export function CreateQuoteModal({
             </div>
           </div>
 
-          {/* Vessel (optional) */}
+          {/* Vessel */}
           <div className="border-t pt-4 space-y-3">
             <h4 className="text-sm font-medium text-foreground">Vessel (optional)</h4>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Vessel Name</Label>
-                <Input value={vesselName} onChange={(e) => setVesselName(e.target.value)} />
+                <Input value={vesselName} onChange={e => setVesselName(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">IMO</Label>
-                <Input value={vesselImo} onChange={(e) => setVesselImo(e.target.value)} />
+                <Input value={vesselImo} onChange={e => setVesselImo(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">DWT</Label>
-                <Input type="number" value={vesselDwt} onChange={(e) => setVesselDwt(e.target.value)} />
+                <Input type="number" value={vesselDwt} onChange={e => setVesselDwt(e.target.value)} />
               </div>
             </div>
           </div>
 
-          {/* Terms (optional) */}
+          {/* Terms */}
           <div className="border-t pt-4 space-y-3">
             <h4 className="text-sm font-medium text-foreground">Terms (optional)</h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Validity Date</Label>
-                <Input type="date" value={validityDate} onChange={(e) => setValidityDate(e.target.value)} />
+                <Input type="date" value={validityDate} onChange={e => setValidityDate(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Payment Terms</Label>
-                <Input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
+                <Input value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Laycan From</Label>
-                <Input type="date" value={laycanFrom} onChange={(e) => setLaycanFrom(e.target.value)} />
+                <Input type="date" value={laycanFrom} onChange={e => setLaycanFrom(e.target.value)} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Laycan To</Label>
-                <Input type="date" value={laycanTo} onChange={(e) => setLaycanTo(e.target.value)} />
+                <Input type="date" value={laycanTo} onChange={e => setLaycanTo(e.target.value)} />
               </div>
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Special Conditions</Label>
-              <Textarea value={specialConditions} onChange={(e) => setSpecialConditions(e.target.value)} rows={2} />
+              <Textarea value={specialConditions} onChange={e => setSpecialConditions(e.target.value)} rows={2} maxLength={2000} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">General Terms</Label>
-              <Textarea value={terms} onChange={(e) => setTerms(e.target.value)} rows={2} />
+              <Textarea value={terms} onChange={e => setTerms(e.target.value)} rows={2} maxLength={2000} />
             </div>
           </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-2 border-t">
-            <Button type="button" variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>
-              Cancel
-            </Button>
+            <Button type="button" variant="outline" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {status === 'SENT' ? 'Send Quote' : 'Save Draft'}
+              {status === 'SENT' ? 'Send Offer' : 'Save Draft'}
             </Button>
           </div>
         </form>
