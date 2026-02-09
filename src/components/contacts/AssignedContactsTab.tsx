@@ -1,6 +1,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Loader2, RefreshCw, Users, PhoneCall, Mail, Video, MessageSquare, FileEdit } from 'lucide-react';
+import { Loader2, RefreshCw, Users, PhoneCall, Mail, Video, MessageSquare, FileEdit, Filter } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -58,6 +65,7 @@ export function AssignedContactsTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({ fullName: '', company: '', designation: '', email: '' });
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({ column: 'full_name', direction: 'asc' });
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
 
   // Modal state
   const [reassignModalOpen, setReassignModalOpen] = useState(false);
@@ -94,12 +102,11 @@ export function AssignedContactsTab() {
         return;
       }
 
-      // Fetch contacts from the view
+      // Fetch contacts from the view (fetch all, filter client-side by status)
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts_with_primary_phone')
         .select('*')
         .in('id', contactIds)
-        .eq('is_active', true)
         .order('full_name', { ascending: true });
 
       if (contactsError) {
@@ -226,6 +233,13 @@ export function AssignedContactsTab() {
   const filteredContacts = useMemo(() => {
     let filtered = contacts;
 
+    // Status filter
+    if (statusFilter === 'active') {
+      filtered = filtered.filter(c => c.is_active !== false);
+    } else if (statusFilter === 'inactive') {
+      filtered = filtered.filter(c => c.is_active === false);
+    }
+
     if (columnFilters.fullName.trim()) {
       const s = columnFilters.fullName.toLowerCase().trim();
       filtered = filtered.filter(c => (c.full_name || '').toLowerCase().includes(s));
@@ -285,7 +299,7 @@ export function AssignedContactsTab() {
     });
 
     return filtered;
-  }, [contacts, columnFilters, sortConfig, companyNamesMap]);
+  }, [contacts, columnFilters, sortConfig, companyNamesMap, statusFilter]);
 
   const handleSort = (column: SortColumn) => {
     setSortConfig(prev => ({
@@ -319,7 +333,24 @@ export function AssignedContactsTab() {
           </div>
         </CardHeader>
         <CardContent>
-          <ColumnFiltersBar filters={columnFilters} onFiltersChange={setColumnFilters} />
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex-1">
+              <ColumnFiltersBar filters={columnFilters} onFiltersChange={setColumnFilters} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'active' | 'inactive')}>
+                <SelectTrigger className="h-8 w-[120px] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -355,7 +386,6 @@ export function AssignedContactsTab() {
                     <TableHead>
                       <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
-                    <TableHead>Status</TableHead>
                     {isAdmin && <TableHead className="text-right">Action</TableHead>}
                   </TableRow>
                 </TableHeader>
@@ -433,11 +463,6 @@ export function AssignedContactsTab() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={contact.is_active ? 'default' : 'secondary'} className={contact.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-800'}>
-                            {contact.is_active ? 'Active' : 'Inactive'}
-                          </Badge>
                         </TableCell>
                         {isAdmin && (
                           <TableCell className="text-right">
