@@ -104,7 +104,7 @@ export function MyContactsTab() {
         .select('stage')
         .eq('status', 'ACTIVE')
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .eq('assignment_role', 'PRIMARY');
+        .in('assignment_role', ['PRIMARY', 'primary']);
 
       const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
       (allAssignments || []).forEach(a => {
@@ -140,7 +140,7 @@ export function MyContactsTab() {
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .eq('assignment_role', 'PRIMARY')
+        .in('assignment_role', ['PRIMARY', 'primary'])
         .eq('stage', activeStage);
 
       if (assignmentError) {

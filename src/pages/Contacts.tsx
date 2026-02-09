@@ -87,7 +87,7 @@ export default function Contacts() {
       .select('contact_id', { count: 'exact', head: true })
       .eq('status', 'ACTIVE')
       .eq('assigned_to_crm_user_id', currentCrmUserId)
-      .eq('assignment_role', 'SECONDARY');
+      .in('assignment_role', ['SECONDARY', 'secondary']);
     setSecondaryCount(secCount || 0);
 
     // Directory (all contacts with active primary assignment)
@@ -95,7 +95,7 @@ export default function Contacts() {
       .from('contact_assignments')
       .select('contact_id', { count: 'exact', head: true })
       .eq('status', 'ACTIVE')
-      .eq('assignment_role', 'PRIMARY');
+      .in('assignment_role', ['PRIMARY', 'primary']);
     setDirectoryCount(dirCount || 0);
 
     // My Contacts (primary owned by current user)
@@ -104,7 +104,7 @@ export default function Contacts() {
       .select('contact_id', { count: 'exact', head: true })
       .eq('status', 'ACTIVE')
       .eq('assigned_to_crm_user_id', currentCrmUserId)
-      .eq('assignment_role', 'PRIMARY');
+      .in('assignment_role', ['PRIMARY', 'primary']);
     setMyContactsCount(myCount || 0);
 
     // My Added
