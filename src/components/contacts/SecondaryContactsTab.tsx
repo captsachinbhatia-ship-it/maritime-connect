@@ -17,7 +17,7 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { getCurrentCrmUserId } from '@/services/profiles';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { getUserNames } from '@/services/interactions';
 import { getNudgeStatusMap } from '@/services/nudgeStatus';
@@ -57,6 +57,7 @@ interface SecondaryContact extends ContactWithCompany {
 
 export function SecondaryContactsTab() {
   const { session, loading: authLoading } = useAuth();
+  const { crmUserId } = useCrmUser();
   const [contacts, setContacts] = useState<SecondaryContact[]>([]);
   const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [primaryOwnerNamesMap, setPrimaryOwnerNamesMap] = useState<Record<string, string>>({});
@@ -69,7 +70,7 @@ export function SecondaryContactsTab() {
   const [drawerContact, setDrawerContact] = useState<SecondaryContact | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const loadContacts = useCallback(async () => {
-    if (!session) {
+    if (!session || !crmUserId) {
       setContacts([]);
       setIsLoading(false);
       return;
@@ -79,15 +80,7 @@ export function SecondaryContactsTab() {
     setError(null);
 
     try {
-      // Get current user's CRM ID
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-
-      if (crmError || !currentCrmUserId) {
-        setError(crmError || 'CRM user not found');
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
+      const currentCrmUserId = crmUserId;
 
       // Get ACTIVE SECONDARY assignments for the current user
       const { data: secondaryAssignments, error: secondaryError } = await supabase
@@ -216,7 +209,7 @@ export function SecondaryContactsTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, [session, crmUserId]);
 
   useEffect(() => {
     if (!authLoading) {

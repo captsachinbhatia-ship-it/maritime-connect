@@ -25,7 +25,7 @@ import { AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { getCurrentCrmUserId } from '@/services/profiles';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { changeContactStage } from '@/services/assignments';
 import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
@@ -71,6 +71,7 @@ const FOLLOWUP_STATUS_STYLES: Record<string, string> = {
 // My Contacts tab shows only PRIMARY ownership contacts with stage sub-tabs
 export function MyContactsTab() {
   const { session, loading: authLoading, isAdmin } = useAuth();
+  const { crmUserId } = useCrmUser();
   const { toast } = useToast();
   const [activeStage, setActiveStage] = useState<StageType>('COLD_CALLING');
   const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
@@ -94,10 +95,9 @@ export function MyContactsTab() {
   const [inactiveContact, setInactiveContact] = useState<{ id: string; name: string } | null>(null);
 
   const loadStageCounts = useCallback(async () => {
-    if (!session) return;
+    if (!session || !crmUserId) return;
     try {
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-      if (crmError || !currentCrmUserId) return;
+      const currentCrmUserId = crmUserId;
 
       const { data: allAssignments } = await supabase
         .from('contact_assignments')
@@ -112,10 +112,10 @@ export function MyContactsTab() {
       });
       setStageCounts(counts);
     } catch { /* keep existing counts */ }
-  }, [session]);
+  }, [session, crmUserId]);
 
   const loadContacts = useCallback(async () => {
-    if (!session) {
+    if (!session || !crmUserId) {
       setContacts([]);
       setIsLoading(false);
       return;
@@ -125,14 +125,7 @@ export function MyContactsTab() {
     setError(null);
 
     try {
-      const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-
-      if (crmError || !currentCrmUserId) {
-        setError(crmError || 'CRM user not found');
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
+      const currentCrmUserId = crmUserId;
 
       // Get ACTIVE PRIMARY assignments for the current user in the selected stage
       const { data: primaryAssignments, error: assignmentError } = await supabase
@@ -228,7 +221,7 @@ export function MyContactsTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeStage, session]);
+  }, [activeStage, session, crmUserId]);
 
   // Client-side search filter for multi-field search
   const filteredContacts = useMemo(() => {
