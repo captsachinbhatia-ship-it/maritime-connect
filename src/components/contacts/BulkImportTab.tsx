@@ -196,12 +196,18 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
     await loadStagingRows();
 
     if (data) {
+      const successMessage = [
+        `✅ Imported: ${data.imported_count} contact${data.imported_count !== 1 ? 's' : ''}`,
+        data.skipped_duplicate_count > 0 ? `⏭️ Skipped: ${data.skipped_duplicate_count} duplicate${data.skipped_duplicate_count !== 1 ? 's' : ''}` : null,
+      ].filter(Boolean).join('\n');
+
       toast({
-        title: 'Import complete',
-        description: `Imported ${data.imported_count} contacts • ${data.skipped_duplicate_count} duplicates skipped`,
+        title: 'Import Complete!',
+        description: successMessage,
+        duration: 6000,
       });
 
-      // Notify parent to navigate to My Added
+      // Notify parent to navigate to My Added tab
       onImportComplete?.(data.imported_count, data.skipped_duplicate_count);
     }
     setImporting(false);
@@ -244,7 +250,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
         <div>
           <h2 className="text-xl font-semibold text-foreground">Bulk Import Contacts</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Use this to add multiple contacts at once. Imported contacts appear under My Added and await Admin assignment.
+            Upload a CSV to add multiple contacts at once. Imported contacts appear in <strong>My Added</strong> and the <strong>Unassigned</strong> pool.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>

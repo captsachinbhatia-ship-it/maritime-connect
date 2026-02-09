@@ -3,7 +3,6 @@ import { format } from 'date-fns';
 import { Loader2, UserPlus, RefreshCw, Users, CheckSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
@@ -13,21 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
-import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
-import { adminAssignContacts, adminAssignUnassigned } from '@/services/adminAssignments';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { AssignContactModal } from './AssignContactModal';
+import { BulkAssignModal } from './BulkAssignModal';
 import { ContactWithCompany } from '@/types';
 
 interface UnassignedContact {
@@ -46,16 +37,13 @@ interface UnassignedContact {
 
 export function UnassignedContactsTab() {
   const [contacts, setContacts] = useState<UnassignedContact[]>([]);
-  const [crmUsers, setCrmUsers] = useState<CrmUserForAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAssigning, setIsAssigning] = useState(false);
   const { toast } = useToast();
   const [search, setSearch] = useState('');
 
   // Bulk assignment state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [targetUserId, setTargetUserId] = useState('');
-  const [assignNextN, setAssignNextN] = useState(50);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
   // Drawer state
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
@@ -97,12 +85,6 @@ export function UnassignedContactsTab() {
 
       setContacts(mapped);
       setSelectedIds(new Set());
-
-      // Fetch CRM users for assignment dropdown
-      const { data: crmUsersData } = await listCrmUsersForAssignment();
-      if (crmUsersData) {
-        setCrmUsers(crmUsersData);
-      }
     } catch (error) {
       console.error('[UnassignedContactsTab] Failed to fetch data:', error);
     } finally {
@@ -152,52 +134,6 @@ export function UnassignedContactsTab() {
     }
   };
 
-  const handleAssignSelected = async () => {
-    if (!targetUserId) {
-      toast({ title: 'Select a user', description: 'Please select a user to assign contacts to.', variant: 'destructive' });
-      return;
-    }
-    if (selectedIds.size === 0) {
-      toast({ title: 'No contacts selected', description: 'Please select at least one contact.', variant: 'destructive' });
-      return;
-    }
-
-    setIsAssigning(true);
-    const { data, error } = await adminAssignContacts(targetUserId, Array.from(selectedIds));
-    setIsAssigning(false);
-
-    if (error) {
-      toast({ title: 'Assignment failed', description: error, variant: 'destructive' });
-    } else {
-      const count = data?.assigned_count ?? selectedIds.size;
-      toast({ title: 'Assigned successfully', description: `Assigned ${count} contacts.` });
-      await fetchData();
-    }
-  };
-
-  const handleAssignNextN = async () => {
-    if (!targetUserId) {
-      toast({ title: 'Select a user', description: 'Please select a user to assign contacts to.', variant: 'destructive' });
-      return;
-    }
-    if (assignNextN < 1) {
-      toast({ title: 'Invalid count', description: 'Please enter a valid number.', variant: 'destructive' });
-      return;
-    }
-
-    setIsAssigning(true);
-    const { data, error } = await adminAssignUnassigned(targetUserId, assignNextN);
-    setIsAssigning(false);
-
-    if (error) {
-      toast({ title: 'Assignment failed', description: error, variant: 'destructive' });
-    } else {
-      const count = data?.assigned_count ?? assignNextN;
-      toast({ title: 'Assigned successfully', description: `Assigned ${count} contacts.` });
-      await fetchData();
-    }
-  };
-
   const handleRowClick = (e: React.MouseEvent, contact: UnassignedContact) => {
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('[role="checkbox"]') || target.closest('input')) {
@@ -225,10 +161,6 @@ export function UnassignedContactsTab() {
     setDrawerOpen(true);
   };
 
-  const formatUserLabel = (user: CrmUserForAssignment): string => {
-    return user.full_name;
-  };
-
   const formatCreatedBy = (contact: UnassignedContact): string => {
     return contact.created_by_name || 'Unknown';
   };
@@ -249,64 +181,23 @@ export function UnassignedContactsTab() {
                 </CardDescription>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => setBulkModalOpen(true)}
+                disabled={selectedIds.size === 0}
+              >
+                <CheckSquare className="mr-2 h-4 w-4" />
+                Assign Selected ({selectedIds.size})
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          {/* Bulk assignment controls */}
-          <div className="mb-4 flex flex-wrap items-end gap-3 rounded-lg border border-dashed p-3 bg-muted/30">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Assign to user</label>
-              <Select value={targetUserId} onValueChange={setTargetUserId}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select user..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {crmUsers.map(user => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {formatUserLabel(user)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Button
-                size="sm"
-                onClick={handleAssignSelected}
-                disabled={isAssigning || selectedIds.size === 0 || !targetUserId}
-              >
-                {isAssigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckSquare className="mr-2 h-4 w-4" />}
-                Assign Selected ({selectedIds.size})
-              </Button>
-            </div>
-            <div className="flex items-end gap-2">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">Next N</label>
-                <Input
-                  type="number"
-                  value={assignNextN}
-                  onChange={(e) => setAssignNextN(parseInt(e.target.value) || 0)}
-                  className="h-9 w-20"
-                  min={1}
-                  max={500}
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleAssignNextN}
-                disabled={isAssigning || !targetUserId || assignNextN < 1}
-              >
-                {isAssigning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                Assign Next {assignNextN}
-              </Button>
-            </div>
-          </div>
-
           <div className="mb-4">
             <ContactsSearch value={search} onChange={setSearch} />
           </div>
@@ -417,6 +308,7 @@ export function UnassignedContactsTab() {
         onCompanyChange={() => fetchData()}
       />
 
+      {/* Individual assign modal */}
       {assignModalContact && (
         <AssignContactModal
           open={assignModalOpen}
@@ -429,6 +321,17 @@ export function UnassignedContactsTab() {
           }}
         />
       )}
+
+      {/* Bulk assign modal */}
+      <BulkAssignModal
+        open={bulkModalOpen}
+        onOpenChange={setBulkModalOpen}
+        contactIds={Array.from(selectedIds)}
+        onSuccess={() => {
+          setSelectedIds(new Set());
+          fetchData();
+        }}
+      />
     </>
   );
 }
