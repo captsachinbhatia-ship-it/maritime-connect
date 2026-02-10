@@ -87,12 +87,10 @@ export default function Contacts() {
       .in('assignment_role', ['SECONDARY', 'secondary']);
     setSecondaryCount(secCount || 0);
 
-    // Directory (all contacts with active primary assignment)
+    // Directory (ALL contacts)
     const { count: dirCount } = await supabase
-      .from('contact_assignments')
-      .select('contact_id', { count: 'exact', head: true })
-      .eq('status', 'ACTIVE')
-      .in('assignment_role', ['PRIMARY', 'primary']);
+      .from('contacts')
+      .select('id', { count: 'exact', head: true });
     setDirectoryCount(dirCount || 0);
 
     // My Contacts (primary owned by current user)
