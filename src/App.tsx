@@ -21,6 +21,7 @@ import MyFollowups from "./pages/MyFollowups";
 import FollowupsOversight from "./pages/FollowupsOversight";
 import AdminUsers from "./pages/AdminUsers";
 import DailyWorkDone from "./pages/DailyWorkDone";
+import BulkImport from "./pages/BulkImport";
 
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
@@ -55,6 +56,7 @@ const App = () => {
                 <Route index element={<Dashboard />} />
                 <Route path="companies" element={<Companies />} />
                 <Route path="contacts" element={<Contacts />} />
+                <Route path="contacts/bulk-import" element={<BulkImport />} />
                 <Route path="followups" element={<MyFollowups />} />
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="admin-users" element={<AdminUsers />} />
@@ -64,7 +66,7 @@ const App = () => {
                 <Route path="enquiries/new" element={<CreateEnquiry />} />
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
                 <Route path="reporting" element={<Reporting />} />
-                <Route path="bulk-import" element={<Navigate to="/contacts?tab=bulk-import" replace />} />
+                <Route path="bulk-import" element={<Navigate to="/contacts/bulk-import" replace />} />
                 <Route path="account/security" element={<AccountSecurity />} />
               </Route>
               <Route path="*" element={<NotFound />} />

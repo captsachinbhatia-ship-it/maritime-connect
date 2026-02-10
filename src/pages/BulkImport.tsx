@@ -1,10 +1,12 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   FileUp,
   Trash2,
@@ -16,6 +18,8 @@ import {
   XCircle,
   AlertTriangle,
   ListChecks,
+  RefreshCw,
+  ArrowLeft,
 } from 'lucide-react';
 
 import { KPICard } from '@/components/dashboard/KPICard';
@@ -24,102 +28,87 @@ import { StagingTable } from '@/components/bulk-import/StagingTable';
 import { ImportConfirmDialog } from '@/components/bulk-import/ImportConfirmDialog';
 import { parseCsvContent, generateCsvTemplate } from '@/lib/csvParser';
 import {
-  getCurrentCrmUserIdViaRpc,
   insertStagingRows,
   fetchStagingRows,
   validateImportBatch,
   importValidatedContacts,
   importValidatedContactsClientSide,
 } from '@/services/bulkImport';
-import type { ParsedCsvRow, StagingRow, ValidationResult, ImportValidatedResult } from '@/services/bulkImport';
+import type { ParsedCsvRow, StagingRow } from '@/services/bulkImport';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function BulkImport() {
   const { isAdmin, crmUser } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const BATCH_KEY = 'contact_import_last_batch_id';
+  const crmUserId = crmUser?.id ?? null;
 
-  // State
+  // State — single batchId per import attempt
   const [parsedRows, setParsedRows] = useState<ParsedCsvRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [activeBatchId, setActiveBatchIdRaw] = useState<string | null>(() => {
-    return localStorage.getItem(BATCH_KEY);
-  });
-
-  // Wrapper that syncs to localStorage
-  const setActiveBatchId = (id: string | null) => {
-    setActiveBatchIdRaw(id);
-    if (id) {
-      localStorage.setItem(BATCH_KEY, id);
-      console.log('[BulkImport] Persisted batch_id:', id);
-    } else {
-      localStorage.removeItem(BATCH_KEY);
-      console.log('[BulkImport] Cleared batch_id from localStorage');
-    }
-  };
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [stagingRows, setStagingRows] = useState<StagingRow[]>([]);
   const [stagingLoading, setStagingLoading] = useState(false);
-  // skipDuplicates removed — new RPC always marks them SKIPPED_DUPLICATE
   const [activeTab, setActiveTab] = useState('all');
-  const [crmUserId, setCrmUserId] = useState<string | null>(null);
-  const [crmIdError, setCrmIdError] = useState<string | null>(null);
-
-  // Operation loading states
   const [inserting, setInserting] = useState(false);
   const [validating, setValidating] = useState(false);
   const [importing, setImporting] = useState(false);
 
-  // Validation results
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
-
-  // Resolve CRM user ID on mount
-  useEffect(() => {
-    async function resolve() {
-      const { data, error } = await getCurrentCrmUserIdViaRpc();
-      if (error || !data) {
-        setCrmIdError(error || 'CRM user ID could not be resolved.');
-      } else {
-        setCrmUserId(data);
-      }
-    }
-    if (crmUser) resolve();
-  }, [crmUser]);
-
-  // Restore staging rows if we have a persisted batch_id
-  useEffect(() => {
-    if (activeBatchId && stagingRows.length === 0 && !stagingLoading) {
-      loadStagingRows();
-    }
-  }, [activeBatchId]);
-
-  // Filtered staging rows
+  // Derived counts from staging rows (source of truth)
+  const pendingRows = stagingRows.filter((r) => r.status === 'PENDING' || r.status === 'NEW');
   const validatedRows = stagingRows.filter((r) => r.status === 'VALIDATED');
   const failedRows = stagingRows.filter((r) => r.status === 'FAILED');
   const duplicateRows = stagingRows.filter((r) => r.status === 'DUPLICATE');
+  const importedRows = stagingRows.filter((r) => r.status === 'IMPORTED');
+  const hasBeenValidated = stagingRows.length > 0 && pendingRows.length === 0;
 
-  // Compute stats from staging rows (single source of truth)
-  const computeStatsFromRows = (rows: StagingRow[]): ValidationResult => ({
-    total_rows: rows.length,
-    valid_rows: rows.filter((r) => r.status === 'VALIDATED').length,
-    failed_rows: rows.filter((r) => r.status === 'FAILED').length,
-    duplicate_rows: rows.filter((r) => r.status === 'DUPLICATE').length,
-  });
+  // Two-layer session verification
+  const verifySession = async (opName: string): Promise<boolean> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast({ title: 'Session expired', description: 'Please log in again.', variant: 'destructive' });
+      return false;
+    }
+    const sessionEmail = session.user.email;
+    const uiEmail = crmUser?.email;
+    console.log(`[BulkImport:${opName}] auth.uid=${session.user.id}, session_email=${sessionEmail}, ui_email=${uiEmail}, ui_crmUserId=${crmUserId}`);
 
-  // Load staging rows for active batch
+    if (uiEmail && sessionEmail && sessionEmail.toLowerCase() !== uiEmail.toLowerCase()) {
+      toast({ title: 'User mismatch', description: `Session belongs to ${sessionEmail} but UI shows ${uiEmail}.`, variant: 'destructive' });
+      return false;
+    }
+
+    const { data: dbCrmId, error: rpcErr } = await supabase.rpc('current_crm_user_id');
+    console.log(`[BulkImport:${opName}] DB current_crm_user_id()=${dbCrmId}, expected=${crmUserId}`);
+    if (rpcErr) {
+      toast({ title: 'Auth verification failed', description: rpcErr.message, variant: 'destructive' });
+      return false;
+    }
+    if (dbCrmId !== crmUserId) {
+      toast({ title: 'Identity mismatch', description: `DB sees user ${dbCrmId} but UI user is ${crmUserId}.`, variant: 'destructive' });
+      return false;
+    }
+    return true;
+  };
+
+  // Load staging rows
   const loadStagingRows = useCallback(async () => {
     if (!activeBatchId) return;
     setStagingLoading(true);
     const { data } = await fetchStagingRows(activeBatchId);
     setStagingRows(data);
-    // Always sync counters from actual DB rows
-    if (data.length > 0) {
-      setValidationResult(computeStatsFromRows(data));
-    }
     setStagingLoading(false);
   }, [activeBatchId]);
 
-  // File upload handler
+  // Hidden file input trigger
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // File select handler
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setParseError(null);
     const file = e.target.files?.[0];
@@ -151,21 +140,17 @@ export default function BulkImport() {
     setParseError(null);
     setActiveBatchId(null);
     setStagingRows([]);
-    setValidationResult(null);
     setActiveTab('all');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Insert to staging
+  // Insert to staging — generates ONE batchId per attempt
   const handleInsertToStaging = async () => {
     if (!crmUserId) {
-      toast({
-        title: 'Not authenticated',
-        description: 'CRM user ID not available. Please login via Google SSO.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Not authenticated', description: 'CRM user ID not available.', variant: 'destructive' });
       return;
     }
+    if (!(await verifySession('insert'))) return;
 
     setInserting(true);
     const batchId = crypto.randomUUID();
@@ -180,7 +165,6 @@ export default function BulkImport() {
     setActiveBatchId(batchId);
     toast({ title: 'Inserted', description: `${count} rows inserted into staging.` });
 
-    // Load the staging rows
     setStagingLoading(true);
     const { data } = await fetchStagingRows(batchId);
     setStagingRows(data);
@@ -191,7 +175,8 @@ export default function BulkImport() {
   // Validate batch
   const handleValidate = async () => {
     if (!activeBatchId) return;
-    console.log('[BULK_IMPORT] batchId used for validate:', activeBatchId);
+    if (!(await verifySession('validate'))) return;
+
     setValidating(true);
     const { error } = await validateImportBatch(activeBatchId);
 
@@ -201,37 +186,35 @@ export default function BulkImport() {
       return;
     }
 
-    // Refetch staging rows and derive counters from DB (single source of truth)
+    // Always refetch from DB
     setStagingLoading(true);
     const { data: freshRows } = await fetchStagingRows(activeBatchId);
     setStagingRows(freshRows);
-    const stats = computeStatsFromRows(freshRows);
-    setValidationResult(stats);
     setStagingLoading(false);
-
-    // Auto-switch tab
-    if (stats.failed_rows > 0) {
-      setActiveTab('failed');
-    } else {
-      setActiveTab('validated');
-    }
-
-    toast({ title: 'Validation complete', description: `${stats.valid_rows} valid, ${stats.failed_rows} failed, ${stats.duplicate_rows} duplicates.` });
     setValidating(false);
+
+    const freshValidated = freshRows.filter((r) => r.status === 'VALIDATED').length;
+    const freshFailed = freshRows.filter((r) => r.status === 'FAILED').length;
+    const freshDuplicate = freshRows.filter((r) => r.status === 'DUPLICATE').length;
+
+    toast({ title: 'Validation complete', description: `${freshValidated} valid, ${freshFailed} failed, ${freshDuplicate} duplicates.` });
+
+    if (freshFailed > 0) setActiveTab('failed');
+    else if (freshValidated > 0) setActiveTab('validated');
   };
 
-  // Import validated
+  // Import validated contacts
   const handleImport = async () => {
     if (!activeBatchId || !crmUserId) return;
-    console.log('[BULK_IMPORT] batchId used for import:', activeBatchId);
+    if (!(await verifySession('import'))) return;
+
     setImporting(true);
 
-    // Try RPC first
+    // Try RPC first, fallback to client-side
     let { data, error } = await importValidatedContacts(activeBatchId);
 
-    // If RPC fails, fall back to client-side import
     if (error || (data && data.imported_count === 0 && validatedRows.length > 0)) {
-      console.warn('[BULK_IMPORT] RPC failed or imported 0, falling back to client-side import. Error:', error);
+      console.warn('[BulkImport] RPC failed or imported 0, falling back to client-side.', error);
       const fallback = await importValidatedContactsClientSide(activeBatchId, crmUserId);
       data = fallback.data;
       error = fallback.error;
@@ -243,26 +226,30 @@ export default function BulkImport() {
       return;
     }
 
-    // Refetch staging rows to reflect IMPORTED status
+    // Refetch staging rows
     setStagingLoading(true);
     const { data: freshRows } = await fetchStagingRows(activeBatchId);
     setStagingRows(freshRows);
-    setValidationResult(computeStatsFromRows(freshRows));
     setStagingLoading(false);
 
     if (data) {
-      toast({
-        title: 'Import complete',
-        description: `Imported ${data.imported_count} contacts${data.skipped_duplicate_count > 0 ? ` (${data.skipped_duplicate_count} duplicates skipped)` : ''}`,
-      });
-      if (data.skipped_duplicate_count > 0) {
-        setActiveTab('duplicates');
-      }
+      const msg = [
+        `✅ Imported: ${data.imported_count} contact${data.imported_count !== 1 ? 's' : ''}`,
+        data.skipped_duplicate_count > 0 ? `⏭️ Skipped: ${data.skipped_duplicate_count} duplicate${data.skipped_duplicate_count !== 1 ? 's' : ''}` : null,
+      ].filter(Boolean).join('\n');
+
+      toast({ title: 'Import Complete!', description: msg, duration: 6000 });
+
+      // Invalidate contact list queries so All Contacts / Unassigned / My Added refresh
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['unassigned-contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['my-added-contacts'] });
     }
+
     setImporting(false);
   };
 
-  // Download CSV template
+  // Download template
   const handleDownloadTemplate = () => {
     const content = generateCsvTemplate();
     const blob = new Blob([content], { type: 'text/csv' });
@@ -275,19 +262,16 @@ export default function BulkImport() {
   };
 
   // Auth guard
-  if (crmIdError || (!crmUserId && crmUser)) {
+  if (!crmUserId && crmUser) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Bulk Contact Import</h1>
-          <p className="mt-1 text-muted-foreground">Upload CSV, validate for errors/duplicates, then import.</p>
         </div>
         <Card>
           <CardContent className="flex items-center gap-3 p-6">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            <p className="text-sm text-destructive">
-              Not authenticated in CRM. Please login via Google SSO.
-            </p>
+            <p className="text-sm text-destructive">Not authenticated in CRM. Please login via Google SSO.</p>
           </CardContent>
         </Card>
       </div>
@@ -295,23 +279,32 @@ export default function BulkImport() {
   }
 
   const canInsert = parsedRows.length > 0 && !activeBatchId && !inserting;
-  const canValidate = !!activeBatchId && !validating;
-  const canImport = !!validationResult && (validationResult.valid_rows > 0) && !importing;
+  const canValidate = !!activeBatchId && !validating && pendingRows.length > 0;
+  const canImport = validatedRows.length > 0 && !importing;
 
   return (
     <div className="space-y-6">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Bulk Contact Import</h1>
-          <p className="mt-1 text-muted-foreground">
-            Upload CSV, validate for errors/duplicates, then import.
-          </p>
-          {activeBatchId && (
-            <p className="mt-1 text-xs font-mono text-muted-foreground">
-              Active batch: {activeBatchId}
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/contacts')}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Bulk Contact Import</h1>
+            <p className="mt-1 text-muted-foreground">
+              Upload CSV, validate for errors/duplicates, then import.
             </p>
-          )}
+          </div>
         </div>
         <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
           <Download className="mr-2 h-4 w-4" />
@@ -322,59 +315,34 @@ export default function BulkImport() {
       {/* Controls */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
-          <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-              className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer"
-            />
-          </div>
+          <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={!!activeBatchId}>
+            <FileUp className="mr-2 h-4 w-4" />
+            {parsedRows.length > 0 ? `${parsedRows.length} rows parsed` : 'Upload CSV'}
+          </Button>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClear}
-            disabled={parsedRows.length === 0 && !activeBatchId}
-          >
+          <Button variant="ghost" size="sm" onClick={handleClear} disabled={parsedRows.length === 0 && !activeBatchId}>
             <Trash2 className="mr-2 h-4 w-4" />
             Clear
           </Button>
 
-          <Button
-            size="sm"
-            disabled={!canInsert}
-            onClick={handleInsertToStaging}
-          >
-            {inserting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Database className="mr-2 h-4 w-4" />
-            )}
+          <Button size="sm" disabled={!canInsert} onClick={handleInsertToStaging}>
+            {inserting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
             Insert to Staging
           </Button>
 
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!canValidate}
-            onClick={handleValidate}
-          >
-            {validating ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ShieldCheck className="mr-2 h-4 w-4" />
-            )}
+          <Button size="sm" variant="secondary" disabled={!canValidate} onClick={handleValidate}>
+            {validating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
             Validate Batch
           </Button>
 
-          <ImportConfirmDialog
-            validCount={validationResult?.valid_rows ?? 0}
-            disabled={!canImport}
-            loading={importing}
-            onConfirm={handleImport}
-          />
+          <ImportConfirmDialog validCount={validatedRows.length} disabled={!canImport} loading={importing} onConfirm={handleImport} />
+
+          {activeBatchId && (
+            <Button variant="outline" size="sm" disabled={stagingLoading} onClick={loadStagingRows}>
+              {stagingLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Refresh
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -388,72 +356,35 @@ export default function BulkImport() {
         </Card>
       )}
 
-      {/* CSV Preview (before staging insert) */}
-      {parsedRows.length > 0 && !activeBatchId && (
-        <CsvPreviewTable rows={parsedRows} />
-      )}
+      {/* CSV Preview */}
+      {parsedRows.length > 0 && !activeBatchId && <CsvPreviewTable rows={parsedRows} />}
 
-      {/* KPI Cards (after validation) */}
-      {validationResult && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <KPICard
-            title="Total Rows"
-            value={validationResult.total_rows}
-            icon={ListChecks}
-            variant="muted"
-          />
-          <KPICard
-            title="Valid Rows"
-            value={validationResult.valid_rows}
-            icon={CheckCircle2}
-            variant="success"
-          />
-          <KPICard
-            title="Failed Rows"
-            value={validationResult.failed_rows}
-            icon={XCircle}
-            variant="warning"
-          />
-          <KPICard
-            title="Duplicate Rows"
-            value={validationResult.duplicate_rows}
-            icon={AlertTriangle}
-            variant="default"
-          />
+      {/* KPI Cards */}
+      {activeBatchId && hasBeenValidated && (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <KPICard title="Total Rows" value={stagingRows.length} icon={ListChecks} variant="muted" />
+          <KPICard title="Validated" value={validatedRows.length} icon={CheckCircle2} variant="success" />
+          <KPICard title="Failed" value={failedRows.length} icon={XCircle} variant="warning" />
+          <KPICard title="Duplicates" value={duplicateRows.length} icon={AlertTriangle} variant="default" />
+          <KPICard title="Imported" value={importedRows.length} icon={CheckCircle2} variant="muted" />
         </div>
       )}
 
-      {/* Staging tables with tabs */}
+      {/* Staging tables */}
       {activeBatchId && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="all">
-              All Rows
-              <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
-                {stagingRows.length}
-              </Badge>
+              All Rows <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{stagingRows.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="validated">
-              Validated
-              <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">
-                {validatedRows.length}
-              </Badge>
+              Validated <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-xs">{validatedRows.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="failed">
-              Failed
-              {failedRows.length > 0 && (
-                <Badge variant="destructive" className="ml-1.5 h-5 px-1.5 text-xs">
-                  {failedRows.length}
-                </Badge>
-              )}
+              Failed {failedRows.length > 0 && <Badge variant="destructive" className="ml-1.5 h-5 px-1.5 text-xs">{failedRows.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="duplicates">
-              Duplicates
-              {duplicateRows.length > 0 && (
-                <Badge variant="outline" className="ml-1.5 h-5 px-1.5 text-xs">
-                  {duplicateRows.length}
-                </Badge>
-              )}
+              Duplicates {duplicateRows.length > 0 && <Badge variant="outline" className="ml-1.5 h-5 px-1.5 text-xs">{duplicateRows.length}</Badge>}
             </TabsTrigger>
           </TabsList>
 
