@@ -19,12 +19,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactOwners, getOwnersForContacts } from '@/services/assignments';
 import { getUserNames } from '@/services/interactions';
 import { getCompanyNamesMap } from '@/services/contacts';
-import { ColumnFiltersBar, SortableHeader, type ColumnFilters, type SortColumn, type SortDirection } from './ColumnFilters';
+import { SortableHeader, type SortColumn, type SortDirection } from './ColumnFilters';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/contexts/AuthContext';
+import { DirectoryUserChips, type UserFilter } from './DirectoryUserChips';
+import { DirectoryBulkToolbar } from './DirectoryBulkToolbar';
 
 const STAGE_LABELS: Record<string, string> = {
   COLD_CALLING: 'Cold Calling',
@@ -52,6 +56,7 @@ interface DirectoryContact {
 }
 
 export function DirectoryTab() {
+  const { isAdmin } = useAuth();
   const [contacts, setContacts] = useState<DirectoryContact[]>([]);
   const [ownersMap, setOwnersMap] = useState<Record<string, ContactOwners>>({});
   const [ownerNamesMap, setOwnerNamesMap] = useState<Record<string, string>>({});
@@ -61,11 +66,12 @@ export function DirectoryTab() {
   const [companyFilter, setCompanyFilter] = useState('');
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({ column: 'full_name', direction: 'asc' });
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+  const [userFilter, setUserFilter] = useState<UserFilter | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Get all contacts with ACTIVE PRIMARY assignments
       const { data: activeAssignments, error: assignmentsError } = await supabase
         .from('contact_assignments')
         .select('contact_id, stage, assigned_to_crm_user_id')
@@ -93,7 +99,6 @@ export function DirectoryTab() {
         return;
       }
 
-      // Fetch contacts — only fields needed for directory (NO phone, NO email)
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('id, full_name, company_id, designation, is_active, created_at, created_by_crm_user_id')
@@ -114,19 +119,15 @@ export function DirectoryTab() {
 
       setContacts(contactsList);
 
-      // Fetch company names
       const companyIds = contactsList
         .map(c => c.company_id)
         .filter((id): id is string => id !== null);
 
       if (companyIds.length > 0) {
         const namesResult = await getCompanyNamesMap(companyIds);
-        if (namesResult.data) {
-          setCompanyNamesMap(namesResult.data);
-        }
+        if (namesResult.data) setCompanyNamesMap(namesResult.data);
       }
 
-      // Fetch owners
       if (contactIds.length > 0) {
         const ownersResult = await getOwnersForContacts(contactIds);
         if (ownersResult.data) {
@@ -134,24 +135,17 @@ export function DirectoryTab() {
 
           const ownerUserIds = new Set<string>();
           Object.values(ownersResult.data).forEach(owners => {
-            if (owners.primary?.assigned_to_crm_user_id) {
-              ownerUserIds.add(owners.primary.assigned_to_crm_user_id);
-            }
-            if (owners.secondary?.assigned_to_crm_user_id) {
-              ownerUserIds.add(owners.secondary.assigned_to_crm_user_id);
-            }
+            if (owners.primary?.assigned_to_crm_user_id) ownerUserIds.add(owners.primary.assigned_to_crm_user_id);
+            if (owners.secondary?.assigned_to_crm_user_id) ownerUserIds.add(owners.secondary.assigned_to_crm_user_id);
           });
 
           if (ownerUserIds.size > 0) {
             const ownerNamesResult = await getUserNames(Array.from(ownerUserIds));
-            if (ownerNamesResult.data) {
-              setOwnerNamesMap(ownerNamesResult.data);
-            }
+            if (ownerNamesResult.data) setOwnerNamesMap(ownerNamesResult.data);
           }
         }
       }
 
-      // Resolve creator names
       const creatorIds = contactsList
         .map(c => c.created_by_crm_user_id)
         .filter((id): id is string => id !== null);
@@ -194,6 +188,18 @@ export function DirectoryTab() {
       });
     }
 
+    // User filter from chips
+    if (userFilter) {
+      filtered = filtered.filter(c => {
+        const owners = ownersMap[c.id];
+        if (!owners) return false;
+        if (userFilter.role === 'PRIMARY') {
+          return owners.primary?.assigned_to_crm_user_id === userFilter.crmUserId;
+        }
+        return owners.secondary?.assigned_to_crm_user_id === userFilter.crmUserId;
+      });
+    }
+
     filtered = [...filtered].sort((a, b) => {
       const dir = sortConfig.direction === 'asc' ? 1 : -1;
       let aVal = '';
@@ -224,7 +230,7 @@ export function DirectoryTab() {
     });
 
     return filtered;
-  }, [contacts, nameFilter, companyFilter, sortConfig, companyNamesMap, statusFilter]);
+  }, [contacts, nameFilter, companyFilter, sortConfig, companyNamesMap, statusFilter, userFilter, ownersMap]);
 
   const handleSort = (column: SortColumn) => {
     setSortConfig(prev => ({
@@ -242,6 +248,29 @@ export function DirectoryTab() {
     }
   };
 
+  // Selection helpers
+  const visibleIds = filteredContacts.map(c => c.id);
+  const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(visibleIds);
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkComplete = () => {
+    setSelectedIds([]);
+    fetchData();
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -253,7 +282,7 @@ export function DirectoryTab() {
             <div>
               <CardTitle className="text-lg">Directory</CardTitle>
               <CardDescription>
-                {isLoading ? 'Loading...' : `${filteredContacts.length} contacts (read-only)`}
+                {isLoading ? 'Loading...' : `${filteredContacts.length} contacts`}
               </CardDescription>
             </div>
           </div>
@@ -264,6 +293,23 @@ export function DirectoryTab() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* User chips filter strip */}
+        <DirectoryUserChips
+          ownersMap={ownersMap}
+          ownerNamesMap={ownerNamesMap}
+          selectedFilter={userFilter}
+          onFilterChange={setUserFilter}
+        />
+
+        {/* Bulk toolbar (admin only, when selected) */}
+        {isAdmin && selectedIds.length > 0 && (
+          <DirectoryBulkToolbar
+            selectedIds={selectedIds}
+            onClearSelection={() => setSelectedIds([])}
+            onComplete={handleBulkComplete}
+          />
+        )}
+
         <div className="flex items-center gap-2 mb-3">
           <Input
             placeholder="Filter by name…"
@@ -305,6 +351,15 @@ export function DirectoryTab() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {isAdmin && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleAll}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>
                     <SortableHeader label="Contact Name" column="full_name" currentSort={sortConfig} onSort={handleSort} />
                   </TableHead>
@@ -315,10 +370,10 @@ export function DirectoryTab() {
                   <TableHead>Primary Owner</TableHead>
                   <TableHead>Secondary Owner</TableHead>
                   <TableHead>
-                    <SortableHeader label="Created" column="created_at" currentSort={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
                   </TableHead>
                   <TableHead>
-                    <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
+                    <SortableHeader label="Created" column="created_at" currentSort={sortConfig} onSort={handleSort} />
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -328,9 +383,19 @@ export function DirectoryTab() {
                   const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id;
                   const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id;
                   const creatorId = contact.created_by_crm_user_id;
+                  const isSelected = selectedIds.includes(contact.id);
 
                   return (
-                    <TableRow key={contact.id}>
+                    <TableRow key={contact.id} className={isSelected ? 'bg-primary/5' : ''}>
+                      {isAdmin && (
+                        <TableCell>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleOne(contact.id)}
+                            aria-label={`Select ${contact.full_name}`}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium">
                         {contact.full_name || '—'}
                       </TableCell>
@@ -349,17 +414,24 @@ export function DirectoryTab() {
                           : <span className="text-muted-foreground/50">System</span>}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {primaryOwnerId
-                          ? ownerNamesMap[primaryOwnerId] || 'Unassigned'
-                          : <span className="text-muted-foreground">Unassigned</span>}
+                        {primaryOwnerId ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-0 font-medium">
+                            {ownerNamesMap[primaryOwnerId] || 'Unknown'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground border-dashed font-normal">
+                            Unassigned
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {secondaryOwnerId
-                          ? ownerNamesMap[secondaryOwnerId] || 'Unknown'
-                          : <span className="text-muted-foreground/50">—</span>}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {formatCreatedDate(contact.created_at)}
+                        {secondaryOwnerId ? (
+                          <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 border-0 font-medium">
+                            {ownerNamesMap[secondaryOwnerId] || 'Unknown'}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {contact.stage ? (
@@ -369,6 +441,9 @@ export function DirectoryTab() {
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {formatCreatedDate(contact.created_at)}
                       </TableCell>
                     </TableRow>
                   );
