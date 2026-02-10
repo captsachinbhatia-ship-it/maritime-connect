@@ -95,7 +95,8 @@ export function DirectoryTab() {
     try {
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
-        .select('id, full_name, company_id, designation, is_active, created_at, created_by_crm_user_id, stage, country')
+        .select('*')
+        .eq('is_archived', false)
         .order('created_at', { ascending: false });
 
       if (contactsError) {
