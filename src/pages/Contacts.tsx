@@ -10,13 +10,14 @@ import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
 import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
 import { DuplicateRiskTab } from '@/components/contacts/DuplicateRiskTab';
 import { PendingInactiveRequestsTab } from '@/components/contacts/PendingInactiveRequestsTab';
+import { BulkImportTab } from '@/components/contacts/BulkImportTab';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, UserPlus, Users2, FileUp, AlertTriangle, Clock, BookOpen } from 'lucide-react';
 
-type TabType = 'directory' | 'my-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
+type TabType = 'directory' | 'my-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests' | 'bulk-import';
 
-const ALL_TABS: TabType[] = ['directory', 'my-contacts', 'secondary', 'my-added', 'unassigned', 'duplicate-risk', 'pending-requests'];
+const ALL_TABS: TabType[] = ['directory', 'my-contacts', 'secondary', 'my-added', 'unassigned', 'duplicate-risk', 'pending-requests', 'bulk-import'];
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -39,15 +40,13 @@ export default function Contacts() {
   const [myAddedCount, setMyAddedCount] = useState(0);
   const [myContactsCount, setMyContactsCount] = useState(0);
 
-  // Sync tab from URL param
+  // Sync tab from URL param (keep param in URL for deep-link / refresh)
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ALL_TABS.includes(tabParam as TabType)) {
+    if (tabParam && ALL_TABS.includes(tabParam as TabType) && tabParam !== activeTab) {
       setActiveTab(tabParam as TabType);
-      // Clear the param after applying
-      setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams]);
 
   useEffect(() => {
     const checkRole = async () => {
@@ -149,6 +148,7 @@ export default function Contacts() {
 
   const handleTabChange = (val: string) => {
     setActiveTab(val as TabType);
+    setSearchParams({ tab: val }, { replace: true });
   };
 
   if (authLoading || isAdmin === null) {
@@ -179,7 +179,7 @@ export default function Contacts() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => navigate('/bulk-import')}>
+          <Button onClick={() => handleTabChange('bulk-import')}>
             <FileUp className="mr-2 h-4 w-4" />
             Bulk Import
           </Button>
@@ -243,6 +243,13 @@ export default function Contacts() {
                 Pending ({pendingRequestsCount})
               </TabsTrigger>
             )}
+            <TabsTrigger
+              value="bulk-import"
+              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              <FileUp className="h-3.5 w-3.5" />
+              Bulk Import
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -279,6 +286,15 @@ export default function Contacts() {
             <PendingInactiveRequestsTab key={`pending-requests-${refreshKey}`} />
           </TabsContent>
         )}
+
+        <TabsContent value="bulk-import" className="mt-4">
+          <BulkImportTab key={`bulk-import-${refreshKey}`} onImportComplete={(imported) => {
+            if (imported > 0) {
+              handleContactAdded();
+              handleTabChange('my-added');
+            }
+          }} />
+        </TabsContent>
       </Tabs>
     </div>
   );
