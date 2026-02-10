@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Loader2, RefreshCw, BookOpen, Filter } from 'lucide-react';
+import { Loader2, RefreshCw, BookOpen, Filter, AlertTriangle } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -20,6 +20,12 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactOwners, getOwnersForContacts, addAssignment, type AssignmentStage } from '@/services/assignments';
 import { getUserNames } from '@/services/interactions';
@@ -76,17 +82,15 @@ export function DirectoryTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [nameFilter, setNameFilter] = useState('');
   const [companyFilter, setCompanyFilter] = useState('');
-  const [addedByFilter, setAddedByFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState('all');
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({ column: 'full_name', direction: 'asc' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // Track saving state per contact+field for optimistic revert
   const [savingCells, setSavingCells] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch ALL contacts (not just assigned ones)
       const { data: contactsData, error: contactsError } = await supabase
         .from('contacts')
         .select('id, full_name, company_id, designation, is_active, created_at, created_by_crm_user_id, stage, country')
@@ -107,8 +111,6 @@ export function DirectoryTab() {
       setContacts(contactsList);
 
       const contactIds = contactsList.map(c => c.id);
-
-      // Fetch all related data in parallel
       const companyIds = contactsList
         .map(c => c.company_id)
         .filter((id): id is string => id !== null);
@@ -125,7 +127,6 @@ export function DirectoryTab() {
       if (ownersResult.data) {
         setOwnersMap(ownersResult.data);
 
-        // Collect all user IDs that need name resolution
         const allUserIds = new Set<string>();
         Object.values(ownersResult.data).forEach(owners => {
           if (owners.primary?.assigned_to_crm_user_id) allUserIds.add(owners.primary.assigned_to_crm_user_id);
@@ -151,12 +152,23 @@ export function DirectoryTab() {
     fetchData();
   }, [fetchData]);
 
-  // Contact country map for summary table
   const contactCountryMap = useMemo(() => {
     const map: Record<string, string | null> = {};
     contacts.forEach(c => { map[c.id] = c.country || null; });
     return map;
   }, [contacts]);
+
+  // Owner counts for dropdown filter
+  const ownerCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    Object.values(ownersMap).forEach(owners => {
+      const pId = owners.primary?.assigned_to_crm_user_id;
+      const sId = owners.secondary?.assigned_to_crm_user_id;
+      if (pId) counts[pId] = (counts[pId] || 0) + 1;
+      if (sId) counts[sId] = (counts[sId] || 0) + 1;
+    });
+    return counts;
+  }, [ownersMap]);
 
   const filteredContacts = useMemo(() => {
     let filtered = contacts;
@@ -172,27 +184,26 @@ export function DirectoryTab() {
         return name.toLowerCase().includes(s);
       });
     }
-    if (addedByFilter.trim()) {
-      const s = addedByFilter.toLowerCase().trim();
+    if (ownerFilter !== 'all') {
       filtered = filtered.filter(c => {
-        const name = c.created_by_crm_user_id ? (ownerNamesMap[c.created_by_crm_user_id] || '') : 'System';
-        return name.toLowerCase().includes(s);
+        const owners = ownersMap[c.id];
+        const pId = owners?.primary?.assigned_to_crm_user_id;
+        const sId = owners?.secondary?.assigned_to_crm_user_id;
+        return pId === ownerFilter || sId === ownerFilter;
       });
     }
     if (stageFilter !== 'all') {
       filtered = filtered.filter(c => (c.stage || '') === stageFilter);
     }
 
-    // Sort: unassigned first (no PRIMARY), then by created_at desc within groups
+    // Sort: unassigned first, then by sort config
     filtered = [...filtered].sort((a, b) => {
       const aHasPrimary = !!ownersMap[a.id]?.primary?.assigned_to_crm_user_id;
       const bHasPrimary = !!ownersMap[b.id]?.primary?.assigned_to_crm_user_id;
 
-      // Unassigned contacts first
       if (!aHasPrimary && bHasPrimary) return -1;
       if (aHasPrimary && !bHasPrimary) return 1;
 
-      // Within same group, apply sort config
       const dir = sortConfig.direction === 'asc' ? 1 : -1;
       let aVal = '';
       let bVal = '';
@@ -215,7 +226,6 @@ export function DirectoryTab() {
           bVal = (b.stage || '').toLowerCase();
           break;
         default:
-          // Default: newest first
           aVal = a.created_at || '';
           bVal = b.created_at || '';
           return aVal > bVal ? -1 * dir : aVal < bVal ? 1 * dir : 0;
@@ -227,7 +237,7 @@ export function DirectoryTab() {
     });
 
     return filtered;
-  }, [contacts, nameFilter, companyFilter, addedByFilter, stageFilter, sortConfig, companyNamesMap, ownerNamesMap, ownersMap]);
+  }, [contacts, nameFilter, companyFilter, ownerFilter, stageFilter, sortConfig, companyNamesMap, ownersMap]);
 
   const handleSort = (column: SortColumn) => {
     setSortConfig(prev => ({
@@ -245,24 +255,24 @@ export function DirectoryTab() {
     }
   };
 
-  // Inline Primary/Secondary change handler
+  // Inline Primary/Secondary change — uses lowercase 'primary'/'secondary' for DB
   const handleOwnerChange = async (
     contactId: string,
-    role: 'PRIMARY' | 'SECONDARY',
+    role: 'primary' | 'secondary',
     newUserId: string,
   ) => {
     const cellKey = `${contactId}-${role}`;
     const prevOwners = ownersMap[contactId];
     setSavingCells(prev => ({ ...prev, [cellKey]: true }));
 
-    // Determine stage: use contact's current stage or default
     const contact = contacts.find(c => c.id === contactId);
     const currentStage = (contact?.stage as AssignmentStage) || 'COLD_CALLING';
 
+    // addAssignment accepts AssignmentRole which is uppercase — cast for DB compatibility
     const { error } = await addAssignment({
       contact_id: contactId,
       assigned_to_crm_user_id: newUserId,
-      assignment_role: role,
+      assignment_role: role as any,
       stage: currentStage,
     });
 
@@ -270,12 +280,10 @@ export function DirectoryTab() {
 
     if (error) {
       toast({ title: 'Save failed', description: error, variant: 'destructive' });
-      // Revert: restore previous owners
       setOwnersMap(prev => ({ ...prev, [contactId]: prevOwners || { primary: null, secondary: null } }));
       return;
     }
 
-    // Optimistically update the local ownersMap
     const userName = crmUsers.find(u => u.id === newUserId)?.full_name || 'Unknown';
     setOwnerNamesMap(prev => ({ ...prev, [newUserId]: userName }));
 
@@ -286,13 +294,12 @@ export function DirectoryTab() {
     }
   };
 
-  // Inline Stage change handler
+  // Inline Stage change
   const handleStageChange = async (contactId: string, newStage: string) => {
     const cellKey = `${contactId}-stage`;
     const prevContact = contacts.find(c => c.id === contactId);
     setSavingCells(prev => ({ ...prev, [cellKey]: true }));
 
-    // Optimistic update
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: newStage } : c));
 
     const { error: contactUpdateError } = await supabase
@@ -302,13 +309,11 @@ export function DirectoryTab() {
 
     if (contactUpdateError) {
       toast({ title: 'Stage update failed', description: contactUpdateError.message, variant: 'destructive' });
-      // Revert
       setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: prevContact?.stage || null } : c));
       setSavingCells(prev => ({ ...prev, [cellKey]: false }));
       return;
     }
 
-    // Also update active assignments stage
     await supabase
       .from('contact_assignments')
       .update({ stage: newStage })
@@ -337,6 +342,10 @@ export function DirectoryTab() {
     setSelectedIds([]);
     fetchData();
   };
+
+  // Check if any cell in a row is saving
+  const isRowSaving = (contactId: string) =>
+    !!savingCells[`${contactId}-primary`] || !!savingCells[`${contactId}-secondary`] || !!savingCells[`${contactId}-stage`];
 
   return (
     <Card>
@@ -392,14 +401,23 @@ export function DirectoryTab() {
             onChange={(e) => setCompanyFilter(e.target.value)}
             className="h-8 w-[150px] text-sm"
           />
-          <Input
-            placeholder="Added by…"
-            value={addedByFilter}
-            onChange={(e) => setAddedByFilter(e.target.value)}
-            className="h-8 w-[140px] text-sm"
-          />
-          <div className="flex items-center gap-1.5 ml-auto">
+          <div className="flex items-center gap-1.5">
             <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+              <SelectTrigger className="h-8 w-[180px] text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Owners</SelectItem>
+                {crmUsers.map(u => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.full_name} ({ownerCounts[u.id] || 0})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-1.5 ml-auto">
             <Select value={stageFilter} onValueChange={setStageFilter}>
               <SelectTrigger className="h-8 w-[140px] text-sm">
                 <SelectValue />
@@ -425,196 +443,221 @@ export function DirectoryTab() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {isAdmin && (
-                    <TableHead className="w-10">
-                      <Checkbox
-                        checked={allSelected}
-                        onCheckedChange={toggleAll}
-                        aria-label="Select all"
-                      />
+            <TooltipProvider>
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-200">
+                    {isAdmin && (
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={toggleAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
+                    )}
+                    <TableHead>
+                      <SortableHeader label="Contact Name" column="full_name" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
-                  )}
-                  <TableHead>
-                    <SortableHeader label="Contact Name" column="full_name" currentSort={sortConfig} onSort={handleSort} />
-                  </TableHead>
-                  <TableHead>
-                    <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
-                  </TableHead>
-                  <TableHead>Primary Owner</TableHead>
-                  <TableHead>Secondary Owner</TableHead>
-                  <TableHead>Added By</TableHead>
-                  <TableHead>
-                    <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
-                  </TableHead>
-                  <TableHead>
-                    <SortableHeader label="Created" column="created_at" currentSort={sortConfig} onSort={handleSort} />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredContacts.map((contact) => {
-                  const owners = ownersMap[contact.id];
-                  const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id || '';
-                  const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id || '';
-                  const creatorId = contact.created_by_crm_user_id;
-                  const isSelected = selectedIds.includes(contact.id);
-                  const hasPrimary = !!primaryOwnerId;
+                    <TableHead>
+                      <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
+                    <TableHead>Primary Owner</TableHead>
+                    <TableHead>Secondary Owner</TableHead>
+                    <TableHead>
+                      <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
+                    <TableHead>
+                      <SortableHeader label="Created" column="created_at" currentSort={sortConfig} onSort={handleSort} />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredContacts.map((contact) => {
+                    const owners = ownersMap[contact.id];
+                    const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id || '';
+                    const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id || '';
+                    const isSelected = selectedIds.includes(contact.id);
+                    const hasPrimary = !!primaryOwnerId;
+                    const rowSaving = isRowSaving(contact.id);
 
-                  return (
-                    <TableRow key={contact.id} className={`${isSelected ? 'bg-primary/5' : ''} ${!hasPrimary ? 'bg-amber-50/50 dark:bg-amber-950/10' : ''}`}>
-                      {isAdmin && (
-                        <TableCell>
-                          <Checkbox
-                            checked={isSelected}
-                            onCheckedChange={() => toggleOne(contact.id)}
-                            aria-label={`Select ${contact.full_name}`}
-                          />
+                    return (
+                      <TableRow
+                        key={contact.id}
+                        className={[
+                          'border-gray-200 hover:bg-gray-50',
+                          isSelected ? 'bg-primary/5' : '',
+                          !hasPrimary ? 'bg-red-50 border-red-200' : '',
+                          rowSaving ? 'opacity-50 pointer-events-none' : '',
+                        ].filter(Boolean).join(' ')}
+                      >
+                        {isAdmin && (
+                          <TableCell>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleOne(contact.id)}
+                              aria-label={`Select ${contact.full_name}`}
+                            />
+                          </TableCell>
+                        )}
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-1.5">
+                            {!hasPrimary && (
+                              <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            )}
+                            {contact.full_name || '—'}
+                          </div>
                         </TableCell>
-                      )}
-                      <TableCell className="font-medium">
-                        {contact.full_name || '—'}
-                      </TableCell>
-                      <TableCell>
-                        {contact.company_id ? (
-                          <Badge variant="secondary">
-                            {companyNamesMap[contact.company_id] || '—'}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
+                        <TableCell>
+                          {contact.company_id ? (
+                            <Badge variant="secondary">
+                              {companyNamesMap[contact.company_id] || '—'}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
 
-                      {/* Primary Owner - inline dropdown for admin, badge for others */}
-                      <TableCell className="text-sm">
-                        {isAdmin ? (
-                          <Select
-                            value={primaryOwnerId || '_unassigned'}
-                            onValueChange={(val) => {
-                              if (val !== '_unassigned') handleOwnerChange(contact.id, 'PRIMARY', val);
-                            }}
-                            disabled={!!savingCells[`${contact.id}-PRIMARY`]}
-                          >
-                            <SelectTrigger className="h-7 w-[150px] text-xs">
-                              <SelectValue>
-                                {primaryOwnerId ? (
-                                  <span className="text-emerald-700 font-medium">
-                                    {ownerNamesMap[primaryOwnerId] || 'Unknown'}
+                        {/* Primary Owner */}
+                        <TableCell className="text-sm">
+                          {isAdmin ? (
+                            <Select
+                              value={primaryOwnerId || '_unassigned'}
+                              onValueChange={(val) => {
+                                if (val !== '_unassigned') handleOwnerChange(contact.id, 'primary', val);
+                              }}
+                              disabled={!!savingCells[`${contact.id}-primary`]}
+                            >
+                              <SelectTrigger className="h-7 w-[150px] text-xs border-gray-300 focus:ring-blue-500">
+                                <SelectValue>
+                                  {primaryOwnerId ? (
+                                    <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-0 text-xs font-medium">
+                                      {ownerNamesMap[primaryOwnerId] || 'Unknown'}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-red-500 font-medium">Unassigned</span>
+                                  )}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="_unassigned" disabled>Unassigned</SelectItem>
+                                {crmUsers.map(u => (
+                                  <SelectItem key={u.id} value={u.id}>
+                                    {u.full_name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : primaryOwnerId ? (
+                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-0 font-medium">
+                              {ownerNamesMap[primaryOwnerId] || 'Unknown'}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-red-500 border-red-200 border-dashed font-normal">
+                              Unassigned
+                            </Badge>
+                          )}
+                        </TableCell>
+
+                        {/* Secondary Owner — DISABLED if no primary */}
+                        <TableCell className="text-sm">
+                          {isAdmin ? (
+                            hasPrimary ? (
+                              <Select
+                                value={secondaryOwnerId || '_none'}
+                                onValueChange={(val) => {
+                                  if (val === '_none') return;
+                                  if (val === primaryOwnerId) return; // safety
+                                  handleOwnerChange(contact.id, 'secondary', val);
+                                }}
+                                disabled={!!savingCells[`${contact.id}-secondary`]}
+                              >
+                                <SelectTrigger className="h-7 w-[150px] text-xs border-gray-300 focus:ring-blue-500">
+                                  <SelectValue>
+                                    {secondaryOwnerId ? (
+                                      <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-0 text-xs font-medium">
+                                        {ownerNamesMap[secondaryOwnerId] || 'Unknown'}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground">None</span>
+                                    )}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="_none">None</SelectItem>
+                                  {crmUsers.map(u => (
+                                    <SelectItem
+                                      key={u.id}
+                                      value={u.id}
+                                      disabled={u.id === primaryOwnerId}
+                                    >
+                                      {u.full_name}{u.id === primaryOwnerId ? ' (Primary)' : ''}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground cursor-not-allowed">
+                                    <Badge variant="outline" className="border-dashed text-muted-foreground text-xs font-normal opacity-50">
+                                      —
+                                    </Badge>
                                   </span>
-                                ) : (
-                                  <span className="text-muted-foreground">Unassigned</span>
-                                )}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="_unassigned" disabled>Unassigned</SelectItem>
-                              {crmUsers.map(u => (
-                                <SelectItem key={u.id} value={u.id}>
-                                  {u.full_name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : primaryOwnerId ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-0 font-medium">
-                            {ownerNamesMap[primaryOwnerId] || 'Unknown'}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground border-dashed font-normal">
-                            Unassigned
-                          </Badge>
-                        )}
-                      </TableCell>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Assign primary owner first</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )
+                          ) : secondaryOwnerId ? (
+                            <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-0 font-medium">
+                              {ownerNamesMap[secondaryOwnerId] || 'Unknown'}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground/50">—</span>
+                          )}
+                        </TableCell>
 
-                      {/* Secondary Owner - inline dropdown for admin */}
-                      <TableCell className="text-sm">
-                        {isAdmin ? (
-                          <Select
-                            value={secondaryOwnerId || '_unassigned'}
-                            onValueChange={(val) => {
-                              if (val !== '_unassigned') handleOwnerChange(contact.id, 'SECONDARY', val);
-                            }}
-                            disabled={!!savingCells[`${contact.id}-SECONDARY`]}
-                          >
-                            <SelectTrigger className="h-7 w-[150px] text-xs">
-                              <SelectValue>
-                                {secondaryOwnerId ? (
-                                  <span className="text-sky-700 font-medium">
-                                    {ownerNamesMap[secondaryOwnerId] || 'Unknown'}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground">Unassigned</span>
-                                )}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="_unassigned" disabled>Unassigned</SelectItem>
-                              {crmUsers.map(u => (
-                                <SelectItem
-                                  key={u.id}
-                                  value={u.id}
-                                  disabled={u.id === primaryOwnerId}
-                                >
-                                  {u.full_name}{u.id === primaryOwnerId ? ' (Primary)' : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : secondaryOwnerId ? (
-                          <Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100 border-0 font-medium">
-                            {ownerNamesMap[secondaryOwnerId] || 'Unknown'}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground/50">—</span>
-                        )}
-                      </TableCell>
+                        {/* Stage */}
+                        <TableCell>
+                          {isAdmin ? (
+                            <Select
+                              value={contact.stage || 'COLD_CALLING'}
+                              onValueChange={(val) => handleStageChange(contact.id, val)}
+                              disabled={!!savingCells[`${contact.id}-stage`]}
+                            >
+                              <SelectTrigger className="h-7 w-[130px] text-xs border-gray-300 focus:ring-blue-500">
+                                <SelectValue>
+                                  <Badge className={`${STAGE_COLORS[contact.stage || 'COLD_CALLING']} text-xs`}>
+                                    {STAGE_LABELS[contact.stage || 'COLD_CALLING'] || contact.stage}
+                                  </Badge>
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STAGE_OPTIONS.map(s => (
+                                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : contact.stage ? (
+                            <Badge className={STAGE_COLORS[contact.stage] || ''}>
+                              {STAGE_LABELS[contact.stage] || contact.stage}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
 
-                      <TableCell className="text-sm text-muted-foreground">
-                        {creatorId
-                          ? ownerNamesMap[creatorId] || 'System'
-                          : <span className="text-muted-foreground/50">System</span>}
-                      </TableCell>
-
-                      {/* Stage - inline dropdown for admin */}
-                      <TableCell>
-                        {isAdmin ? (
-                          <Select
-                            value={contact.stage || 'COLD_CALLING'}
-                            onValueChange={(val) => handleStageChange(contact.id, val)}
-                            disabled={!!savingCells[`${contact.id}-stage`]}
-                          >
-                            <SelectTrigger className="h-7 w-[130px] text-xs">
-                              <SelectValue>
-                                <Badge className={`${STAGE_COLORS[contact.stage || 'COLD_CALLING']} text-xs`}>
-                                  {STAGE_LABELS[contact.stage || 'COLD_CALLING'] || contact.stage}
-                                </Badge>
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STAGE_OPTIONS.map(s => (
-                                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : contact.stage ? (
-                          <Badge className={STAGE_COLORS[contact.stage] || ''}>
-                            {STAGE_LABELS[contact.stage] || contact.stage}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {formatCreatedDate(contact.created_at)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {formatCreatedDate(contact.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
           </div>
         )}
       </CardContent>

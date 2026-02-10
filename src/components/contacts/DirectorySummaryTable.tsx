@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { ContactOwners } from '@/services/assignments';
 
 interface DirectorySummaryTableProps {
@@ -69,36 +70,55 @@ export function DirectorySummaryTable({
 
   if (summaries.length === 0) return null;
 
-  const formatCountries = (countries: Record<string, number>) => {
-    const sorted = Object.entries(countries).sort((a, b) => b[1] - a[1]);
-    return sorted.map(([c, n]) => `${c}(${n})`).join(', ');
+  const formatCountryChips = (countries: Record<string, number>) => {
+    return Object.entries(countries)
+      .sort((a, b) => b[1] - a[1])
+      .map(([c, n]) => (
+        <Badge key={c} variant="outline" className="text-[10px] px-1.5 py-0 mr-1 mb-0.5 font-normal border-gray-300">
+          {c}: {n}
+        </Badge>
+      ));
   };
 
   return (
-    <div className="rounded-lg border bg-card mb-4">
-      <div className="px-4 py-2 border-b">
+    <div className="rounded-lg border border-gray-200 bg-white mb-4">
+      <div className="px-4 py-2 border-b border-gray-200">
         <h3 className="text-sm font-semibold text-foreground">Assignment Summary</h3>
       </div>
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">User</TableHead>
-              <TableHead className="text-xs text-center">Total</TableHead>
-              <TableHead className="text-xs text-center">Primary</TableHead>
-              <TableHead className="text-xs text-center">Secondary</TableHead>
+            <TableRow className="border-gray-200">
+              <TableHead className="text-xs">User Name</TableHead>
+              <TableHead className="text-xs text-center">Total Contacts</TableHead>
+              <TableHead className="text-xs text-center">Primary Count</TableHead>
+              <TableHead className="text-xs text-center">Secondary Count</TableHead>
               <TableHead className="text-xs">Country Breakdown</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {summaries.map((s) => (
-              <TableRow key={s.userId}>
+            {summaries.map((s, idx) => (
+              <TableRow key={s.userId} className={idx % 2 === 1 ? 'bg-gray-50' : 'bg-white'}>
                 <TableCell className="text-sm font-medium py-1.5">{s.name}</TableCell>
-                <TableCell className="text-sm text-center py-1.5">{s.total}</TableCell>
-                <TableCell className="text-sm text-center py-1.5">{s.primaryCount}</TableCell>
-                <TableCell className="text-sm text-center py-1.5">{s.secondaryCount}</TableCell>
-                <TableCell className="text-xs text-muted-foreground py-1.5 max-w-[300px] truncate">
-                  {formatCountries(s.countries)}
+                <TableCell className="text-center py-1.5">
+                  <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 border-0 text-xs font-semibold">
+                    {s.total}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-center py-1.5">
+                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-0 text-xs font-semibold">
+                    {s.primaryCount}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-center py-1.5">
+                  <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-0 text-xs font-semibold">
+                    {s.secondaryCount}
+                  </Badge>
+                </TableCell>
+                <TableCell className="py-1.5 max-w-[350px]">
+                  <div className="flex flex-wrap">
+                    {formatCountryChips(s.countries)}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

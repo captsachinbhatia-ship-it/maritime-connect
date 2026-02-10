@@ -100,7 +100,7 @@ export function DirectoryBulkToolbar({
           addAssignment({
             contact_id: cid,
             assigned_to_crm_user_id: primaryUserId,
-            assignment_role: 'PRIMARY',
+            assignment_role: 'primary' as any,
             stage: (bulkStage as AssignmentStage) || 'COLD_CALLING',
           }),
         CONCURRENCY,
@@ -120,7 +120,7 @@ export function DirectoryBulkToolbar({
           addAssignment({
             contact_id: cid,
             assigned_to_crm_user_id: secondaryUserId,
-            assignment_role: 'SECONDARY',
+            assignment_role: 'secondary' as any,
             stage: (bulkStage as AssignmentStage) || 'COLD_CALLING',
           }),
         CONCURRENCY,
