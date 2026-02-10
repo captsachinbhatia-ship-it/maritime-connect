@@ -48,7 +48,7 @@ export function DailyReport() {
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .eq('assignment_role', 'primary');
+        .eq('assignment_role', 'PRIMARY');
 
       const contactIds = [...new Set((assignments || []).map(a => a.contact_id))];
 

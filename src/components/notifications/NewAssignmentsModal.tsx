@@ -25,7 +25,7 @@ interface NewAssignment {
   id: string;
   contact_id: string;
   contact_name: string;
-  assignment_role: 'primary' | 'secondary';
+  assignment_role: 'PRIMARY' | 'SECONDARY';
   stage: string;
   assigned_at: string;
   assigned_by: string;
@@ -77,7 +77,7 @@ export function NewAssignmentsModal() {
           .select('id, contact_id, assignment_role, stage, assigned_at, assigned_by_crm_user_id')
           .eq('status', 'ACTIVE')
           .eq('assigned_to_crm_user_id', currentCrmUserId)
-          .in('assignment_role', ['primary', 'secondary'])
+          .in('assignment_role', ['PRIMARY', 'SECONDARY'])
           .gte('assigned_at', cutoffTime.toISOString())
           .order('assigned_at', { ascending: false })
           .limit(MAX_DISPLAY_COUNT);
@@ -133,7 +133,7 @@ export function NewAssignmentsModal() {
           id: a.id,
           contact_id: a.contact_id,
           contact_name: contactNameMap[a.contact_id] || 'Unknown Contact',
-          assignment_role: a.assignment_role as 'primary' | 'secondary',
+          assignment_role: a.assignment_role as 'PRIMARY' | 'SECONDARY',
           stage: a.stage,
           assigned_at: a.assigned_at,
           assigned_by: a.assigned_by_crm_user_id ? (assignerNameMap[a.assigned_by_crm_user_id] || 'Admin') : 'Admin',
@@ -190,10 +190,10 @@ export function NewAssignmentsModal() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-sm">{assignment.contact_name}</span>
                     <Badge
-                      variant={assignment.assignment_role === 'primary' ? 'default' : 'secondary'}
+                      variant={assignment.assignment_role === 'PRIMARY' ? 'default' : 'secondary'}
                       className="text-xs"
                     >
-                      {assignment.assignment_role === 'primary' ? 'Primary' : 'Secondary'}
+                      {assignment.assignment_role === 'PRIMARY' ? 'Primary' : 'Secondary'}
                     </Badge>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -88,7 +88,7 @@ export function SecondaryContactsTab() {
         .select('contact_id')
         .eq('status', 'ACTIVE')
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .in('assignment_role', ['secondary']);
+        .in('assignment_role', ['SECONDARY']);
 
       if (secondaryError) {
         setError(secondaryError.message);
@@ -111,7 +111,7 @@ export function SecondaryContactsTab() {
         .select('contact_id, stage, assigned_to_crm_user_id')
         .in('contact_id', contactIds)
         .eq('status', 'ACTIVE')
-        .in('assignment_role', ['primary']);
+        .in('assignment_role', ['PRIMARY']);
 
       if (primaryError) {
         setError(primaryError.message);

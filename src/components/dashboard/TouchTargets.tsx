@@ -79,7 +79,7 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp, isAdmin
         .from('contact_assignments')
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'primary');
+        .eq('assignment_role', 'PRIMARY');
 
       if (userId) {
         assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
@@ -175,7 +175,7 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp, isAdmin
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .eq('assignment_role', 'primary')
+          .eq('assignment_role', 'PRIMARY')
           .not('assigned_to_crm_user_id', 'is', null);
 
         const assignedContactIds = new Set(
