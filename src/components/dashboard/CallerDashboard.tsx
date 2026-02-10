@@ -72,7 +72,7 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
 
       {/* Enquiries + Daily Report */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <EnquiriesSummary />
+        <EnquiriesSummary isPersonal />
         <DailyReport />
       </div>
 
