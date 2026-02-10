@@ -122,7 +122,7 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
 
           {/* Enquiries + Daily Report */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <EnquiriesSummary />
+            <EnquiriesSummary crmUserId={selectedUserId} />
             <DailyReport />
           </div>
         </TabsContent>
