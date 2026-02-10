@@ -2,24 +2,25 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { HeartPulse, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { HeartPulse, AlertTriangle, AlertCircle, Building2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { getCurrentCrmUserId } from '@/services/profiles';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
 interface StageCounts {
   COLD_CALLING: number;
   ASPIRATION: number;
   ACHIEVEMENT: number;
-  INACTIVE: number;
 }
 
+const ACTIVE_STAGES = ['COLD_CALLING', 'ASPIRATION', 'ACHIEVEMENT'] as const;
+
 const stageConfig = [
-  { key: 'COLD_CALLING', label: 'Cold Calling', color: 'bg-blue-500', tab: 'my-contacts' },
-  { key: 'ASPIRATION', label: 'Aspiration', color: 'bg-amber-500', tab: 'my-contacts' },
-  { key: 'ACHIEVEMENT', label: 'Achievement', color: 'bg-emerald-500', tab: 'my-contacts' },
-  { key: 'INACTIVE', label: 'Inactive', color: 'bg-slate-400', tab: 'my-contacts' },
-] as const;
+  { key: 'COLD_CALLING' as const, label: 'Cold Calling', color: 'bg-blue-500', tab: 'my-contacts' },
+  { key: 'ASPIRATION' as const, label: 'Aspiration', color: 'bg-amber-500', tab: 'my-contacts' },
+  { key: 'ACHIEVEMENT' as const, label: 'Achievement', color: 'bg-emerald-500', tab: 'my-contacts' },
+];
 
 interface ContactHealthSnapshotProps {
   /** undefined = logged-in user, null = all users, string = specific user */
@@ -28,46 +29,72 @@ interface ContactHealthSnapshotProps {
 
 export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealthSnapshotProps = {}) {
   const navigate = useNavigate();
+  const { crmUser } = useAuth();
   const [counts, setCounts] = useState<StageCounts>({
-    COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0,
+    COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0,
   });
   const [totalActive, setTotalActive] = useState(0);
   const [staleCount, setStaleCount] = useState(0);
+  const [newCompanies7d, setNewCompanies7d] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       let userId: string | null = null;
 
       if (crmUserIdProp === undefined) {
-        const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-        if (crmError || !currentCrmUserId) { setIsLoading(false); return; }
-        userId = currentCrmUserId;
+        if (!crmUser?.id) { setIsLoading(false); return; }
+        userId = crmUser.id;
       } else {
         userId = crmUserIdProp;
       }
 
+      // Fetch assignments and new companies in parallel
       let assignQuery = supabase
         .from('contact_assignments')
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'PRIMARY');
+        .in('assignment_role', ['PRIMARY', 'primary'])
+        .in('stage', [...ACTIVE_STAGES]);
 
       if (userId) {
         assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
       }
 
-      const { data: assignments } = await assignQuery;
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+      const [assignResult, companiesResult] = await Promise.all([
+        assignQuery,
+        supabase
+          .from('companies')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', sevenDaysAgo.toISOString()),
+      ]);
+
+      if (assignResult.error) {
+        setError(`Assignments: ${assignResult.error.message}`);
+        return;
+      }
+      if (companiesResult.error) {
+        setError(`Companies: ${companiesResult.error.message}`);
+        return;
+      }
+
+      setNewCompanies7d(companiesResult.count ?? 0);
+
+      const assignments = assignResult.data || [];
       const latestByContact = new Map<string, string>();
-      (assignments || []).forEach(a => {
+      assignments.forEach(a => {
         if (!latestByContact.has(a.contact_id)) {
           latestByContact.set(a.contact_id, a.stage);
         }
       });
 
-      const sc: StageCounts = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+      const sc: StageCounts = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
       latestByContact.forEach(stage => {
         if (stage in sc) sc[stage as keyof StageCounts]++;
       });
@@ -100,13 +127,36 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
         setStaleCount(0);
       }
     } catch (err) {
-      console.error('ContactHealthSnapshot error:', err);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('ContactHealthSnapshot error:', msg);
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
-  }, [crmUserIdProp]);
+  }, [crmUserIdProp, crmUser?.id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <HeartPulse className="h-4.5 w-4.5 text-primary" />
+            </div>
+            <CardTitle className="text-base">Contact Health</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -121,17 +171,17 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
       <CardContent>
         {isLoading ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14" />)}
+            <div className="grid grid-cols-3 gap-2">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14" />)}
             </div>
-            <div className="grid grid-cols-4 gap-2">
-              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12" />)}
+            <div className="grid grid-cols-3 gap-2">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12" />)}
             </div>
           </div>
         ) : (
           <div className="space-y-3">
             {/* Top summary */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <div
                 className="rounded-lg border p-3 cursor-pointer hover:bg-accent/50 transition-colors"
                 onClick={() => navigate('/contacts?tab=my-contacts')}
@@ -157,10 +207,20 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
                   {staleCount}
                 </p>
               </div>
+              <div
+                className="rounded-lg border p-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                onClick={() => navigate('/companies')}
+              >
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Building2 className="h-3 w-3" />
+                  New Companies (7d)
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-foreground">{newCompanies7d}</p>
+              </div>
             </div>
 
             {/* Stage counts */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {stageConfig.map(({ key, label, color, tab }) => (
                 <div
                   key={key}
