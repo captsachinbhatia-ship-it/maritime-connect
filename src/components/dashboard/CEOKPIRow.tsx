@@ -36,7 +36,7 @@ export function CEOKPIRow() {
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .eq('assignment_role', 'primary')
+          .eq('assignment_role', 'PRIMARY')
           .not('assigned_to_crm_user_id', 'is', null);
 
         const assignedContactIds = new Set(
@@ -68,7 +68,7 @@ export function CEOKPIRow() {
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .eq('assignment_role', 'primary')
+          .eq('assignment_role', 'PRIMARY')
           .gte('assigned_at', sevenDaysAgo.toISOString());
 
         const recentlyAssignedCount = new Set(

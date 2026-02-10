@@ -71,7 +71,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .in('assignment_role', ['primary', 'secondary']);
+          .in('assignment_role', ['PRIMARY', 'SECONDARY']);
 
         if (userId) {
           assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);

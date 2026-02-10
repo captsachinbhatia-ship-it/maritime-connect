@@ -45,7 +45,7 @@ export function BulkAssignModal({
   const { toast } = useToast();
   const [users, setUsers] = useState<Array<{ id: string; full_name: string; email: string | null }>>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [assignmentRole, setAssignmentRole] = useState<AssignmentRole>('primary');
+  const [assignmentRole, setAssignmentRole] = useState<AssignmentRole>('PRIMARY');
   const [selectedStage, setSelectedStage] = useState<AssignmentStage>('COLD_CALLING');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -56,7 +56,7 @@ export function BulkAssignModal({
     if (open) {
       loadUsers();
       setSelectedUserId('');
-      setAssignmentRole('primary');
+      setAssignmentRole('PRIMARY');
       setSelectedStage('COLD_CALLING');
       setError(null);
       setProgress({ current: 0, total: 0, success: 0, failed: 0 });
@@ -94,7 +94,7 @@ export function BulkAssignModal({
         contact_id: contactId,
         assigned_to_crm_user_id: selectedUserId,
         assignment_role: assignmentRole,
-        stage: assignmentRole === 'primary' ? selectedStage : 'COLD_CALLING',
+        stage: assignmentRole === 'PRIMARY' ? selectedStage : 'COLD_CALLING',
       });
 
       if (result.error) {
@@ -165,20 +165,20 @@ export function BulkAssignModal({
                 className="w-full"
               >
                 <ToggleGroupItem
-                  value="primary"
+                  value="PRIMARY"
                   className="flex-1 h-9 text-sm font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   Primary
                 </ToggleGroupItem>
                 <ToggleGroupItem
-                  value="secondary"
+                  value="SECONDARY"
                   className="flex-1 h-9 text-sm font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   Secondary
                 </ToggleGroupItem>
               </ToggleGroup>
               <p className="text-xs text-muted-foreground">
-                {assignmentRole === 'primary'
+                {assignmentRole === 'PRIMARY'
                   ? 'Primary owners manage the contact pipeline and can change stages.'
                   : 'Secondary owners have read access and can add interactions.'}
               </p>
@@ -202,7 +202,7 @@ export function BulkAssignModal({
             </div>
 
             {/* Stage - only for PRIMARY */}
-            {assignmentRole === 'primary' && (
+            {assignmentRole === 'PRIMARY' && (
               <div className="space-y-2">
                 <Label>Stage *</Label>
                 <Select value={selectedStage} onValueChange={(v) => setSelectedStage(v as AssignmentStage)}>

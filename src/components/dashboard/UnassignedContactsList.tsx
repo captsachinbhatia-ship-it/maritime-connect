@@ -38,7 +38,7 @@ export function UnassignedContactsList() {
         .from('contact_assignments')
         .select('contact_id')
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'primary')
+        .eq('assignment_role', 'PRIMARY')
         .not('assigned_to_crm_user_id', 'is', null);
 
       if (assignmentsError) {
