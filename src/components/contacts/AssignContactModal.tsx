@@ -20,7 +20,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { getActiveCrmUsers } from '@/services/assignPrimary';
-import { addAssignment, getContactOwners, type AssignmentStage, type AssignmentRole } from '@/services/assignments';
+import { addAssignment, type AssignmentStage, type AssignmentRole } from '@/services/assignments';
 import { useToast } from '@/hooks/use-toast';
 
 interface AssignContactModalProps {
@@ -55,7 +55,7 @@ export function AssignContactModal({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasPrimaryOwner, setHasPrimaryOwner] = useState<boolean | null>(null);
+  
 
   useEffect(() => {
     if (open) {
@@ -71,11 +71,7 @@ export function AssignContactModal({
     setIsLoading(true);
     setError(null);
 
-    // Load users and check for existing primary owner in parallel
-    const [usersResult, ownersResult] = await Promise.all([
-      getActiveCrmUsers(),
-      getContactOwners(contactId),
-    ]);
+    const usersResult = await getActiveCrmUsers();
 
     if (usersResult.error) {
       setError(usersResult.error);
@@ -83,25 +79,12 @@ export function AssignContactModal({
       setUsers(usersResult.data || []);
     }
 
-    if (ownersResult.data) {
-      setHasPrimaryOwner(!!ownersResult.data.primary);
-    } else {
-      setHasPrimaryOwner(null);
-    }
-
     setIsLoading(false);
   };
-
-  const canSubmitSecondary = assignmentRole !== 'SECONDARY' || hasPrimaryOwner === true;
 
   const handleSave = async () => {
     if (!selectedUserId) {
       setError('Please select a user to assign');
-      return;
-    }
-
-    if (assignmentRole === 'SECONDARY' && !hasPrimaryOwner) {
-      setError('Primary owner must be assigned first.');
       return;
     }
 
@@ -192,16 +175,6 @@ export function AssignContactModal({
               </p>
             </div>
 
-            {/* Secondary warning if no primary */}
-            {assignmentRole === 'SECONDARY' && hasPrimaryOwner === false && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Primary owner must be assigned first.
-                </AlertDescription>
-              </Alert>
-            )}
-
             {/* Assign To */}
             <div className="space-y-2">
               <Label>Assign To *</Label>
@@ -250,7 +223,7 @@ export function AssignContactModal({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={isSaving || isLoading || !selectedUserId || !canSubmitSecondary}
+            disabled={isSaving || isLoading || !selectedUserId}
           >
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {buttonLabel}
