@@ -108,7 +108,7 @@ export function DashboardLineChart({ crmUserId, isPersonal = true }: DashboardLi
         const assignQuery = supabase.from('contact_assignments')
           .select('contact_id, stage')
           .eq('status', 'ACTIVE')
-          .eq('assignment_role', 'PRIMARY');
+          .eq('assignment_role', 'primary');
 
         if (userId) assignQuery.eq('assigned_to_crm_user_id', userId);
 

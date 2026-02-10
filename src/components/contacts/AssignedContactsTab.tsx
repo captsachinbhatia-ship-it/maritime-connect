@@ -84,7 +84,7 @@ export function AssignedContactsTab() {
         .from('contact_assignments')
         .select('contact_id, stage, assigned_to_crm_user_id')
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'PRIMARY')
+        .eq('assignment_role', 'primary')
         .not('assigned_to_crm_user_id', 'is', null);
 
       if (assignmentsError) {

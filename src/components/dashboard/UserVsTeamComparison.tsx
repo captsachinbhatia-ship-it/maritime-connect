@@ -115,11 +115,11 @@ export function UserVsTeamComparison({ isCEO, isAdmin }: UserVsTeamComparisonPro
         supabase.from('contact_assignments').select('contact_id, stage')
           .eq('status', 'ACTIVE')
           .eq('assigned_to_crm_user_id', currentCrmUserId)
-          .eq('assignment_role', 'PRIMARY'),
+          .eq('assignment_role', 'primary'),
         // All assignments
         supabase.from('contact_assignments').select('contact_id, stage, assigned_to_crm_user_id')
           .eq('status', 'ACTIVE')
-          .eq('assignment_role', 'PRIMARY'),
+          .eq('assignment_role', 'primary'),
         // My interactions (via assigned contacts — will filter client-side)
         supabase.from('v_contact_interactions_timeline').select('contact_id, interaction_at')
           .gte('interaction_at', sinceISO),

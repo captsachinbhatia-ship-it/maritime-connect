@@ -45,7 +45,7 @@ export function AddAssignmentModal({
   const [users, setUsers] = useState<CrmUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [assignmentRole, setAssignmentRole] = useState<'PRIMARY' | 'SECONDARY'>('SECONDARY');
+  const [assignmentRole, setAssignmentRole] = useState<'primary' | 'secondary'>('secondary');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -107,7 +107,7 @@ export function AddAssignmentModal({
   const handleClose = () => {
     if (!isSubmitting) {
       setSelectedUserId('');
-      setAssignmentRole('SECONDARY');
+      setAssignmentRole('secondary');
       onClose();
     }
   };
@@ -160,17 +160,17 @@ export function AddAssignmentModal({
             <Label>Assignment Role *</Label>
             <RadioGroup
               value={assignmentRole}
-              onValueChange={(val) => setAssignmentRole(val as 'PRIMARY' | 'SECONDARY')}
+              onValueChange={(val) => setAssignmentRole(val as 'primary' | 'secondary')}
               className="flex gap-4"
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="PRIMARY" id="role-primary" />
+                <RadioGroupItem value="primary" id="role-primary" />
                 <Label htmlFor="role-primary" className="font-normal cursor-pointer">
                   Primary
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="SECONDARY" id="role-secondary" />
+                <RadioGroupItem value="secondary" id="role-secondary" />
                 <Label htmlFor="role-secondary" className="font-normal cursor-pointer">
                   Secondary
                 </Label>
