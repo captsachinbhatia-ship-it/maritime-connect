@@ -59,8 +59,8 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   // Use CRM user ID directly from AuthContext (not a separate RPC)
   const crmUserId = crmUser?.id ?? null;
 
-  // Session safety check: verify auth session matches the UI user before write ops
-  const verifySession = async (): Promise<boolean> => {
+  // Session safety check: verify auth session AND DB-level current_crm_user_id match the UI user
+  const verifySession = async (operationName: string): Promise<boolean> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
       toast({ title: 'Session expired', description: 'Please log in again.', variant: 'destructive' });
@@ -68,11 +68,28 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
     }
     const sessionEmail = session.user.email;
     const uiEmail = crmUser?.email;
-    console.log('[BulkImport] Session check — auth.uid:', session.user.id, 'session email:', sessionEmail, 'UI crmUser email:', uiEmail, 'crmUser.id:', crmUserId);
-    if (uiEmail && sessionEmail && sessionEmail !== uiEmail) {
+    console.log(`[BulkImport:${operationName}] auth.uid=${session.user.id}, session_email=${sessionEmail}, ui_email=${uiEmail}, ui_crmUserId=${crmUserId}`);
+
+    if (uiEmail && sessionEmail && sessionEmail.toLowerCase() !== uiEmail.toLowerCase()) {
       toast({
         title: 'User mismatch',
         description: `Session belongs to ${sessionEmail} but UI shows ${uiEmail}. Please log out and log back in.`,
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    // Also verify at DB level — current_crm_user_id() must match crmUser.id
+    const { data: dbCrmId, error: rpcErr } = await supabase.rpc('current_crm_user_id');
+    console.log(`[BulkImport:${operationName}] DB current_crm_user_id()=${dbCrmId}, expected=${crmUserId}, rpcErr=${rpcErr?.message}`);
+    if (rpcErr) {
+      toast({ title: 'Auth verification failed', description: rpcErr.message, variant: 'destructive' });
+      return false;
+    }
+    if (dbCrmId !== crmUserId) {
+      toast({
+        title: 'Identity mismatch',
+        description: `DB sees user ${dbCrmId} but UI user is ${crmUserId}. Please log out and log back in.`,
         variant: 'destructive',
       });
       return false;
@@ -142,7 +159,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
       return;
     }
 
-    if (!(await verifySession())) { setInserting(false); return; }
+    if (!(await verifySession('insert'))) { setInserting(false); return; }
     setInserting(true);
     const batchId = crypto.randomUUID();
     const { count, error } = await insertStagingRows(batchId, crmUserId, parsedRows);
@@ -167,7 +184,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   // Validate batch
   const handleValidate = async () => {
     if (!activeBatchId) return;
-    if (!(await verifySession())) return;
+    if (!(await verifySession('validate'))) return;
     setValidating(true);
     const { data, error } = await validateImportBatch(activeBatchId);
 
@@ -194,7 +211,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   // Import validated
   const handleImport = async () => {
     if (!activeBatchId) return;
-    if (!(await verifySession())) return;
+    if (!(await verifySession('import'))) return;
     setImporting(true);
     const { data, error } = await importValidatedContacts(activeBatchId);
 
