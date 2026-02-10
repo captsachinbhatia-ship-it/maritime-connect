@@ -500,6 +500,7 @@ export function DirectoryTab() {
                     <TableHead>
                       <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
+                    <TableHead>Added By</TableHead>
                     <TableHead>Primary Owner</TableHead>
                     <TableHead>Secondary Owner</TableHead>
                     <TableHead>
@@ -554,6 +555,13 @@ export function DirectoryTab() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+
+                        {/* Added By */}
+                        <TableCell className="text-xs text-muted-foreground">
+                          {contact.created_by_crm_user_id
+                            ? (ownerNamesMap[contact.created_by_crm_user_id] || '—')
+                            : '—'}
                         </TableCell>
 
                         {/* Primary Owner */}
