@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactWithCompany } from '@/types';
+import { toast } from '@/hooks/use-toast';
 
 interface DuplicateRiskContact {
   id: string;
@@ -26,6 +27,8 @@ interface DuplicateRiskContact {
   primary_phone_type: string | null;
   created_at: string | null;
   duplicate_count: number;
+  keep_contact_id: string | null;
+  other_contact_id: string | null;
 }
 
 export function DuplicateRiskTab() {
@@ -34,6 +37,7 @@ export function DuplicateRiskTab() {
   const [search, setSearch] = useState('');
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -95,6 +99,36 @@ export function DuplicateRiskTab() {
     setDrawerOpen(true);
   };
 
+  const handleResolve = useCallback(async (
+    action: 'keep_this' | 'keep_both' | 'delete',
+    keepId: string | null,
+    otherId: string | null,
+    rowId: string,
+  ) => {
+    if (!keepId || !otherId) {
+      toast({ title: 'Error', description: 'Missing contact IDs for resolution', variant: 'destructive' });
+      return;
+    }
+    setActionInFlight(rowId);
+    try {
+      const { error } = await supabase.rpc('resolve_duplicate_contact', {
+        p_action: action,
+        p_keep_contact_id: keepId,
+        p_other_contact_id: otherId,
+      });
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Resolved', description: 'Duplicate resolved successfully.' });
+        fetchData();
+      }
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setActionInFlight(null);
+    }
+  }, [fetchData]);
+
   const getDuplicateCountColor = (count: number) => {
     if (count >= 5) return 'bg-destructive text-destructive-foreground';
     if (count >= 3) return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300';
@@ -150,6 +184,7 @@ export function DuplicateRiskTab() {
                     <TableHead>Designation</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
+                    <TableHead className="w-[200px] text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -182,6 +217,34 @@ export function DuplicateRiskTab() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {contact.primary_phone || '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={actionInFlight === contact.id}
+                            onClick={(e) => { e.stopPropagation(); handleResolve('keep_this', contact.keep_contact_id, contact.other_contact_id, contact.id); }}
+                          >
+                            <Check className="mr-1 h-3 w-3" /> Keep
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={actionInFlight === contact.id}
+                            onClick={(e) => { e.stopPropagation(); handleResolve('keep_both', contact.keep_contact_id, contact.other_contact_id, contact.id); }}
+                          >
+                            <CheckCheck className="mr-1 h-3 w-3" /> Both
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={actionInFlight === contact.id}
+                            onClick={(e) => { e.stopPropagation(); handleResolve('delete', contact.keep_contact_id, contact.other_contact_id, contact.id); }}
+                          >
+                            <Trash2 className="mr-1 h-3 w-3" /> Delete
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
