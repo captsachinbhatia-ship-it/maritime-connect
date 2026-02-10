@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getActiveCrmUsers } from '@/services/assignPrimary';
-import { addAssignment, type AssignmentStage } from '@/services/assignments';
+import { type AssignmentStage } from '@/services/assignments';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -66,6 +67,7 @@ export function DirectoryBulkToolbar({
   onComplete,
 }: DirectoryBulkToolbarProps) {
   const { toast } = useToast();
+  const { crmUserId } = useCrmUser();
   const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
   const [primaryUserId, setPrimaryUserId] = useState('');
   const [secondaryUserId, setSecondaryUserId] = useState('');
@@ -83,80 +85,74 @@ export function DirectoryBulkToolbar({
   const count = selectedIds.length;
 
   const handleApply = async () => {
-    if (!hasAnyAction || count === 0) return;
+    if (!hasAnyAction || count === 0 || !crmUserId) return;
     setIsApplying(true);
     setProgress(0);
 
     let totalSuccess = 0;
     let totalFailed = 0;
     let firstErr: string | null = null;
-    let totalOps = 0;
 
-    // Primary assignments
+    // Primary assignments via RPC
     if (primaryUserId) {
       const res = await runWithConcurrency(
         selectedIds,
-        (cid) =>
-          addAssignment({
-            contact_id: cid,
-            assigned_to_crm_user_id: primaryUserId,
-            assignment_role: 'primary' as any,
-            stage: (bulkStage as AssignmentStage) || 'COLD_CALLING',
-          }),
+        async (cid) => {
+          const { error } = await supabase.rpc('assign_contact_owner', {
+            p_contact_id: cid,
+            p_assigned_to: primaryUserId,
+            p_assignment_role: 'PRIMARY',
+            p_assigned_by: crmUserId,
+          });
+          return { error: error?.message || null };
+        },
         CONCURRENCY,
         (d) => setProgress(d),
       );
       totalSuccess += res.success;
       totalFailed += res.failed;
       if (!firstErr && res.firstError) firstErr = res.firstError;
-      totalOps += count;
     }
 
-    // Secondary assignments
+    // Secondary assignments via RPC
     if (secondaryUserId) {
       const res = await runWithConcurrency(
         selectedIds,
-        (cid) =>
-          addAssignment({
-            contact_id: cid,
-            assigned_to_crm_user_id: secondaryUserId,
-            assignment_role: 'secondary' as any,
-            stage: (bulkStage as AssignmentStage) || 'COLD_CALLING',
-          }),
+        async (cid) => {
+          const { error } = await supabase.rpc('assign_contact_owner', {
+            p_contact_id: cid,
+            p_assigned_to: secondaryUserId,
+            p_assignment_role: 'SECONDARY',
+            p_assigned_by: crmUserId,
+          });
+          return { error: error?.message || null };
+        },
         CONCURRENCY,
         (d) => setProgress(d),
       );
       totalSuccess += res.success;
       totalFailed += res.failed;
       if (!firstErr && res.firstError) firstErr = res.firstError;
-      totalOps += count;
     }
 
-    // Stage update (direct on contacts table)
-    if (bulkStage && !primaryUserId) {
-      // If primaryUserId was set, stage was already applied via addAssignment
-      // Only do standalone stage update if no primary assignment
-      for (const cid of selectedIds) {
-        const { error } = await supabase
-          .from('contacts')
-          .update({ stage: bulkStage })
-          .eq('id', cid);
-
-        if (error) {
-          totalFailed++;
-          if (!firstErr) firstErr = error.message;
-        } else {
-          totalSuccess++;
-        }
-      }
-      // Also update active assignments stage
-      for (const cid of selectedIds) {
-        await supabase
-          .from('contact_assignments')
-          .update({ stage: bulkStage })
-          .eq('contact_id', cid)
-          .eq('status', 'ACTIVE');
-      }
+    // Stage update via RPC
+    if (bulkStage) {
+      const res = await runWithConcurrency(
+        selectedIds,
+        async (cid) => {
+          const { error } = await supabase.rpc('update_contact_stage', {
+            p_contact_id: cid,
+            p_stage: bulkStage,
+            p_updated_by: crmUserId,
+          });
+          return { error: error?.message || null };
+        },
+        CONCURRENCY,
+        (d) => setProgress(d),
+      );
+      totalSuccess += res.success;
+      totalFailed += res.failed;
+      if (!firstErr && res.firstError) firstErr = res.firstError;
     }
 
     const description =

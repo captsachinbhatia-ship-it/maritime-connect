@@ -27,13 +27,14 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { supabase } from '@/lib/supabaseClient';
-import { ContactOwners, getOwnersForContacts, addAssignment, type AssignmentStage } from '@/services/assignments';
+import { ContactOwners, getOwnersForContacts, type AssignmentStage } from '@/services/assignments';
 import { getUserNames } from '@/services/interactions';
 import { getCompanyNamesMap } from '@/services/contacts';
 import { getActiveCrmUsers } from '@/services/assignPrimary';
 import { SortableHeader, type SortColumn, type SortDirection } from './ColumnFilters';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { DirectoryBulkToolbar } from './DirectoryBulkToolbar';
 import { DirectorySummaryTable } from './DirectorySummaryTable';
 import { useToast } from '@/hooks/use-toast';
@@ -73,6 +74,7 @@ interface DirectoryContact {
 
 export function DirectoryTab() {
   const { isAdmin } = useAuth();
+  const { crmUserId } = useCrmUser();
   const { toast } = useToast();
   const [contacts, setContacts] = useState<DirectoryContact[]>([]);
   const [ownersMap, setOwnersMap] = useState<Record<string, ContactOwners>>({});
@@ -255,32 +257,44 @@ export function DirectoryTab() {
     }
   };
 
-  // Inline Primary/Secondary change — uses lowercase 'primary'/'secondary' for DB
+  // Inline Primary/Secondary change — uses Supabase RPC
   const handleOwnerChange = async (
     contactId: string,
     role: 'primary' | 'secondary',
     newUserId: string,
   ) => {
+    if (!crmUserId) return;
     const cellKey = `${contactId}-${role}`;
     const prevOwners = ownersMap[contactId];
     setSavingCells(prev => ({ ...prev, [cellKey]: true }));
 
-    const contact = contacts.find(c => c.id === contactId);
-    const currentStage = (contact?.stage as AssignmentStage) || 'COLD_CALLING';
+    // Validate: secondary requires primary
+    if (role === 'secondary') {
+      const hasPrimary = !!prevOwners?.primary?.assigned_to_crm_user_id;
+      if (!hasPrimary) {
+        toast({ title: 'Validation error', description: 'Please assign a Primary owner first.', variant: 'destructive' });
+        setSavingCells(prev => ({ ...prev, [cellKey]: false }));
+        return;
+      }
+    }
 
-    // addAssignment accepts AssignmentRole which is uppercase — cast for DB compatibility
-    const { error } = await addAssignment({
-      contact_id: contactId,
-      assigned_to_crm_user_id: newUserId,
-      assignment_role: role as any,
-      stage: currentStage,
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('assign_contact_owner', {
+      p_contact_id: contactId,
+      p_assigned_to: newUserId,
+      p_assignment_role: role.toUpperCase(),
+      p_assigned_by: crmUserId,
     });
 
     setSavingCells(prev => ({ ...prev, [cellKey]: false }));
 
-    if (error) {
-      toast({ title: 'Save failed', description: error, variant: 'destructive' });
+    if (rpcError) {
+      toast({ title: 'Save failed', description: rpcError.message, variant: 'destructive' });
       setOwnersMap(prev => ({ ...prev, [contactId]: prevOwners || { primary: null, secondary: null } }));
+      return;
+    }
+
+    if (rpcResult && typeof rpcResult === 'object' && !rpcResult.success) {
+      toast({ title: 'Save failed', description: rpcResult.message || rpcResult.error || 'Unknown error', variant: 'destructive' });
       return;
     }
 
@@ -294,31 +308,54 @@ export function DirectoryTab() {
     }
   };
 
-  // Inline Stage change
+  // Remove secondary owner via RPC
+  const handleRemoveSecondary = async (contactId: string) => {
+    if (!crmUserId) return;
+    const cellKey = `${contactId}-secondary`;
+    setSavingCells(prev => ({ ...prev, [cellKey]: true }));
+
+    const { error: rpcError } = await supabase.rpc('remove_secondary_owner', {
+      p_contact_id: contactId,
+      p_removed_by: crmUserId,
+    });
+
+    setSavingCells(prev => ({ ...prev, [cellKey]: false }));
+
+    if (rpcError) {
+      toast({ title: 'Remove failed', description: rpcError.message, variant: 'destructive' });
+      return;
+    }
+
+    // Refetch owners
+    const { data: refreshed } = await getOwnersForContacts([contactId]);
+    if (refreshed) {
+      setOwnersMap(prev => ({ ...prev, ...refreshed }));
+    }
+  };
+
+  // Inline Stage change via RPC
   const handleStageChange = async (contactId: string, newStage: string) => {
+    if (!crmUserId) return;
     const cellKey = `${contactId}-stage`;
     const prevContact = contacts.find(c => c.id === contactId);
     setSavingCells(prev => ({ ...prev, [cellKey]: true }));
 
+    // Optimistic update
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: newStage } : c));
 
-    const { error: contactUpdateError } = await supabase
-      .from('contacts')
-      .update({ stage: newStage })
-      .eq('id', contactId);
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('update_contact_stage', {
+      p_contact_id: contactId,
+      p_stage: newStage,
+      p_updated_by: crmUserId,
+    });
 
-    if (contactUpdateError) {
-      toast({ title: 'Stage update failed', description: contactUpdateError.message, variant: 'destructive' });
+    if (rpcError) {
+      toast({ title: 'Stage update failed', description: rpcError.message, variant: 'destructive' });
       setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: prevContact?.stage || null } : c));
-      setSavingCells(prev => ({ ...prev, [cellKey]: false }));
-      return;
+    } else if (rpcResult && typeof rpcResult === 'object' && !rpcResult.success) {
+      toast({ title: 'Stage update failed', description: rpcResult.message || 'Unknown error', variant: 'destructive' });
+      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: prevContact?.stage || null } : c));
     }
-
-    await supabase
-      .from('contact_assignments')
-      .update({ stage: newStage })
-      .eq('contact_id', contactId)
-      .eq('status', 'ACTIVE');
 
     setSavingCells(prev => ({ ...prev, [cellKey]: false }));
   };
@@ -566,7 +603,11 @@ export function DirectoryTab() {
                               <Select
                                 value={secondaryOwnerId || '_none'}
                                 onValueChange={(val) => {
-                                  if (val === '_none') return;
+                                  if (val === '_none') {
+                                    // Remove secondary via RPC
+                                    if (secondaryOwnerId) handleRemoveSecondary(contact.id);
+                                    return;
+                                  }
                                   if (val === primaryOwnerId) return; // safety
                                   handleOwnerChange(contact.id, 'secondary', val);
                                 }}
