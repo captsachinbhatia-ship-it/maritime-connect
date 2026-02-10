@@ -50,7 +50,7 @@ export function AssignContactModal({
   const { toast } = useToast();
   const [users, setUsers] = useState<Array<{ id: string; full_name: string; email: string | null }>>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [assignmentRole, setAssignmentRole] = useState<AssignmentRole>(defaultRole || 'PRIMARY');
+  const [assignmentRole, setAssignmentRole] = useState<AssignmentRole>(defaultRole || 'primary');
   const [selectedStage, setSelectedStage] = useState<AssignmentStage>('COLD_CALLING');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,7 +61,7 @@ export function AssignContactModal({
     if (open) {
       loadData();
       setSelectedUserId('');
-      setAssignmentRole(defaultRole || 'PRIMARY');
+      setAssignmentRole(defaultRole || 'primary');
       setSelectedStage('COLD_CALLING');
       setError(null);
     }
@@ -95,7 +95,7 @@ export function AssignContactModal({
       contact_id: contactId,
       assigned_to_crm_user_id: selectedUserId,
       assignment_role: assignmentRole,
-      stage: assignmentRole === 'PRIMARY' ? selectedStage : 'COLD_CALLING',
+      stage: assignmentRole === 'primary' ? selectedStage : 'COLD_CALLING',
     });
 
     if (result.error) {
@@ -116,7 +116,7 @@ export function AssignContactModal({
     onSuccess(assigneeName);
   };
 
-  const buttonLabel = assignmentRole === 'PRIMARY' ? 'Assign Primary' : 'Assign Secondary';
+  const buttonLabel = assignmentRole === 'primary' ? 'Assign Primary' : 'Assign Secondary';
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!isSaving) onOpenChange(v); }}>
@@ -156,20 +156,20 @@ export function AssignContactModal({
                 className="w-full"
               >
                 <ToggleGroupItem
-                  value="PRIMARY"
+                  value="primary"
                   className="flex-1 h-9 text-sm font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   Primary
                 </ToggleGroupItem>
                 <ToggleGroupItem
-                  value="SECONDARY"
+                  value="secondary"
                   className="flex-1 h-9 text-sm font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                 >
                   Secondary
                 </ToggleGroupItem>
               </ToggleGroup>
               <p className="text-xs text-muted-foreground">
-                {assignmentRole === 'PRIMARY'
+                {assignmentRole === 'primary'
                   ? 'Primary owners manage the contact pipeline and can change stages.'
                   : 'Secondary owners have read access and can add interactions.'}
               </p>
@@ -193,7 +193,7 @@ export function AssignContactModal({
             </div>
 
             {/* Stage - only for PRIMARY */}
-            {assignmentRole === 'PRIMARY' && (
+            {assignmentRole === 'primary' && (
               <div className="space-y-2">
                 <Label>Stage *</Label>
                 <Select value={selectedStage} onValueChange={(v) => setSelectedStage(v as AssignmentStage)}>

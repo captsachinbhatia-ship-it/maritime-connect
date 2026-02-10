@@ -47,7 +47,7 @@ export function KPIRow({ crmUserId: crmUserIdProp }: KPIRowProps = {}) {
           .from('contact_assignments')
           .select('contact_id')
           .eq('status', 'ACTIVE')
-          .in('assignment_role', ['PRIMARY', 'SECONDARY']);
+          .in('assignment_role', ['primary', 'secondary']);
 
         if (userId) {
           assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);

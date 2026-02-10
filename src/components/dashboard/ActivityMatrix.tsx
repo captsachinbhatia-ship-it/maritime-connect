@@ -115,7 +115,7 @@ export function ActivityMatrix({ crmUserId: crmUserIdProp }: ActivityMatrixProps
         .from('contact_assignments')
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'PRIMARY');
+        .eq('assignment_role', 'primary');
       if (userId) assignmentsQuery = assignmentsQuery.eq('assigned_to_crm_user_id', userId);
 
       // Parallel fetches

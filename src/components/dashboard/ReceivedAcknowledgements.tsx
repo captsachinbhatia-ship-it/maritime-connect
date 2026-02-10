@@ -39,7 +39,7 @@ export function ReceivedAcknowledgements() {
         .select('contact_id')
         .eq('status', 'ACTIVE')
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .eq('assignment_role', 'PRIMARY');
+        .eq('assignment_role', 'primary');
 
       if (primaryError || !primaryAssignments?.length) {
         setAcks([]);

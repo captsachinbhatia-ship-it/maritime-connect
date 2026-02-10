@@ -108,7 +108,7 @@ export function MyAddedContactsTab({ onRefresh }: MyAddedContactsTabProps) {
           const { data: secData } = await supabase
             .from('contact_assignments')
             .select('contact_id, crm_users:assigned_to_crm_user_id(full_name,email)')
-            .eq('assignment_role', 'SECONDARY')
+            .eq('assignment_role', 'secondary')
             .is('ended_at', null)
             .in('contact_id', contactIds);
 

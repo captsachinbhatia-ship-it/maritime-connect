@@ -57,7 +57,7 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
         .from('contact_assignments')
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
-        .in('assignment_role', ['PRIMARY', 'primary'])
+        .in('assignment_role', ['primary'])
         .in('stage', [...ACTIVE_STAGES]);
 
       if (userId) {

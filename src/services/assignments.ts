@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { getCurrentCrmUserId } from './profiles';
 
 export type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
-export type AssignmentRole = 'PRIMARY' | 'SECONDARY';
+export type AssignmentRole = 'primary' | 'secondary';
 
 export interface ContactAssignment {
   id: string;
@@ -49,7 +49,7 @@ export async function getAssignmentsForContacts(contactIds: string[]): Promise<{
     data?.forEach(assignment => {
       const existing = assignmentMap[assignment.contact_id];
       // If no existing or current is PRIMARY, use it
-      if (!existing || assignment.assignment_role === 'PRIMARY') {
+      if (!existing || assignment.assignment_role === 'primary') {
         assignmentMap[assignment.contact_id] = assignment as ContactAssignment;
       }
     });
@@ -74,7 +74,7 @@ export async function getContactOwners(contactId: string): Promise<{
       .select('*')
       .eq('contact_id', contactId)
       .eq('status', 'ACTIVE')
-      .in('assignment_role', ['PRIMARY', 'SECONDARY', 'primary', 'secondary']);
+      .in('assignment_role', ['primary', 'secondary']);
 
     if (error) {
       return { data: null, error: error.message };
@@ -86,10 +86,10 @@ export async function getContactOwners(contactId: string): Promise<{
     };
 
     data?.forEach(assignment => {
-      const role = (assignment.assignment_role || '').toUpperCase();
-      if (role === 'PRIMARY') {
+      const role = (assignment.assignment_role || '').toLowerCase();
+      if (role === 'primary') {
         owners.primary = assignment as ContactAssignment;
-      } else if (role === 'SECONDARY') {
+      } else if (role === 'secondary') {
         owners.secondary = assignment as ContactAssignment;
       }
     });
@@ -118,7 +118,7 @@ export async function getOwnersForContacts(contactIds: string[]): Promise<{
       .select('*')
       .in('contact_id', contactIds)
       .eq('status', 'ACTIVE')
-      .in('assignment_role', ['PRIMARY', 'SECONDARY', 'primary', 'secondary']);
+      .in('assignment_role', ['primary', 'secondary']);
 
     if (error) {
       return { data: null, error: error.message };
@@ -136,10 +136,10 @@ export async function getOwnersForContacts(contactIds: string[]): Promise<{
       if (!ownersMap[contactId]) {
         ownersMap[contactId] = { primary: null, secondary: null };
       }
-      const role = (assignment.assignment_role || '').toUpperCase();
-      if (role === 'PRIMARY') {
+      const role = (assignment.assignment_role || '').toLowerCase();
+      if (role === 'primary') {
         ownersMap[contactId].primary = assignment as ContactAssignment;
-      } else if (role === 'SECONDARY') {
+      } else if (role === 'secondary') {
         ownersMap[contactId].secondary = assignment as ContactAssignment;
       }
     });
@@ -184,7 +184,7 @@ export async function upsertOwners(params: {
       .select('id, stage, assigned_to_crm_user_id')
       .eq('contact_id', contact_id)
       .eq('status', 'ACTIVE')
-      .eq('assignment_role', 'PRIMARY')
+      .eq('assignment_role', 'primary')
       .maybeSingle();
 
     // Get current ACTIVE SECONDARY
@@ -193,7 +193,7 @@ export async function upsertOwners(params: {
       .select('id, assigned_to_crm_user_id')
       .eq('contact_id', contact_id)
       .eq('status', 'ACTIVE')
-      .eq('assignment_role', 'SECONDARY')
+      .eq('assignment_role', 'secondary')
       .maybeSingle();
 
     // Preserve stage: use provided stage, or existing primary's stage, or fallback to ASPIRATION
@@ -230,7 +230,7 @@ export async function upsertOwners(params: {
       contact_id: string;
       assigned_to_crm_user_id: string;
       assigned_by_crm_user_id: string;
-      assignment_role: 'PRIMARY' | 'SECONDARY';
+      assignment_role: 'primary' | 'secondary';
       stage: AssignmentStage;
       status: 'ACTIVE';
       assigned_at: string;
@@ -243,7 +243,7 @@ export async function upsertOwners(params: {
       contact_id,
       assigned_to_crm_user_id: primary_owner_id,
       assigned_by_crm_user_id: currentCrmUserId,
-      assignment_role: 'PRIMARY',
+      assignment_role: 'primary',
       stage: finalStage,
       status: 'ACTIVE',
       assigned_at: now,
@@ -257,7 +257,7 @@ export async function upsertOwners(params: {
         contact_id,
         assigned_to_crm_user_id: secondary_owner_id,
         assigned_by_crm_user_id: currentCrmUserId,
-        assignment_role: 'SECONDARY',
+        assignment_role: 'secondary',
         stage: finalStage,
         status: 'ACTIVE',
         assigned_at: now,
@@ -286,8 +286,8 @@ export async function upsertOwners(params: {
     }
 
     // Parse results
-    const primaryData = insertedData?.find(a => a.assignment_role === 'PRIMARY') || null;
-    const secondaryData = insertedData?.find(a => a.assignment_role === 'SECONDARY') || null;
+    const primaryData = insertedData?.find(a => a.assignment_role === 'primary') || null;
+    const secondaryData = insertedData?.find(a => a.assignment_role === 'secondary') || null;
 
     console.log('[upsertOwners] Inserted PRIMARY:', primaryData?.id);
     console.log('[upsertOwners] Inserted SECONDARY:', secondaryData?.id);
