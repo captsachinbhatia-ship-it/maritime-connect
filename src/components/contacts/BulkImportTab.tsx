@@ -16,6 +16,7 @@ import {
   XCircle,
   AlertTriangle,
   ListChecks,
+  RefreshCw,
 } from 'lucide-react';
 
 import { KPICard } from '@/components/dashboard/KPICard';
@@ -29,7 +30,7 @@ import {
   validateImportBatch,
   importValidatedContacts,
 } from '@/services/bulkImport';
-import type { ParsedCsvRow, StagingRow, ValidationResult } from '@/services/bulkImport';
+import type { ParsedCsvRow, StagingRow } from '@/services/bulkImport';
 import { supabase } from '@/lib/supabaseClient';
 
 interface BulkImportTabProps {
@@ -53,8 +54,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   const [validating, setValidating] = useState(false);
   const [importing, setImporting] = useState(false);
 
-  // Validation results
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+
 
   // Use CRM user ID directly from AuthContext (not a separate RPC)
   const crmUserId = crmUser?.id ?? null;
@@ -97,10 +97,14 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
     return true;
   };
 
-  // Filtered staging rows
+  // Filtered staging rows — derived counts replace RPC-returned validationResult
+  const pendingRows = stagingRows.filter((r) => r.status === 'PENDING' || r.status === 'NEW');
   const validatedRows = stagingRows.filter((r) => r.status === 'VALIDATED');
   const failedRows = stagingRows.filter((r) => r.status === 'FAILED');
   const duplicateRows = stagingRows.filter((r) => r.status === 'DUPLICATE');
+  const importedRows = stagingRows.filter((r) => r.status === 'IMPORTED');
+
+  const hasBeenValidated = stagingRows.length > 0 && pendingRows.length === 0;
 
   // Load staging rows for active batch
   const loadStagingRows = useCallback(async () => {
@@ -143,7 +147,6 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
     setParseError(null);
     setActiveBatchId(null);
     setStagingRows([]);
-    setValidationResult(null);
     setActiveTab('all');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -181,12 +184,12 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
     setInserting(false);
   };
 
-  // Validate batch
+  // Validate batch — run RPC then ALWAYS refetch rows; derive counts from refetched data
   const handleValidate = async () => {
     if (!activeBatchId) return;
     if (!(await verifySession('validate'))) return;
     setValidating(true);
-    const { data, error } = await validateImportBatch(activeBatchId);
+    const { error } = await validateImportBatch(activeBatchId);
 
     if (error) {
       toast({ title: 'Validation failed', description: error, variant: 'destructive' });
@@ -194,18 +197,28 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
       return;
     }
 
-    setValidationResult(data);
+    // Always refetch rows from DB — the source of truth
     await loadStagingRows();
+    setValidating(false);
 
-    // Auto-switch tab
-    if (data && data.failed_rows > 0) {
+    // Toast with counts derived from refetched rows (computed above via filter)
+    // We need to read them after loadStagingRows, but state is async, so we fetch inline
+    const { data: freshRows } = await fetchStagingRows(activeBatchId);
+    const freshValidated = freshRows.filter((r) => r.status === 'VALIDATED').length;
+    const freshFailed = freshRows.filter((r) => r.status === 'FAILED').length;
+    const freshDuplicate = freshRows.filter((r) => r.status === 'DUPLICATE').length;
+
+    toast({
+      title: 'Validation complete',
+      description: `${freshValidated} valid, ${freshFailed} failed, ${freshDuplicate} duplicates.`,
+    });
+
+    // Auto-switch tab based on results
+    if (freshFailed > 0) {
       setActiveTab('failed');
-    } else {
+    } else if (freshValidated > 0) {
       setActiveTab('validated');
     }
-
-    toast({ title: 'Validation complete', description: `${data?.valid_rows || 0} valid, ${data?.failed_rows || 0} failed, ${data?.duplicate_rows || 0} duplicates.` });
-    setValidating(false);
   };
 
   // Import validated
@@ -268,8 +281,8 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   }
 
   const canInsert = parsedRows.length > 0 && !activeBatchId && !inserting;
-  const canValidate = !!activeBatchId && !validating;
-  const canImport = !!validationResult && (validationResult.valid_rows > 0) && !importing;
+  const canValidate = !!activeBatchId && !validating && pendingRows.length > 0;
+  const canImport = validatedRows.length > 0 && !importing;
 
   return (
     <div className="space-y-6">
@@ -338,11 +351,27 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
           </Button>
 
           <ImportConfirmDialog
-            validCount={validationResult?.valid_rows ?? 0}
+            validCount={validatedRows.length}
             disabled={!canImport}
             loading={importing}
             onConfirm={handleImport}
           />
+
+          {activeBatchId && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={stagingLoading}
+              onClick={loadStagingRows}
+            >
+              {stagingLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Refresh
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -361,32 +390,38 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
         <CsvPreviewTable rows={parsedRows} />
       )}
 
-      {/* KPI Cards (after validation) */}
-      {validationResult && (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {/* KPI Cards — derived from actual staging rows */}
+      {activeBatchId && hasBeenValidated && (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
           <KPICard
             title="Total Rows"
-            value={validationResult.total_rows}
+            value={stagingRows.length}
             icon={ListChecks}
             variant="muted"
           />
           <KPICard
-            title="Valid Rows"
-            value={validationResult.valid_rows}
+            title="Validated"
+            value={validatedRows.length}
             icon={CheckCircle2}
             variant="success"
           />
           <KPICard
-            title="Failed Rows"
-            value={validationResult.failed_rows}
+            title="Failed"
+            value={failedRows.length}
             icon={XCircle}
             variant="warning"
           />
           <KPICard
-            title="Duplicate Rows"
-            value={validationResult.duplicate_rows}
+            title="Duplicates"
+            value={duplicateRows.length}
             icon={AlertTriangle}
             variant="default"
+          />
+          <KPICard
+            title="Imported"
+            value={importedRows.length}
+            icon={CheckCircle2}
+            variant="muted"
           />
         </div>
       )}
