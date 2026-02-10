@@ -37,7 +37,7 @@ export function InteractionRecency() {
         .select('contact_id')
         .eq('status', 'ACTIVE')
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .in('assignment_role', ['PRIMARY', 'SECONDARY']);
+        .in('assignment_role', ['primary', 'secondary']);
 
       const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
 

@@ -119,7 +119,7 @@ export async function getPendingStageRequests(): Promise<{
       .select('contact_id, stage')
       .in('contact_id', contactIds)
       .eq('status', 'ACTIVE')
-      .eq('assignment_role', 'PRIMARY'),
+      .eq('assignment_role', 'primary'),
   ]);
 
   const contactMap: Record<string, string> = {};

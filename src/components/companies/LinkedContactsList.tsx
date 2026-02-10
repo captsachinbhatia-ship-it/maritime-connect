@@ -44,13 +44,13 @@ export function LinkedContactsList({ companyId, onContactClick }: LinkedContacts
         .select('contact_id, assignment_role')
         .in('contact_id', contactIds)
         .eq('status', 'ACTIVE')
-        .in('assignment_role', ['PRIMARY', 'SECONDARY']);
+        .in('assignment_role', ['primary', 'secondary']);
 
       // Build role map (prefer PRIMARY)
       const roleMap = new Map<string, string>();
       (assignments || []).forEach(a => {
         const existing = roleMap.get(a.contact_id);
-        if (!existing || a.assignment_role === 'PRIMARY') {
+        if (!existing || a.assignment_role === 'primary') {
           roleMap.set(a.contact_id, a.assignment_role);
         }
       });
@@ -108,7 +108,7 @@ export function LinkedContactsList({ companyId, onContactClick }: LinkedContacts
                     <Badge
                       variant="outline"
                       className={`text-[10px] ${
-                        contact.assignment_role === 'PRIMARY'
+                        contact.assignment_role === 'primary'
                           ? 'border-primary/50 text-primary'
                           : 'border-muted-foreground/50 text-muted-foreground'
                       }`}
