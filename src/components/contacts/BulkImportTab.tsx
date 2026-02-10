@@ -24,13 +24,13 @@ import { StagingTable } from '@/components/bulk-import/StagingTable';
 import { ImportConfirmDialog } from '@/components/bulk-import/ImportConfirmDialog';
 import { parseCsvContent, generateCsvTemplate } from '@/lib/csvParser';
 import {
-  getCurrentCrmUserIdViaRpc,
   insertStagingRows,
   fetchStagingRows,
   validateImportBatch,
   importValidatedContacts,
 } from '@/services/bulkImport';
 import type { ParsedCsvRow, StagingRow, ValidationResult } from '@/services/bulkImport';
+import { supabase } from '@/lib/supabaseClient';
 
 interface BulkImportTabProps {
   onImportComplete?: (importedCount: number, skippedCount: number) => void;
@@ -48,9 +48,6 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   const [stagingRows, setStagingRows] = useState<StagingRow[]>([]);
   const [stagingLoading, setStagingLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
-  const [crmUserId, setCrmUserId] = useState<string | null>(null);
-  const [crmIdError, setCrmIdError] = useState<string | null>(null);
-
   // Operation loading states
   const [inserting, setInserting] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -59,18 +56,29 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   // Validation results
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
-  // Resolve CRM user ID on mount
-  useEffect(() => {
-    async function resolve() {
-      const { data, error } = await getCurrentCrmUserIdViaRpc();
-      if (error || !data) {
-        setCrmIdError(error || 'CRM user ID could not be resolved.');
-      } else {
-        setCrmUserId(data);
-      }
+  // Use CRM user ID directly from AuthContext (not a separate RPC)
+  const crmUserId = crmUser?.id ?? null;
+
+  // Session safety check: verify auth session matches the UI user before write ops
+  const verifySession = async (): Promise<boolean> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast({ title: 'Session expired', description: 'Please log in again.', variant: 'destructive' });
+      return false;
     }
-    if (crmUser) resolve();
-  }, [crmUser]);
+    const sessionEmail = session.user.email;
+    const uiEmail = crmUser?.email;
+    console.log('[BulkImport] Session check — auth.uid:', session.user.id, 'session email:', sessionEmail, 'UI crmUser email:', uiEmail, 'crmUser.id:', crmUserId);
+    if (uiEmail && sessionEmail && sessionEmail !== uiEmail) {
+      toast({
+        title: 'User mismatch',
+        description: `Session belongs to ${sessionEmail} but UI shows ${uiEmail}. Please log out and log back in.`,
+        variant: 'destructive',
+      });
+      return false;
+    }
+    return true;
+  };
 
   // Filtered staging rows
   const validatedRows = stagingRows.filter((r) => r.status === 'VALIDATED');
@@ -134,6 +142,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
       return;
     }
 
+    if (!(await verifySession())) { setInserting(false); return; }
     setInserting(true);
     const batchId = crypto.randomUUID();
     const { count, error } = await insertStagingRows(batchId, crmUserId, parsedRows);
@@ -158,6 +167,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   // Validate batch
   const handleValidate = async () => {
     if (!activeBatchId) return;
+    if (!(await verifySession())) return;
     setValidating(true);
     const { data, error } = await validateImportBatch(activeBatchId);
 
@@ -184,6 +194,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   // Import validated
   const handleImport = async () => {
     if (!activeBatchId) return;
+    if (!(await verifySession())) return;
     setImporting(true);
     const { data, error } = await importValidatedContacts(activeBatchId);
 
@@ -226,7 +237,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
   };
 
   // Auth guard
-  if (crmIdError || (!crmUserId && crmUser)) {
+  if (!crmUserId && crmUser) {
     return (
       <Card>
         <CardContent className="flex items-center gap-3 p-6">
