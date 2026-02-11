@@ -37,16 +37,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { DirectoryBulkToolbar } from './DirectoryBulkToolbar';
 import { DirectorySummaryTable } from './DirectorySummaryTable';
-import { EditContactModal } from './EditContactModal';
+import { ContactEditSheet } from './ContactEditSheet';
 import { useToast } from '@/hooks/use-toast';
-import { ContactWithCompany } from '@/types';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
 
 const STAGE_OPTIONS: { value: AssignmentStage; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
@@ -118,6 +110,17 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       if (editingTimerRef.current) clearTimeout(editingTimerRef.current);
     };
   }, []);
+
+  // Stage counts derived from contacts (auto-updates on any change)
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+    contacts.forEach(c => {
+      if (c.stage && counts.hasOwnProperty(c.stage)) {
+        counts[c.stage]++;
+      }
+    });
+    return counts;
+  }, [contacts]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -456,23 +459,12 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const isRowSaving = (contactId: string) =>
     !!savingCells[`${contactId}-primary`] || !!savingCells[`${contactId}-secondary`] || !!savingCells[`${contactId}-stage`];
 
-  // --- Admin Edit/Delete ---
+   // --- Admin Edit/Delete ---
   const [editSheetOpen, setEditSheetOpen] = useState(false);
-  const [editContact, setEditContact] = useState<ContactWithCompany | null>(null);
+  const [editContactId, setEditContactId] = useState<string | null>(null);
 
   const openEditPanel = (contact: DirectoryContact) => {
-    setEditContact({
-      id: contact.id,
-      full_name: contact.full_name || '',
-      company_id: contact.company_id || null,
-      designation: contact.designation || null,
-      email: contact.email || null,
-      phone: contact.phone || null,
-      ice_handle: contact.ice_handle || null,
-      preferred_channel: contact.preferred_channel || null,
-      notes: contact.notes || null,
-      is_active: contact.is_active,
-    } as ContactWithCompany);
+    setEditContactId(contact.id);
     setEditSheetOpen(true);
   };
 
@@ -580,18 +572,27 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-1.5 ml-auto">
-            <Select value={stageFilter} onValueChange={setStageFilter}>
-              <SelectTrigger className="h-8 w-[140px] text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Stages</SelectItem>
-                {STAGE_OPTIONS.map(s => (
-                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Stage filter buttons with counts */}
+          <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+            <Button
+              variant={stageFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setStageFilter('all')}
+            >
+              All Stages
+            </Button>
+            {STAGE_OPTIONS.map(s => (
+              <Button
+                key={s.value}
+                variant={stageFilter === s.value ? 'default' : 'outline'}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setStageFilter(s.value)}
+              >
+                {s.label} ({stageCounts[s.value] || 0})
+              </Button>
+            ))}
           </div>
         </div>
 
@@ -840,9 +841,9 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       </CardContent>
     </Card>
 
-    {/* Edit Contact Sheet */}
-    <EditContactModal
-      contact={editContact}
+    {/* Edit Contact Sheet (slides from right) */}
+    <ContactEditSheet
+      contactId={editContactId}
       open={editSheetOpen}
       onOpenChange={setEditSheetOpen}
       onSuccess={handleEditSuccess}
