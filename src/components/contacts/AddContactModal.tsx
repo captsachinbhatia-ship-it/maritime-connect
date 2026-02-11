@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Loader2, AlertCircle, Trash2, Star } from 'lucide-react';
+import { Plus, Loader2, AlertCircle, Trash2, Star, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,13 +61,20 @@ const contactSchema = z.object({
   country_code: z.string().max(10).optional(),
   phone: z.string().max(20).optional(),
   phone_type: z.string().optional(),
-  email: z.string().email('Invalid email').max(255).optional().or(z.literal('')),
   ice_handle: z.string().max(100).optional(),
   preferred_channel: z.string().optional(),
   notes: z.string().max(1000).optional(),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
+
+interface EmailEntry {
+  id: string;
+  email: string;
+  is_primary: boolean;
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface AddContactModalProps {
   onSuccess: () => void;
@@ -109,6 +117,13 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     { id: crypto.randomUUID(), phone_type: 'Mobile', phone_number: '', is_primary: true, notes: '' }
   ]);
 
+  // Email state
+  const [emailRows, setEmailRows] = useState<EmailEntry[]>([
+    { id: crypto.randomUUID(), email: '', is_primary: true }
+  ]);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
+
   // Duplicate detection state
   const [existingContacts, setExistingContacts] = useState<ContactForDuplicateCheck[]>([]);
   const [showHighMatchConfirm, setShowHighMatchConfirm] = useState(false);
@@ -130,7 +145,6 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       country_code: '+91',
       phone: '',
       phone_type: '',
-      email: '',
       ice_handle: '',
       preferred_channel: '',
       notes: '',
@@ -138,7 +152,8 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
   });
 
   const watchedName = watch('full_name');
-  const watchedEmail = watch('email');
+  // Use first email from emailRows for duplicate detection
+  const watchedEmail = emailRows.find(e => e.email.trim())?.email || '';
 
   // Load companies and existing contacts on mount
   useEffect(() => {
@@ -343,8 +358,9 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
     try {
       // Check for exact duplicates (using first phone if available)
       const firstPhone = phoneRows.find(p => p.phone_number.trim())?.phone_number || null;
+      const primaryEmail = emailRows.find(e => e.is_primary && e.email.trim())?.email || emailRows.find(e => e.email.trim())?.email || null;
       const duplicateCheck = await checkDuplicateContact(
-        data.email || null,
+        primaryEmail,
         firstPhone
       );
 
@@ -374,7 +390,7 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
         country_code: primaryPhoneRow?.phone_number ? null : null,
         phone: allPhonesString,
         phone_type: primaryPhoneRow?.phone_type || null,
-        email: data.email || null,
+        email: emailRows.filter(e => e.email.trim()).map(e => e.email.trim()).join(', ') || null,
         ice_handle: data.ice_handle || null,
         preferred_channel: data.preferred_channel?.trim() || null,
         notes: data.notes || null,
@@ -404,6 +420,9 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       reset();
       setSelectedCompany(null);
       setPhoneRows([{ id: crypto.randomUUID(), phone_type: 'Mobile', phone_number: '', is_primary: true, notes: '' }]);
+      setEmailRows([{ id: crypto.randomUUID(), email: '', is_primary: true }]);
+      setEmailInput('');
+      setEmailError(null);
       setOpen(false);
       onSuccess();
     } catch (err) {
@@ -414,6 +433,15 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
   };
 
   const onSubmit = async (data: ContactFormData) => {
+    // Validate all emails
+    const invalidEmails = emailRows
+      .filter(e => e.email.trim())
+      .filter(e => !EMAIL_REGEX.test(e.email.trim()));
+    if (invalidEmails.length > 0) {
+      setEmailError(`Invalid email: ${invalidEmails[0].email}`);
+      return;
+    }
+
     // If high matches exist, show confirmation dialog first
     if (highMatches.length > 0) {
       setPendingSubmitData(data);
@@ -444,6 +472,9 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       setSubmitError(null);
       setCompanySearch('');
       setPhoneRows([{ id: crypto.randomUUID(), phone_type: 'Mobile', phone_number: '', is_primary: true, notes: '' }]);
+      setEmailRows([{ id: crypto.randomUUID(), email: '', is_primary: true }]);
+      setEmailInput('');
+      setEmailError(null);
       setPendingSubmitData(null);
     }
     setOpen(newOpen);
@@ -639,18 +670,120 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
               </div>
             </div>
 
-            {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                {...register('email')}
-                placeholder="email@example.com"
-              />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
+            {/* Email Addresses */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Email Addresses</Label>
+              </div>
+
+              {/* Email chips */}
+              {emailRows.filter(e => e.email.trim()).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {emailRows.filter(e => e.email.trim()).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border ${
+                        entry.is_primary
+                          ? 'bg-primary/10 border-primary/30 text-primary'
+                          : 'bg-muted border-border text-foreground'
+                      }`}
+                    >
+                      <span>{entry.email}</span>
+                      {entry.is_primary && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-primary/40">
+                          Primary
+                        </Badge>
+                      )}
+                      {!entry.is_primary && (
+                        <button
+                          type="button"
+                          className="ml-0.5 hover:text-primary"
+                          onClick={() => {
+                            setEmailRows(prev =>
+                              prev.map(e => ({ ...e, is_primary: e.id === entry.id }))
+                            );
+                          }}
+                          title="Set as primary"
+                        >
+                          <Star className="h-3 w-3" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="ml-0.5 hover:text-destructive"
+                        onClick={() => {
+                          setEmailRows(prev => {
+                            const filtered = prev.filter(e => e.id !== entry.id);
+                            if (filtered.length > 0 && !filtered.some(e => e.is_primary)) {
+                              filtered[0].is_primary = true;
+                            }
+                            return filtered;
+                          });
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
+
+              {/* Email input */}
+              <div className="space-y-1">
+                <Input
+                  type="text"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setEmailError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+                      e.preventDefault();
+                      const val = emailInput.trim().replace(/,$/,'');
+                      if (!val) return;
+                      if (!EMAIL_REGEX.test(val)) {
+                        setEmailError(`"${val}" is not a valid email`);
+                        return;
+                      }
+                      if (emailRows.some(r => r.email.toLowerCase() === val.toLowerCase())) {
+                        setEmailError('This email is already added');
+                        return;
+                      }
+                      const isFirst = emailRows.filter(r => r.email.trim()).length === 0;
+                      setEmailRows(prev => [
+                        ...prev.filter(r => r.email.trim()),
+                        { id: crypto.randomUUID(), email: val, is_primary: isFirst }
+                      ]);
+                      setEmailInput('');
+                      setEmailError(null);
+                    }
+                  }}
+                  onBlur={() => {
+                    const val = emailInput.trim().replace(/,$/,'');
+                    if (!val) return;
+                    if (!EMAIL_REGEX.test(val)) {
+                      setEmailError(`"${val}" is not a valid email`);
+                      return;
+                    }
+                    if (emailRows.some(r => r.email.toLowerCase() === val.toLowerCase())) {
+                      setEmailError('This email is already added');
+                      return;
+                    }
+                    const isFirst = emailRows.filter(r => r.email.trim()).length === 0;
+                    setEmailRows(prev => [
+                      ...prev.filter(r => r.email.trim()),
+                      { id: crypto.randomUUID(), email: val, is_primary: isFirst }
+                    ]);
+                    setEmailInput('');
+                    setEmailError(null);
+                  }}
+                  placeholder="Type email and press Enter, comma, or space"
+                />
+                {emailError && (
+                  <p className="text-sm text-destructive">{emailError}</p>
+                )}
+              </div>
             </div>
 
             {/* ICE Handle */}

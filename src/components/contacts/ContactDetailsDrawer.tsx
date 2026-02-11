@@ -704,7 +704,22 @@ export function ContactDetailsDrawer({
                     </div>
                     <div>
                       <span className="text-xs text-muted-foreground">Email</span>
-                      <p className="text-foreground">{contact.email || '-'}</p>
+                      {contact.email ? (
+                        <div className="space-y-1 mt-1">
+                          {contact.email.split(',').map((email, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-foreground">
+                              <span>{email.trim()}</span>
+                              {idx === 0 && contact.email!.includes(',') && (
+                                <Badge className="text-xs bg-primary/10 text-primary border-0">
+                                  Primary
+                                </Badge>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">-</p>
+                      )}
                     </div>
                     {contact.ice_handle && (
                       <div>
