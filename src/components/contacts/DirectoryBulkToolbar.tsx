@@ -1,19 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Loader2, Users, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { getActiveCrmUsers } from '@/services/assignPrimary';
-import { type AssignmentStage } from '@/services/assignments';
-import { useCrmUser } from '@/hooks/useCrmUser';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabaseClient';
+import { useEffect, useState } from "react";
+import { Loader2, Users, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getActiveCrmUsers } from "@/services/assignPrimary";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabaseClient";
+
+type AssignmentStage = "COLD_CALLING" | "ASPIRATION" | "ACHIEVEMENT" | "INACTIVE";
 
 interface DirectoryBulkToolbarProps {
   selectedIds: string[];
@@ -22,188 +16,89 @@ interface DirectoryBulkToolbarProps {
 }
 
 const STAGES: { value: AssignmentStage; label: string }[] = [
-  { value: 'COLD_CALLING', label: 'Cold Calling' },
-  { value: 'ASPIRATION', label: 'Aspiration' },
-  { value: 'ACHIEVEMENT', label: 'Achievement' },
+  { value: "COLD_CALLING", label: "Cold Calling" },
+  { value: "ASPIRATION", label: "Aspiration" },
+  { value: "ACHIEVEMENT", label: "Achievement" },
+  { value: "INACTIVE", label: "Inactive" },
 ];
 
-const CONCURRENCY = 5;
-
-async function runWithConcurrency<T>(
-  items: T[],
-  fn: (item: T) => Promise<{ error: string | null }>,
-  limit: number,
-  onProgress: (done: number) => void,
-): Promise<{ success: number; failed: number; firstError: string | null }> {
-  let success = 0;
-  let failed = 0;
-  let firstError: string | null = null;
-  let done = 0;
-  let idx = 0;
-
-  const next = async (): Promise<void> => {
-    const i = idx++;
-    if (i >= items.length) return;
-    const result = await fn(items[i]);
-    if (result.error) {
-      failed++;
-      if (!firstError) firstError = result.error;
-    } else {
-      success++;
-    }
-    done++;
-    onProgress(done);
-    await next();
-  };
-
-  const workers = Array.from({ length: Math.min(limit, items.length) }, () => next());
-  await Promise.all(workers);
-  return { success, failed, firstError };
-}
-
-export function DirectoryBulkToolbar({
-  selectedIds,
-  onClearSelection,
-  onComplete,
-}: DirectoryBulkToolbarProps) {
+export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete }: DirectoryBulkToolbarProps) {
   const { toast } = useToast();
-  const { crmUserId } = useCrmUser();
+
   const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
-  const [primaryUserId, setPrimaryUserId] = useState('');
-  const [secondaryUserId, setSecondaryUserId] = useState('');
-  const [bulkStage, setBulkStage] = useState('');
+  const [assigneeUserId, setAssigneeUserId] = useState<string>(""); // contacts.assigned_to_user_id
+  const [bulkStage, setBulkStage] = useState<string>(""); // contacts.stage
   const [isApplying, setIsApplying] = useState(false);
-  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     getActiveCrmUsers().then((r) => {
-      if (r.data) setUsers(r.data);
+      if (r.data) {
+        setUsers(r.data.map((u: any) => ({ id: u.id, full_name: u.full_name })));
+      }
     });
   }, []);
 
-  const hasAnyAction = !!primaryUserId || !!secondaryUserId || !!bulkStage;
   const count = selectedIds.length;
+  const hasAnyAction = !!assigneeUserId || !!bulkStage;
 
   const handleApply = async () => {
-    if (!hasAnyAction || count === 0 || !crmUserId) return;
+    if (!hasAnyAction || count === 0) return;
+
     setIsApplying(true);
-    setProgress(0);
 
-    let totalSuccess = 0;
-    let totalFailed = 0;
-    let firstErr: string | null = null;
+    try {
+      // 1) Bulk assignment -> contacts.assigned_to_user_id
+      if (assigneeUserId) {
+        const { error } = await supabase
+          .from("contacts")
+          .update({ assigned_to_user_id: assigneeUserId })
+          .in("id", selectedIds);
 
-    // Primary assignments via RPC
-    if (primaryUserId) {
-      const res = await runWithConcurrency(
-        selectedIds,
-        async (cid) => {
-          const { error } = await supabase.rpc('assign_contact_owner', {
-            p_contact_id: cid,
-            p_assigned_to: primaryUserId,
-            p_assignment_role: 'PRIMARY',
-            p_assigned_by: crmUserId,
-          });
-          return { error: error?.message || null };
-        },
-        CONCURRENCY,
-        (d) => setProgress(d),
-      );
-      totalSuccess += res.success;
-      totalFailed += res.failed;
-      if (!firstErr && res.firstError) firstErr = res.firstError;
+        if (error) throw error;
+      }
+
+      // 2) Bulk stage -> contacts.stage
+      if (bulkStage) {
+        const { error } = await supabase.from("contacts").update({ stage: bulkStage }).in("id", selectedIds);
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: "Bulk update complete",
+        description: `Updated ${count} contacts`,
+        variant: "default",
+      });
+
+      setAssigneeUserId("");
+      setBulkStage("");
+      onClearSelection();
+
+      // CRITICAL: parent Directory must refetch and recompute counts
+      onComplete();
+    } catch (e: any) {
+      toast({
+        title: "Bulk update failed",
+        description: e?.message || "Unexpected error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsApplying(false);
     }
-
-    // Secondary assignments via RPC
-    if (secondaryUserId) {
-      const res = await runWithConcurrency(
-        selectedIds,
-        async (cid) => {
-          const { error } = await supabase.rpc('assign_contact_owner', {
-            p_contact_id: cid,
-            p_assigned_to: secondaryUserId,
-            p_assignment_role: 'SECONDARY',
-            p_assigned_by: crmUserId,
-          });
-          return { error: error?.message || null };
-        },
-        CONCURRENCY,
-        (d) => setProgress(d),
-      );
-      totalSuccess += res.success;
-      totalFailed += res.failed;
-      if (!firstErr && res.firstError) firstErr = res.firstError;
-    }
-
-    // Stage update via RPC
-    if (bulkStage) {
-      const res = await runWithConcurrency(
-        selectedIds,
-        async (cid) => {
-          const { error } = await supabase.rpc('update_contact_stage', {
-            p_contact_id: cid,
-            p_stage: bulkStage,
-            p_updated_by: crmUserId,
-          });
-          return { error: error?.message || null };
-        },
-        CONCURRENCY,
-        (d) => setProgress(d),
-      );
-      totalSuccess += res.success;
-      totalFailed += res.failed;
-      if (!firstErr && res.firstError) firstErr = res.firstError;
-    }
-
-    const description =
-      totalFailed > 0
-        ? `${totalFailed} failed, ${totalSuccess} succeeded${firstErr ? ` — ${firstErr}` : ''}`
-        : `Updated ${totalSuccess} contacts`;
-
-    toast({
-      title: 'Bulk update complete',
-      description,
-      variant: totalFailed > 0 && totalSuccess === 0 ? 'destructive' : 'default',
-    });
-
-    setIsApplying(false);
-    setPrimaryUserId('');
-    setSecondaryUserId('');
-    setBulkStage('');
-    onClearSelection();
-    onComplete();
   };
 
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 mb-3">
       <div className="flex items-center gap-2 mr-2">
         <Users className="h-4 w-4 text-primary" />
-        <span className="text-sm font-medium">
-          {count} selected
-        </span>
+        <span className="text-sm font-medium">{count} selected</span>
       </div>
 
       <div className="space-y-1">
-        <Label className="text-xs">Primary Owner</Label>
-        <Select value={primaryUserId} onValueChange={setPrimaryUserId}>
-          <SelectTrigger className="h-8 w-[160px] text-xs">
-            <SelectValue placeholder="— None —" />
-          </SelectTrigger>
-          <SelectContent>
-            {users.map((u) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.full_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1">
-        <Label className="text-xs">Secondary Owner</Label>
-        <Select value={secondaryUserId} onValueChange={setSecondaryUserId}>
-          <SelectTrigger className="h-8 w-[160px] text-xs">
-            <SelectValue placeholder="— None —" />
+        <Label className="text-xs">Assign Owner</Label>
+        <Select value={assigneeUserId} onValueChange={setAssigneeUserId}>
+          <SelectTrigger className="h-8 w-[200px] text-xs">
+            <SelectValue placeholder="— No change —" />
           </SelectTrigger>
           <SelectContent>
             {users.map((u) => (
@@ -218,8 +113,8 @@ export function DirectoryBulkToolbar({
       <div className="space-y-1">
         <Label className="text-xs">Stage</Label>
         <Select value={bulkStage} onValueChange={setBulkStage}>
-          <SelectTrigger className="h-8 w-[140px] text-xs">
-            <SelectValue placeholder="— None —" />
+          <SelectTrigger className="h-8 w-[170px] text-xs">
+            <SelectValue placeholder="— No change —" />
           </SelectTrigger>
           <SelectContent>
             {STAGES.map((s) => (
@@ -231,29 +126,18 @@ export function DirectoryBulkToolbar({
         </Select>
       </div>
 
-      <Button
-        size="sm"
-        className="h-8"
-        disabled={!hasAnyAction || isApplying}
-        onClick={handleApply}
-      >
+      <Button size="sm" className="h-8" disabled={!hasAnyAction || isApplying} onClick={handleApply}>
         {isApplying ? (
           <>
             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
             Applying…
           </>
         ) : (
-          'Apply'
+          "Apply"
         )}
       </Button>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 text-xs"
-        onClick={onClearSelection}
-        disabled={isApplying}
-      >
+      <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onClearSelection} disabled={isApplying}>
         <X className="mr-1 h-3 w-3" />
         Clear
       </Button>
