@@ -50,10 +50,10 @@ interface DirectoryContact {
   stage: AssignmentStage | null;
   created_at: string | null;
 
-  // joined objects (many-to-one)
-  companies?: { company_name: string | null } | null;
-  assigned_user?: { full_name: string | null } | null;
-  created_by_user?: { full_name: string | null } | null;
+  // joined objects – Supabase may return object or array
+  companies?: any;
+  assigned_user?: any;
+  created_by_user?: any;
 
   // other fields that may exist in your table but not required here
   designation?: string | null;
