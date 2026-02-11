@@ -68,6 +68,7 @@ interface DirectoryContact {
   designation: string | null;
   email?: string | null;
   phone?: string | null;
+  country_code?: string | null;
   ice_handle?: string | null;
   preferred_channel?: string | null;
   notes?: string | null;
@@ -99,6 +100,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({ column: 'full_name', direction: 'asc' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [savingCells, setSavingCells] = useState<Record<string, boolean>>({});
+  const [primaryPhoneMap, setPrimaryPhoneMap] = useState<Record<string, string>>({});
 
   // Editing pin: keep row in position during assignment changes
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
@@ -150,11 +152,29 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
         .map(c => c.company_id)
         .filter((id): id is string => id !== null);
 
-      const [ownersResult, companyResult, usersResult] = await Promise.all([
+      // Fetch primary phones from contact_phones table
+      const fetchPrimaryPhones = async () => {
+        if (contactIds.length === 0) return {};
+        const { data: phones } = await supabase
+          .from('contact_phones')
+          .select('contact_id, phone_number')
+          .eq('is_primary', true)
+          .in('contact_id', contactIds);
+        const map: Record<string, string> = {};
+        (phones || []).forEach((p: any) => {
+          map[p.contact_id] = p.phone_number;
+        });
+        return map;
+      };
+
+      const [ownersResult, companyResult, usersResult, phonesMap] = await Promise.all([
         contactIds.length > 0 ? getOwnersForContacts(contactIds) : Promise.resolve({ data: {} as Record<string, ContactOwners>, error: null }),
         companyIds.length > 0 ? getCompanyNamesMap(companyIds) : Promise.resolve({ data: {} as Record<string, string>, error: null }),
         getActiveCrmUsers(),
+        fetchPrimaryPhones(),
       ]);
+
+      setPrimaryPhoneMap(phonesMap);
 
       if (companyResult.data) setCompanyNamesMap(companyResult.data);
       if (usersResult.data) setCrmUsers(usersResult.data.map(u => ({ id: u.id, full_name: u.full_name })));
@@ -700,20 +720,21 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                           )}
                         </TableCell>
 
-                        {/* Phone */}
-                        <TableCell className="text-xs text-muted-foreground">
-                          {contact.phone ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="max-w-[120px] truncate block">{contact.phone.split(',')[0].trim()}</span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {contact.phone.split(',').map((p, i) => (
-                                  <div key={i}>{p.trim()}</div>
-                                ))}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : '—'}
+                        {/* Phone - from contact_phones primary */}
+                        <TableCell className="text-sm text-muted-foreground">
+                          {(() => {
+                            const primaryPhone = primaryPhoneMap[contact.id];
+                            if (primaryPhone) {
+                              const code = contact.country_code ? `+${contact.country_code.replace(/^\+/, '')} ` : '';
+                              return <span>{code}{primaryPhone}</span>;
+                            }
+                            // Fallback to contacts.phone
+                            if (contact.phone) {
+                              const code = contact.country_code ? `+${contact.country_code.replace(/^\+/, '')} ` : '';
+                              return <span>{code}{contact.phone.split(',')[0].trim()}</span>;
+                            }
+                            return '—';
+                          })()}
                         </TableCell>
 
                         {/* Email */}
