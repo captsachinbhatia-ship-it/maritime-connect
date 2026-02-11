@@ -138,10 +138,10 @@ export async function importValidatedBatch(
   return { data: data as ImportResult, error: null };
 }
 
-// Import validated rows via new single-query RPC
+// Import validated rows via RPC — returns raw RPC response
 export async function importValidatedContacts(
   batchId: string
-): Promise<{ data: ImportValidatedResult | null; error: string | null }> {
+): Promise<{ data: unknown; error: string | null }> {
   console.log('[BulkImport] Calling import_validated_contacts RPC for batch:', batchId);
   const { data, error } = await supabase.rpc('import_validated_contacts', {
     p_batch_id: batchId,
@@ -150,10 +150,7 @@ export async function importValidatedContacts(
   console.log('[BulkImport] RPC response:', { data, error });
 
   if (error) return { data: null, error: error.message };
-
-  // RPC returns a table, so data is an array with one row
-  const row = Array.isArray(data) ? data[0] : data;
-  return { data: row as ImportValidatedResult, error: null };
+  return { data, error: null };
 }
 
 // Client-side fallback: directly insert validated staging rows into contacts

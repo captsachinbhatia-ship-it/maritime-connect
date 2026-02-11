@@ -237,9 +237,13 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
     await loadStagingRows();
 
     if (data) {
+      const row = Array.isArray(data) ? data[0] : data;
+      const imported = Number((row as any)?.imported_count ?? 0);
+      const skipped = Number((row as any)?.skipped_duplicate_count ?? 0);
+
       const successMessage = [
-        `✅ Imported: ${data.imported_count} contact${data.imported_count !== 1 ? 's' : ''}`,
-        data.skipped_duplicate_count > 0 ? `⏭️ Skipped: ${data.skipped_duplicate_count} duplicate${data.skipped_duplicate_count !== 1 ? 's' : ''}` : null,
+        `✅ Imported: ${imported} contact${imported !== 1 ? 's' : ''}`,
+        skipped > 0 ? `⏭️ Skipped: ${skipped} duplicate${skipped !== 1 ? 's' : ''}` : null,
       ].filter(Boolean).join('\n');
 
       toast({
@@ -249,7 +253,7 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
       });
 
       // Notify parent to navigate to My Added tab
-      onImportComplete?.(data.imported_count, data.skipped_duplicate_count);
+      onImportComplete?.(imported, skipped);
     }
     setImporting(false);
   };
