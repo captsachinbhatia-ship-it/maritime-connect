@@ -48,7 +48,7 @@ export function DeleteCompanyDialog({ companyId, companyName, onDeleted }: Delet
       setChecking(true);
       try {
         const [contactsRes, assignmentsRes] = await Promise.all([
-          supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('company_id', companyId),
+          supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('is_archived', false),
           supabase.from('company_assignments').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'ACTIVE'),
         ]);
 
