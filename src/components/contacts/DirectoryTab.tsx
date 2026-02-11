@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
-import { Loader2, RefreshCw, BookOpen, Filter, AlertTriangle, User, Users } from 'lucide-react';
+import { Loader2, RefreshCw, BookOpen, Filter, AlertTriangle, User, Users, Pencil, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -37,7 +37,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { DirectoryBulkToolbar } from './DirectoryBulkToolbar';
 import { DirectorySummaryTable } from './DirectorySummaryTable';
+import { EditContactModal } from './EditContactModal';
 import { useToast } from '@/hooks/use-toast';
+import { ContactWithCompany } from '@/types';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
 
 const STAGE_OPTIONS: { value: AssignmentStage; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
@@ -65,6 +74,11 @@ interface DirectoryContact {
   full_name: string | null;
   company_id: string | null;
   designation: string | null;
+  email?: string | null;
+  phone?: string | null;
+  ice_handle?: string | null;
+  preferred_channel?: string | null;
+  notes?: string | null;
   is_active: boolean;
   created_at?: string | null;
   created_by_crm_user_id?: string | null;
@@ -72,7 +86,11 @@ interface DirectoryContact {
   country?: string | null;
 }
 
-export function DirectoryTab() {
+interface DirectoryTabProps {
+  onCountsChanged?: () => void;
+}
+
+export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const { isAdmin } = useAuth();
   const { crmUserId } = useCrmUser();
   const { toast } = useToast();
@@ -411,6 +429,7 @@ export function DirectoryTab() {
     }
 
     setSavingCells(prev => ({ ...prev, [cellKey]: false }));
+    onCountsChanged?.();
   };
 
   // Selection helpers
@@ -437,7 +456,61 @@ export function DirectoryTab() {
   const isRowSaving = (contactId: string) =>
     !!savingCells[`${contactId}-primary`] || !!savingCells[`${contactId}-secondary`] || !!savingCells[`${contactId}-stage`];
 
+  // --- Admin Edit/Delete ---
+  const [editSheetOpen, setEditSheetOpen] = useState(false);
+  const [editContact, setEditContact] = useState<ContactWithCompany | null>(null);
+
+  const openEditPanel = (contact: DirectoryContact) => {
+    setEditContact({
+      id: contact.id,
+      full_name: contact.full_name || '',
+      company_id: contact.company_id || null,
+      designation: contact.designation || null,
+      email: contact.email || null,
+      phone: contact.phone || null,
+      ice_handle: contact.ice_handle || null,
+      preferred_channel: contact.preferred_channel || null,
+      notes: contact.notes || null,
+      is_active: contact.is_active,
+    } as ContactWithCompany);
+    setEditSheetOpen(true);
+  };
+
+  const handleDeleteContact = async (contactId: string, contactName: string) => {
+    const confirmed = window.confirm(
+      `⚠️ Delete "${contactName}"?\n\nThis will archive the contact and end all assignments.\n\nContinue?`
+    );
+    if (!confirmed) return;
+
+    const { error: contactError } = await supabase
+      .from('contacts')
+      .update({ is_archived: true, archived_at: new Date().toISOString() })
+      .eq('id', contactId);
+
+    if (contactError) {
+      toast({ title: 'Delete failed', description: contactError.message, variant: 'destructive' });
+      return;
+    }
+
+    // Close all active assignments
+    await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: new Date().toISOString() })
+      .eq('contact_id', contactId)
+      .eq('status', 'ACTIVE');
+
+    toast({ title: 'Contact deleted', description: `"${contactName}" has been archived.` });
+    await fetchData();
+    onCountsChanged?.();
+  };
+
+  const handleEditSuccess = () => {
+    fetchData();
+    onCountsChanged?.();
+  };
+
   return (
+    <>
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
@@ -571,6 +644,9 @@ export function DirectoryTab() {
                     <TableHead>
                       <SortableHeader label="Created" column="created_at" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
+                    {isAdmin && (
+                      <TableHead className="text-right">Actions</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -728,6 +804,31 @@ export function DirectoryTab() {
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           {formatCreatedDate(contact.created_at)}
                         </TableCell>
+
+                        {isAdmin && (
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                                onClick={() => openEditPanel(contact)}
+                                title="Edit contact"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => handleDeleteContact(contact.id, contact.full_name || 'Unknown')}
+                                title="Delete contact"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })}
@@ -738,5 +839,14 @@ export function DirectoryTab() {
         )}
       </CardContent>
     </Card>
+
+    {/* Edit Contact Sheet */}
+    <EditContactModal
+      contact={editContact}
+      open={editSheetOpen}
+      onOpenChange={setEditSheetOpen}
+      onSuccess={handleEditSuccess}
+    />
+    </>
   );
 }

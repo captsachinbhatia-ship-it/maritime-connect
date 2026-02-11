@@ -92,10 +92,11 @@ export default function Contacts() {
       .in('assignment_role', ['secondary']);
     setSecondaryCount(secCount || 0);
 
-    // Directory (ALL contacts)
+    // Directory (ALL non-archived contacts)
     const { count: dirCount } = await supabase
       .from('contacts')
-      .select('id', { count: 'exact', head: true });
+      .select('id', { count: 'exact', head: true })
+      .eq('is_archived', false);
     setDirectoryCount(dirCount || 0);
 
     // My Contacts (primary owned by current user)
@@ -234,7 +235,7 @@ export default function Contacts() {
         </div>
 
         <TabsContent value="directory" className="mt-4">
-          <DirectoryTab key={`directory-${refreshKey}`} />
+          <DirectoryTab key={`directory-${refreshKey}`} onCountsChanged={loadCounts} />
         </TabsContent>
 
         <TabsContent value="my-contacts" className="mt-4">
