@@ -239,7 +239,12 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
         return name.toLowerCase().includes(s);
       });
     }
-    if (ownerFilter !== 'all') {
+    if (ownerFilter === 'unassigned') {
+      filtered = filtered.filter(c => {
+        const owners = ownersMap[c.id];
+        return !owners?.primary?.assigned_to_crm_user_id;
+      });
+    } else if (ownerFilter !== 'all') {
       filtered = filtered.filter(c => {
         const owners = ownersMap[c.id];
         const pId = owners?.primary?.assigned_to_crm_user_id;
@@ -584,6 +589,9 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Owners</SelectItem>
+                <SelectItem value="unassigned" className="text-red-600 font-medium">
+                  ⚠ Unassigned ({contacts.filter(c => !ownersMap[c.id]?.primary?.assigned_to_crm_user_id).length})
+                </SelectItem>
                 {crmUsers.map(u => (
                   <SelectItem key={u.id} value={u.id}>
                     {u.full_name} ({ownerCounts[u.id] || 0})
