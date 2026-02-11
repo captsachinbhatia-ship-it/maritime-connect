@@ -1,82 +1,70 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { format } from 'date-fns';
-import { Loader2, RefreshCw, BookOpen, Filter, AlertTriangle, User, Users, Pencil, Trash2 } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { supabase } from '@/lib/supabaseClient';
-import { ContactOwners, getOwnersForContacts, type AssignmentStage } from '@/services/assignments';
-import { getUserNames } from '@/services/interactions';
-import { getCompanyNamesMap } from '@/services/contacts';
-import { getActiveCrmUsers } from '@/services/assignPrimary';
-import { SortableHeader, type SortColumn, type SortDirection } from './ColumnFilters';
-import { Input } from '@/components/ui/input';
-import { useAuth } from '@/contexts/AuthContext';
-import { useCrmUser } from '@/hooks/useCrmUser';
-import { DirectoryBulkToolbar } from './DirectoryBulkToolbar';
-import { DirectorySummaryTable } from './DirectorySummaryTable';
-import { ContactEditSheet } from './ContactEditSheet';
-import { useToast } from '@/hooks/use-toast';
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { format } from "date-fns";
+import { Loader2, RefreshCw, BookOpen, Filter, AlertTriangle, User, Pencil, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { supabase } from "@/lib/supabaseClient";
+import { getActiveCrmUsers } from "@/services/assignPrimary";
+import { SortableHeader, type SortColumn, type SortDirection } from "./ColumnFilters";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCrmUser } from "@/hooks/useCrmUser";
+import { DirectoryBulkToolbar } from "./DirectoryBulkToolbar";
+import { ContactEditSheet } from "./ContactEditSheet";
+import { useToast } from "@/hooks/use-toast";
+
+type AssignmentStage = "COLD_CALLING" | "ASPIRATION" | "ACHIEVEMENT" | "INACTIVE";
 
 const STAGE_OPTIONS: { value: AssignmentStage; label: string }[] = [
-  { value: 'COLD_CALLING', label: 'Cold Calling' },
-  { value: 'ASPIRATION', label: 'Aspiration' },
-  { value: 'ACHIEVEMENT', label: 'Achievement' },
-  { value: 'INACTIVE', label: 'Inactive' },
+  { value: "COLD_CALLING", label: "Cold Calling" },
+  { value: "ASPIRATION", label: "Aspiration" },
+  { value: "ACHIEVEMENT", label: "Achievement" },
+  { value: "INACTIVE", label: "Inactive" },
 ];
 
 const STAGE_LABELS: Record<string, string> = {
-  COLD_CALLING: 'Cold Calling',
-  ASPIRATION: 'Aspiration',
-  ACHIEVEMENT: 'Achievement',
-  INACTIVE: 'Inactive',
+  COLD_CALLING: "Cold Calling",
+  ASPIRATION: "Aspiration",
+  ACHIEVEMENT: "Achievement",
+  INACTIVE: "Inactive",
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  COLD_CALLING: 'bg-blue-100 text-blue-800',
-  ASPIRATION: 'bg-amber-100 text-amber-800',
-  ACHIEVEMENT: 'bg-green-100 text-green-800',
-  INACTIVE: 'bg-gray-100 text-gray-800',
+  COLD_CALLING: "bg-blue-100 text-blue-800",
+  ASPIRATION: "bg-amber-100 text-amber-800",
+  ACHIEVEMENT: "bg-green-100 text-green-800",
+  INACTIVE: "bg-gray-100 text-gray-800",
 };
 
 interface DirectoryContact {
   id: string;
   full_name: string | null;
   company_id: string | null;
-  designation: string | null;
-  email?: string | null;
-  phone?: string | null;
-  country_code?: string | null;
+  assigned_to_user_id: string | null;
+  created_by_crm_user_id: string | null;
+  stage: AssignmentStage | null;
+  created_at: string | null;
+
+  // joined objects (many-to-one)
+  companies?: { company_name: string | null } | null;
+  assigned_user?: { full_name: string | null } | null;
+  created_by_user?: { full_name: string | null } | null;
+
+  // other fields that may exist in your table but not required here
+  designation?: string | null;
   ice_handle?: string | null;
   preferred_channel?: string | null;
   notes?: string | null;
-  is_active: boolean;
-  created_at?: string | null;
-  created_by_crm_user_id?: string | null;
-  stage: string | null;
   country?: string | null;
+
+  // archive flags in your schema
+  is_archived?: boolean | null;
+  archived_at?: string | null;
 }
 
 interface DirectoryTabProps {
@@ -87,212 +75,187 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const { isAdmin } = useAuth();
   const { crmUserId } = useCrmUser();
   const { toast } = useToast();
+
   const [contacts, setContacts] = useState<DirectoryContact[]>([]);
-  const [ownersMap, setOwnersMap] = useState<Record<string, ContactOwners>>({});
-  const [ownerNamesMap, setOwnerNamesMap] = useState<Record<string, string>>({});
-  const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [crmUsers, setCrmUsers] = useState<Array<{ id: string; full_name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [nameFilter, setNameFilter] = useState('');
-  const [companyFilter, setCompanyFilter] = useState('');
-  const [ownerFilter, setOwnerFilter] = useState('all');
-  const [stageFilter, setStageFilter] = useState('all');
-  const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({ column: 'full_name', direction: 'asc' });
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [savingCells, setSavingCells] = useState<Record<string, boolean>>({});
-  const [primaryPhoneMap, setPrimaryPhoneMap] = useState<Record<string, string>>({});
 
-  // Editing pin: keep row in position during assignment changes
+  // filters
+  const [nameFilter, setNameFilter] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("all"); // all | unassigned | userId
+  const [addedByFilter, setAddedByFilter] = useState("all"); // all | userId
+  const [stageFilter, setStageFilter] = useState("all"); // all | stage
+
+  const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({
+    column: "created_at",
+    direction: "desc",
+  });
+
+  // selection
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // row saving indicators
+  const [savingCells, setSavingCells] = useState<Record<string, boolean>>({});
+
+  // pin editing row so it doesn’t jump
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const editingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (editingTimerRef.current) clearTimeout(editingTimerRef.current);
     };
   }, []);
 
-  // Stage counts derived from contacts (auto-updates on any change)
-  const stageCounts = useMemo(() => {
-    const counts: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
-    contacts.forEach(c => {
-      if (c.stage && counts.hasOwnProperty(c.stage)) {
-        counts[c.stage]++;
-      }
-    });
-    return counts;
-  }, [contacts]);
+  const pinEditingRow = (contactId: string) => {
+    if (editingTimerRef.current) clearTimeout(editingTimerRef.current);
+    setEditingContactId(contactId);
+    editingTimerRef.current = setTimeout(() => setEditingContactId(null), 2500);
+  };
+
+  const formatCreatedDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "—";
+    try {
+      return format(new Date(dateStr), "dd MMM yyyy");
+    } catch {
+      return "—";
+    }
+  };
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: contactsData, error: contactsError } = await supabase
-        .from('contacts')
-        .select('*')
-        .eq('is_archived', false)
-        .order('created_at', { ascending: false });
+      // Load active CRM users (for dropdown + filters)
+      const usersResult = await getActiveCrmUsers();
+      if (usersResult.data) {
+        setCrmUsers(usersResult.data.map((u) => ({ id: u.id, full_name: u.full_name })));
+      }
 
-      if (contactsError) {
-        console.error('[DirectoryTab] Error fetching contacts:', contactsError);
+      // Directory source of truth: contacts.assigned_to_user_id + joins
+      const { data, error } = await supabase
+        .from("contacts")
+        .select(
+          `
+          id,
+          full_name,
+          company_id,
+          assigned_to_user_id,
+          created_by_crm_user_id,
+          stage,
+          created_at,
+          is_archived,
+          archived_at,
+          companies:company_id ( company_name ),
+          assigned_user:assigned_to_user_id ( full_name ),
+          created_by_user:created_by_crm_user_id ( full_name )
+        `,
+        )
+        .eq("is_archived", false)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        toast({ title: "Directory load failed", description: error.message, variant: "destructive" });
         setContacts([]);
-        setIsLoading(false);
         return;
       }
 
-      const contactsList: DirectoryContact[] = (contactsData || []).map((c: any) => ({
-        ...c,
-        stage: c.stage || null,
-      }));
-
-      setContacts(contactsList);
-
-      const contactIds = contactsList.map(c => c.id);
-      const companyIds = contactsList
-        .map(c => c.company_id)
-        .filter((id): id is string => id !== null);
-
-      // Fetch primary phones from contact_phones table
-      const fetchPrimaryPhones = async () => {
-        if (contactIds.length === 0) return {};
-        const { data: phones } = await supabase
-          .from('contact_phones')
-          .select('contact_id, phone_number')
-          .eq('is_primary', true)
-          .in('contact_id', contactIds);
-        const map: Record<string, string> = {};
-        (phones || []).forEach((p: any) => {
-          map[p.contact_id] = p.phone_number;
-        });
-        return map;
-      };
-
-      const [ownersResult, companyResult, usersResult, phonesMap] = await Promise.all([
-        contactIds.length > 0 ? getOwnersForContacts(contactIds) : Promise.resolve({ data: {} as Record<string, ContactOwners>, error: null }),
-        companyIds.length > 0 ? getCompanyNamesMap(companyIds) : Promise.resolve({ data: {} as Record<string, string>, error: null }),
-        getActiveCrmUsers(),
-        fetchPrimaryPhones(),
-      ]);
-
-      setPrimaryPhoneMap(phonesMap);
-
-      if (companyResult.data) setCompanyNamesMap(companyResult.data);
-      if (usersResult.data) setCrmUsers(usersResult.data.map(u => ({ id: u.id, full_name: u.full_name })));
-
-      if (ownersResult.data) {
-        setOwnersMap(ownersResult.data);
-
-        const allUserIds = new Set<string>();
-        Object.values(ownersResult.data).forEach(owners => {
-          if (owners.primary?.assigned_to_crm_user_id) allUserIds.add(owners.primary.assigned_to_crm_user_id);
-          if (owners.secondary?.assigned_to_crm_user_id) allUserIds.add(owners.secondary.assigned_to_crm_user_id);
-        });
-        contactsList.forEach(c => {
-          if (c.created_by_crm_user_id) allUserIds.add(c.created_by_crm_user_id);
-        });
-
-        if (allUserIds.size > 0) {
-          const namesResult = await getUserNames(Array.from(allUserIds));
-          if (namesResult.data) setOwnerNamesMap(namesResult.data);
-        }
-      }
-    } catch (error) {
-      console.error('[DirectoryTab] Failed to fetch data:', error);
+      setContacts((data || []) as DirectoryContact[]);
+    } catch (e: any) {
+      toast({ title: "Directory load failed", description: e?.message || "Unexpected error", variant: "destructive" });
+      setContacts([]);
     } finally {
       setIsLoading(false);
+      onCountsChanged?.();
     }
-  }, []);
+  }, [toast, onCountsChanged]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const contactCountryMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    contacts.forEach(c => { map[c.id] = c.country || null; });
-    return map;
-  }, [contacts]);
-
-  // Owner counts for dropdown filter
-  const ownerCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    Object.values(ownersMap).forEach(owners => {
-      const pId = owners.primary?.assigned_to_crm_user_id;
-      const sId = owners.secondary?.assigned_to_crm_user_id;
-      if (pId) counts[pId] = (counts[pId] || 0) + 1;
-      if (sId) counts[sId] = (counts[sId] || 0) + 1;
+  // stage counts derived from contacts (always accurate)
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+    contacts.forEach((c) => {
+      if (c.stage && counts[c.stage] !== undefined) counts[c.stage]++;
     });
     return counts;
-  }, [ownersMap]);
+  }, [contacts]);
+
+  // owner counts derived from assigned_to_user_id (always accurate)
+  const ownerCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    contacts.forEach((c) => {
+      const k = c.assigned_to_user_id || "UNASSIGNED";
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    return counts;
+  }, [contacts]);
 
   const filteredContacts = useMemo(() => {
     let filtered = contacts;
 
     if (nameFilter.trim()) {
       const s = nameFilter.toLowerCase().trim();
-      filtered = filtered.filter(c => (c.full_name || '').toLowerCase().includes(s));
+      filtered = filtered.filter((c) => (c.full_name || "").toLowerCase().includes(s));
     }
+
     if (companyFilter.trim()) {
       const s = companyFilter.toLowerCase().trim();
-      filtered = filtered.filter(c => {
-        const name = c.company_id ? (companyNamesMap[c.company_id] || '') : '';
+      filtered = filtered.filter((c) => {
+        const name = c.companies?.company_name || "";
         return name.toLowerCase().includes(s);
       });
     }
-    if (ownerFilter === 'unassigned') {
-      filtered = filtered.filter(c => {
-        const owners = ownersMap[c.id];
-        return !owners?.primary?.assigned_to_crm_user_id;
-      });
-    } else if (ownerFilter !== 'all') {
-      filtered = filtered.filter(c => {
-        const owners = ownersMap[c.id];
-        const pId = owners?.primary?.assigned_to_crm_user_id;
-        const sId = owners?.secondary?.assigned_to_crm_user_id;
-        return pId === ownerFilter || sId === ownerFilter;
-      });
-    }
-    if (stageFilter !== 'all') {
-      filtered = filtered.filter(c => (c.stage || '') === stageFilter);
+
+    if (ownerFilter === "unassigned") {
+      filtered = filtered.filter((c) => !c.assigned_to_user_id);
+    } else if (ownerFilter !== "all") {
+      filtered = filtered.filter((c) => c.assigned_to_user_id === ownerFilter);
     }
 
-    // Sort: editing row pinned first, then unassigned, then by sort config
+    if (addedByFilter !== "all") {
+      filtered = filtered.filter((c) => c.created_by_crm_user_id === addedByFilter);
+    }
+
+    if (stageFilter !== "all") {
+      filtered = filtered.filter((c) => (c.stage || "") === stageFilter);
+    }
+
+    // Sort: editing row pinned first, then unassigned first, then sort config
+    const dir = sortConfig.direction === "asc" ? 1 : -1;
+
     filtered = [...filtered].sort((a, b) => {
-      // Pin editing row at top
       if (a.id === editingContactId) return -1;
       if (b.id === editingContactId) return 1;
 
-      const aHasPrimary = !!ownersMap[a.id]?.primary?.assigned_to_crm_user_id;
-      const bHasPrimary = !!ownersMap[b.id]?.primary?.assigned_to_crm_user_id;
+      const aUnassigned = !a.assigned_to_user_id;
+      const bUnassigned = !b.assigned_to_user_id;
+      if (aUnassigned && !bUnassigned) return -1;
+      if (!aUnassigned && bUnassigned) return 1;
 
-      if (!aHasPrimary && bHasPrimary) return -1;
-      if (aHasPrimary && !bHasPrimary) return 1;
-
-      const dir = sortConfig.direction === 'asc' ? 1 : -1;
-      let aVal = '';
-      let bVal = '';
+      let aVal = "";
+      let bVal = "";
 
       switch (sortConfig.column) {
-        case 'full_name':
-          aVal = (a.full_name || '').toLowerCase();
-          bVal = (b.full_name || '').toLowerCase();
+        case "full_name":
+          aVal = (a.full_name || "").toLowerCase();
+          bVal = (b.full_name || "").toLowerCase();
           break;
-        case 'company':
-          aVal = (a.company_id ? companyNamesMap[a.company_id] || '' : '').toLowerCase();
-          bVal = (b.company_id ? companyNamesMap[b.company_id] || '' : '').toLowerCase();
+        case "company":
+          aVal = (a.companies?.company_name || "").toLowerCase();
+          bVal = (b.companies?.company_name || "").toLowerCase();
           break;
-        case 'created_at':
-          aVal = a.created_at || '';
-          bVal = b.created_at || '';
+        case "stage":
+          aVal = (a.stage || "").toLowerCase();
+          bVal = (b.stage || "").toLowerCase();
           break;
-        case 'stage':
-          aVal = (a.stage || '').toLowerCase();
-          bVal = (b.stage || '').toLowerCase();
-          break;
+        case "created_at":
         default:
-          aVal = a.created_at || '';
-          bVal = b.created_at || '';
-          return aVal > bVal ? -1 * dir : aVal < bVal ? 1 * dir : 0;
+          aVal = a.created_at || "";
+          bVal = b.created_at || "";
+          break;
       }
 
       if (aVal < bVal) return -1 * dir;
@@ -301,218 +264,24 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     });
 
     return filtered;
-  }, [contacts, nameFilter, companyFilter, ownerFilter, stageFilter, sortConfig, companyNamesMap, ownersMap, editingContactId]);
+  }, [contacts, nameFilter, companyFilter, ownerFilter, addedByFilter, stageFilter, sortConfig, editingContactId]);
 
   const handleSort = (column: SortColumn) => {
-    setSortConfig(prev => ({
+    setSortConfig((prev) => ({
       column,
-      direction: prev.column === column && prev.direction === 'asc' ? 'desc' : 'asc',
+      direction: prev.column === column && prev.direction === "asc" ? "desc" : "asc",
     }));
   };
 
-  const formatCreatedDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '—';
-    try {
-      return format(new Date(dateStr), 'dd MMM yyyy');
-    } catch {
-      return '—';
-    }
-  };
-
-  // Pin the editing contact row and clear after timeout
-  const pinEditingRow = (contactId: string) => {
-    if (editingTimerRef.current) clearTimeout(editingTimerRef.current);
-    setEditingContactId(contactId);
-    editingTimerRef.current = setTimeout(() => {
-      setEditingContactId(null);
-    }, 3000);
-  };
-
-  // Inline Primary/Secondary change — uses close-then-insert pattern to avoid constraint errors
-  const handleOwnerChange = async (
-    contactId: string,
-    role: 'primary' | 'secondary',
-    newUserId: string,
-  ) => {
-    if (!crmUserId) return;
-
-    const cellKey = `${contactId}-${role}`;
-    const prevOwners = ownersMap[contactId];
-    const currentOwnerId = role === 'primary'
-      ? prevOwners?.primary?.assigned_to_crm_user_id
-      : prevOwners?.secondary?.assigned_to_crm_user_id;
-
-    // Idempotent: skip if same owner
-    if (currentOwnerId === newUserId) return;
-
-    setSavingCells(prev => ({ ...prev, [cellKey]: true }));
-    pinEditingRow(contactId);
-
-    // Validate: secondary requires primary
-    if (role === 'secondary') {
-      const hasPrimary = !!prevOwners?.primary?.assigned_to_crm_user_id;
-      if (!hasPrimary) {
-        toast({ title: 'Validation error', description: 'Please assign a Primary owner first.', variant: 'destructive' });
-        setSavingCells(prev => ({ ...prev, [cellKey]: false }));
-        return;
-      }
-    }
-
-    try {
-      const now = new Date().toISOString();
-      // DB accepts lowercase role values via lower(trim()) constraint
-      const roleLower = role === 'primary' ? 'primary' : 'secondary';
-
-      // Step 1: Close existing ACTIVE assignment for this contact+role
-      // Must match both status=ACTIVE AND ended_at IS NULL (DB definition of active)
-      // Use case-insensitive match by trying both cases
-      const { error: closeError } = await supabase
-        .from('contact_assignments')
-        .update({
-          status: 'CLOSED',
-          ended_at: now,
-          updated_by_crm_user_id: crmUserId,
-        })
-        .eq('contact_id', contactId)
-        .eq('status', 'ACTIVE')
-        .is('ended_at', null)
-        .ilike('assignment_role', roleLower);
-
-      if (closeError) {
-        console.error('[handleOwnerChange] Close error:', closeError);
-        toast({ title: 'Assignment failed', description: 'Could not update assignment. Please retry.', variant: 'destructive' });
-        setSavingCells(prev => ({ ...prev, [cellKey]: false }));
-        return;
-      }
-
-      // Step 2: Get current stage from existing contact (preserve it)
-      let currentStage = 'ASPIRATION';
-      const existingContact = contacts.find(c => c.id === contactId);
-      if (existingContact?.stage) {
-        currentStage = existingContact.stage;
-      }
-
-      // Step 3: Insert new ACTIVE assignment with valid values
-      const { error: insertError } = await supabase
-        .from('contact_assignments')
-        .insert({
-          contact_id: contactId,
-          assigned_to_crm_user_id: newUserId,
-          assigned_by_crm_user_id: crmUserId,
-          assignment_role: roleLower,
-          stage: currentStage,
-          status: 'ACTIVE',
-          assigned_at: now,
-          ended_at: null,
-          stage_changed_at: now,
-          stage_changed_by_crm_user_id: crmUserId,
-          created_by_crm_user_id: crmUserId,
-          updated_by_crm_user_id: crmUserId,
-        });
-
-      if (insertError) {
-        console.error('[handleOwnerChange] Insert error:', insertError);
-        toast({ title: 'Assignment failed', description: 'Could not save assignment. Please retry.', variant: 'destructive' });
-        setSavingCells(prev => ({ ...prev, [cellKey]: false }));
-        return;
-      }
-
-      toast({ title: 'Assignment updated' });
-
-      const userName = crmUsers.find(u => u.id === newUserId)?.full_name || 'Unknown';
-      setOwnerNamesMap(prev => ({ ...prev, [newUserId]: userName }));
-
-      // Refetch owners for this contact
-      const { data: refreshed } = await getOwnersForContacts([contactId]);
-      if (refreshed) {
-        setOwnersMap(prev => ({ ...prev, ...refreshed }));
-      }
-    } catch (err) {
-      console.error('[handleOwnerChange] Unexpected error:', err);
-      toast({ title: 'Assignment failed', description: 'An unexpected error occurred. Please retry.', variant: 'destructive' });
-    } finally {
-      setSavingCells(prev => ({ ...prev, [cellKey]: false }));
-    }
-  };
-
-  // Remove secondary owner
-  const handleRemoveSecondary = async (contactId: string) => {
-    if (!crmUserId) return;
-    const cellKey = `${contactId}-secondary`;
-    setSavingCells(prev => ({ ...prev, [cellKey]: true }));
-
-    // Close existing active secondary assignment directly
-    const now = new Date().toISOString();
-    const { error: closeError } = await supabase
-      .from('contact_assignments')
-      .update({
-        status: 'CLOSED',
-        ended_at: now,
-        updated_by_crm_user_id: crmUserId,
-      })
-      .eq('contact_id', contactId)
-      .eq('status', 'ACTIVE')
-      .is('ended_at', null)
-      .ilike('assignment_role', 'secondary');
-
-    setSavingCells(prev => ({ ...prev, [cellKey]: false }));
-
-    if (closeError) {
-      console.error('[handleRemoveSecondary] Error:', closeError);
-      toast({ title: 'Remove failed', description: 'Could not remove secondary owner. Please retry.', variant: 'destructive' });
-      return;
-    }
-
-    toast({ title: 'Secondary owner removed' });
-
-    // Refetch owners
-    const { data: refreshed } = await getOwnersForContacts([contactId]);
-    if (refreshed) {
-      setOwnersMap(prev => ({ ...prev, ...refreshed }));
-    }
-  };
-
-  // Inline Stage change via RPC
-  const handleStageChange = async (contactId: string, newStage: string) => {
-    if (!crmUserId) return;
-    const cellKey = `${contactId}-stage`;
-    const prevContact = contacts.find(c => c.id === contactId);
-    setSavingCells(prev => ({ ...prev, [cellKey]: true }));
-
-    // Optimistic update
-    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: newStage } : c));
-
-    const { data: rpcResult, error: rpcError } = await supabase.rpc('update_contact_stage', {
-      p_contact_id: contactId,
-      p_stage: newStage,
-      p_updated_by: crmUserId,
-    });
-
-    if (rpcError) {
-      toast({ title: 'Stage update failed', description: rpcError.message, variant: 'destructive' });
-      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: prevContact?.stage || null } : c));
-    } else if (rpcResult && typeof rpcResult === 'object' && !rpcResult.success) {
-      toast({ title: 'Stage update failed', description: rpcResult.message || 'Unknown error', variant: 'destructive' });
-      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, stage: prevContact?.stage || null } : c));
-    }
-
-    setSavingCells(prev => ({ ...prev, [cellKey]: false }));
-    onCountsChanged?.();
-  };
-
-  // Selection helpers
-  const visibleIds = filteredContacts.map(c => c.id);
-  const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.includes(id));
-
+  // selection helpers
+  const visibleIds = filteredContacts.map((c) => c.id);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
   const toggleAll = () => {
     if (allSelected) setSelectedIds([]);
     else setSelectedIds(visibleIds);
   };
-
   const toggleOne = (id: string) => {
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleBulkComplete = () => {
@@ -520,11 +289,81 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     fetchData();
   };
 
-  // Check if any cell in a row is saving
   const isRowSaving = (contactId: string) =>
-    !!savingCells[`${contactId}-primary`] || !!savingCells[`${contactId}-secondary`] || !!savingCells[`${contactId}-stage`];
+    !!savingCells[`${contactId}-assign`] || !!savingCells[`${contactId}-stage`];
 
-   // --- Admin Edit/Delete ---
+  // assignment change -> contacts.assigned_to_user_id
+  const handleAssignChange = async (contactId: string, newUserId: string | null) => {
+    if (!isAdmin) return;
+
+    const cellKey = `${contactId}-assign`;
+    setSavingCells((prev) => ({ ...prev, [cellKey]: true }));
+    pinEditingRow(contactId);
+
+    try {
+      const { data, error } = await supabase
+        .from("contacts")
+        .update({ assigned_to_user_id: newUserId })
+        .eq("id", contactId)
+        .select("id")
+        .maybeSingle();
+
+      if (error) {
+        toast({ title: "Assignment failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      if (!data) {
+        toast({ title: "No change applied", description: "0 rows updated", variant: "default" });
+        return;
+      }
+
+      toast({ title: "Assignment updated", description: "Assignment updated", variant: "default" });
+      await fetchData();
+    } catch (e: any) {
+      toast({ title: "Assignment failed", description: e?.message || "Unexpected error", variant: "destructive" });
+    } finally {
+      setSavingCells((prev) => ({ ...prev, [cellKey]: false }));
+    }
+  };
+
+  // stage change -> contacts.stage
+  const handleStageChange = async (contactId: string, newStage: AssignmentStage) => {
+    if (!isAdmin) return;
+
+    const cellKey = `${contactId}-stage`;
+    setSavingCells((prev) => ({ ...prev, [cellKey]: true }));
+    pinEditingRow(contactId);
+
+    try {
+      const { data, error } = await supabase
+        .from("contacts")
+        .update({ stage: newStage })
+        .eq("id", contactId)
+        .select("id")
+        .maybeSingle();
+
+      if (error) {
+        toast({ title: "Stage update failed", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      if (!data) {
+        toast({ title: "No change applied", description: "0 rows updated", variant: "default" });
+        return;
+      }
+
+      toast({ title: "Stage updated", description: "Stage updated", variant: "default" });
+      await fetchData();
+    } catch (e: any) {
+      toast({ title: "Stage update failed", description: e?.message || "Unexpected error", variant: "destructive" });
+    } finally {
+      setSavingCells((prev) => ({ ...prev, [cellKey]: false }));
+      onCountsChanged?.();
+    }
+  };
+
+  // Admin Edit/Delete
   const [editSheetOpen, setEditSheetOpen] = useState(false);
   const [editContactId, setEditContactId] = useState<string | null>(null);
 
@@ -534,29 +373,22 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   };
 
   const handleDeleteContact = async (contactId: string, contactName: string) => {
-    const confirmed = window.confirm(
-      `⚠️ Delete "${contactName}"?\n\nThis will archive the contact and end all assignments.\n\nContinue?`
-    );
+    if (!isAdmin) return;
+
+    const confirmed = window.confirm(`⚠️ Delete "${contactName}"?\n\nThis will archive the contact.\n\nContinue?`);
     if (!confirmed) return;
 
-    const { error: contactError } = await supabase
-      .from('contacts')
+    const { error } = await supabase
+      .from("contacts")
       .update({ is_archived: true, archived_at: new Date().toISOString() })
-      .eq('id', contactId);
+      .eq("id", contactId);
 
-    if (contactError) {
-      toast({ title: 'Delete failed', description: contactError.message, variant: 'destructive' });
+    if (error) {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
       return;
     }
 
-    // Close all active assignments
-    await supabase
-      .from('contact_assignments')
-      .update({ status: 'CLOSED', ended_at: new Date().toISOString() })
-      .eq('contact_id', contactId)
-      .eq('status', 'ACTIVE');
-
-    toast({ title: 'Contact deleted', description: `"${contactName}" has been archived.` });
+    toast({ title: "Contact deleted", description: `"${contactName}" has been archived.` });
     await fetchData();
     onCountsChanged?.();
   };
@@ -568,387 +400,366 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
   return (
     <>
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
-              <BookOpen className="h-5 w-5 text-accent-foreground" />
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent">
+                <BookOpen className="h-5 w-5 text-accent-foreground" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Directory</CardTitle>
+                <CardDescription>{isLoading ? "Loading..." : `${filteredContacts.length} contacts`}</CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-lg">Directory</CardTitle>
-              <CardDescription>
-                {isLoading ? 'Loading...' : `${filteredContacts.length} contacts`}
-              </CardDescription>
-            </div>
+            <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {/* Admin-only assignment summary table */}
-        {isAdmin && !isLoading && (
-          <DirectorySummaryTable
-            ownersMap={ownersMap}
-            ownerNamesMap={ownerNamesMap}
-            contacts={contacts}
-          />
-        )}
+        </CardHeader>
 
-        {/* Bulk toolbar (admin only, when selected) */}
-        {isAdmin && selectedIds.length > 0 && (
-          <DirectoryBulkToolbar
-            selectedIds={selectedIds}
-            onClearSelection={() => setSelectedIds([])}
-            onComplete={handleBulkComplete}
-          />
-        )}
+        <CardContent>
+          {/* Bulk toolbar (admin only, when selected) */}
+          {isAdmin && selectedIds.length > 0 && (
+            <DirectoryBulkToolbar
+              selectedIds={selectedIds}
+              onClearSelection={() => setSelectedIds([])}
+              onComplete={handleBulkComplete}
+            />
+          )}
 
-        {/* Owner filter tabs (admin-only) */}
-        {isAdmin && !isLoading && (
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
-            <span className="text-xs font-medium text-muted-foreground mr-1">Filter by owner:</span>
-            <Badge
-              variant={ownerFilter === 'unassigned' ? 'default' : 'outline'}
-              className={`cursor-pointer text-xs px-2.5 py-1 transition-colors ${ownerFilter === 'unassigned' ? 'bg-red-600 hover:bg-red-700' : 'border-red-300 text-red-600 hover:bg-red-50'}`}
-              onClick={() => setOwnerFilter(ownerFilter === 'unassigned' ? 'all' : 'unassigned')}
-            >
-              ⚠ Unassigned ({contacts.filter(c => !ownersMap[c.id]?.primary?.assigned_to_crm_user_id).length})
-            </Badge>
-            {crmUsers.map(u => {
-              const pCount = Object.values(ownersMap).filter(o => o.primary?.assigned_to_crm_user_id === u.id).length;
-              const sCount = Object.values(ownersMap).filter(o => o.secondary?.assigned_to_crm_user_id === u.id).length;
-              const isActive = ownerFilter === u.id;
-              return (
-                <Badge
-                  key={u.id}
-                  variant={isActive ? 'default' : 'outline'}
-                  className={`cursor-pointer text-xs px-2.5 py-1 transition-colors ${isActive ? '' : 'hover:bg-primary/10'}`}
-                  onClick={() => setOwnerFilter(isActive ? 'all' : u.id)}
+          {/* Owner filter tabs (admin-only) */}
+          {isAdmin && !isLoading && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              <span className="text-xs font-medium text-muted-foreground mr-1">Filter by owner:</span>
+
+              <Badge
+                variant={ownerFilter === "unassigned" ? "default" : "outline"}
+                className={`cursor-pointer text-xs px-2.5 py-1 transition-colors ${
+                  ownerFilter === "unassigned"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "border-red-300 text-red-600 hover:bg-red-50"
+                }`}
+                onClick={() => setOwnerFilter(ownerFilter === "unassigned" ? "all" : "unassigned")}
+              >
+                ⚠ Unassigned ({ownerCounts["UNASSIGNED"] || 0})
+              </Badge>
+
+              {crmUsers.map((u) => {
+                const pCount = contacts.filter((c) => c.assigned_to_user_id === u.id).length;
+                const isActive = ownerFilter === u.id;
+                return (
+                  <Badge
+                    key={u.id}
+                    variant={isActive ? "default" : "outline"}
+                    className={`cursor-pointer text-xs px-2.5 py-1 transition-colors ${isActive ? "" : "hover:bg-primary/10"}`}
+                    onClick={() => setOwnerFilter(isActive ? "all" : u.id)}
+                  >
+                    {u.full_name} ({pCount})
+                  </Badge>
+                );
+              })}
+
+              {ownerFilter !== "all" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-muted-foreground"
+                  onClick={() => setOwnerFilter("all")}
                 >
-                  {u.full_name} (P:{pCount} / S:{sCount})
-                </Badge>
-              );
-            })}
-            {ownerFilter !== 'all' && (
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground" onClick={() => setOwnerFilter('all')}>
-                ✕ Reset
-              </Button>
-            )}
-          </div>
-        )}
+                  ✕ Reset
+                </Button>
+              )}
+            </div>
+          )}
 
-        {/* Header filters */}
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          <Input
-            placeholder="Contact name…"
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
-            className="h-8 w-[160px] text-sm"
-          />
-          <Input
-            placeholder="Company…"
-            value={companyFilter}
-            onChange={(e) => setCompanyFilter(e.target.value)}
-            className="h-8 w-[150px] text-sm"
-          />
-          {!isAdmin && (
+          {/* Header filters */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <Input
+              placeholder="Contact name…"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              className="h-8 w-[160px] text-sm"
+            />
+            <Input
+              placeholder="Company…"
+              value={companyFilter}
+              onChange={(e) => setCompanyFilter(e.target.value)}
+              className="h-8 w-[150px] text-sm"
+            />
+
+            {/* Added By filter */}
             <div className="flex items-center gap-1.5">
               <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-              <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-                <SelectTrigger className="h-8 w-[180px] text-sm">
-                  <SelectValue />
+              <Select value={addedByFilter} onValueChange={setAddedByFilter}>
+                <SelectTrigger className="h-8 w-[200px] text-sm">
+                  <SelectValue placeholder="Added By" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Owners</SelectItem>
-                  {crmUsers.map(u => (
+                  <SelectItem value="all">Added By: All</SelectItem>
+                  {crmUsers.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
-                      {u.full_name} ({ownerCounts[u.id] || 0})
+                      {u.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          )}
-          {/* Stage filter buttons with counts */}
-          <div className="flex items-center gap-1.5 ml-auto flex-wrap">
-            <Button
-              variant={stageFilter === 'all' ? 'default' : 'outline'}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setStageFilter('all')}
-            >
-              All Stages
-            </Button>
-            {STAGE_OPTIONS.map(s => (
+
+            {/* Non-admin owner filter dropdown */}
+            {!isAdmin && (
+              <div className="flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                  <SelectTrigger className="h-8 w-[180px] text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Owners</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {crmUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.full_name} ({contacts.filter((c) => c.assigned_to_user_id === u.id).length})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Stage filter buttons with counts */}
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
               <Button
-                key={s.value}
-                variant={stageFilter === s.value ? 'default' : 'outline'}
+                variant={stageFilter === "all" ? "default" : "outline"}
                 size="sm"
                 className="h-7 text-xs"
-                onClick={() => setStageFilter(s.value)}
+                onClick={() => setStageFilter("all")}
               >
-                {s.label} ({stageCounts[s.value] || 0})
+                All Stages
               </Button>
-            ))}
+              {STAGE_OPTIONS.map((s) => (
+                <Button
+                  key={s.value}
+                  variant={stageFilter === s.value ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setStageFilter(s.value)}
+                >
+                  {s.label} ({stageCounts[s.value] || 0})
+                </Button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredContacts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <BookOpen className="mb-2 h-10 w-10 text-muted-foreground/50" />
-            <p className="text-muted-foreground">No contacts found</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <TooltipProvider>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-200">
-                    {isAdmin && (
-                      <TableHead className="w-10">
-                        <Checkbox
-                          checked={allSelected}
-                          onCheckedChange={toggleAll}
-                          aria-label="Select all"
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredContacts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <BookOpen className="mb-2 h-10 w-10 text-muted-foreground/50" />
+              <p className="text-muted-foreground">No contacts found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <TooltipProvider>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-200">
+                      {isAdmin && (
+                        <TableHead className="w-10">
+                          <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all" />
+                        </TableHead>
+                      )}
+                      <TableHead>
+                        <SortableHeader
+                          label="Contact Name"
+                          column="full_name"
+                          currentSort={sortConfig}
+                          onSort={handleSort}
                         />
                       </TableHead>
-                    )}
-                    <TableHead>
-                      <SortableHeader label="Contact Name" column="full_name" currentSort={sortConfig} onSort={handleSort} />
-                    </TableHead>
-                    <TableHead>
-                      <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
-                    </TableHead>
-                    <TableHead>Added By</TableHead>
-                    <TableHead>
-                      <span className="flex items-center gap-1">
-                        <User className="h-3.5 w-3.5" />
-                        Primary Owner
-                      </span>
-                    </TableHead>
-                    <TableHead>
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3.5 w-3.5" />
-                        Secondary Owner
-                      </span>
-                    </TableHead>
-                    <TableHead>
-                      <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
-                    </TableHead>
-                    <TableHead>
-                      <SortableHeader label="Created" column="created_at" currentSort={sortConfig} onSort={handleSort} />
-                    </TableHead>
-                    {isAdmin && (
-                      <TableHead className="text-right">Actions</TableHead>
-                    )}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredContacts.map((contact) => {
-                    const owners = ownersMap[contact.id];
-                    const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id || '';
-                    const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id || '';
-                    const isSelected = selectedIds.includes(contact.id);
-                    const hasPrimary = !!primaryOwnerId;
-                    const rowSaving = isRowSaving(contact.id);
-                    const isEditing = contact.id === editingContactId;
+                      <TableHead>
+                        <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
+                      </TableHead>
+                      <TableHead>Added By</TableHead>
+                      <TableHead>
+                        <span className="flex items-center gap-1">
+                          <User className="h-3.5 w-3.5" />
+                          Owner
+                        </span>
+                      </TableHead>
+                      <TableHead>
+                        <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
+                      </TableHead>
+                      <TableHead>
+                        <SortableHeader
+                          label="Created"
+                          column="created_at"
+                          currentSort={sortConfig}
+                          onSort={handleSort}
+                        />
+                      </TableHead>
+                      {isAdmin && <TableHead className="text-right">Actions</TableHead>}
+                    </TableRow>
+                  </TableHeader>
 
-                    return (
-                      <TableRow
-                        key={contact.id}
-                        className={[
-                          'border-gray-200 hover:bg-gray-50',
-                          isSelected ? 'bg-primary/5' : '',
-                          !hasPrimary ? 'bg-red-50 border-red-200' : '',
-                          rowSaving ? 'opacity-50 pointer-events-none' : '',
-                          isEditing ? 'ring-2 ring-blue-400 bg-blue-50/30' : '',
-                        ].filter(Boolean).join(' ')}
-                      >
-                        {isAdmin && (
-                          <TableCell>
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => toggleOne(contact.id)}
-                              aria-label={`Select ${contact.full_name}`}
-                            />
-                          </TableCell>
-                        )}
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-1.5">
-                            {!hasPrimary && (
-                              <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                            )}
-                            {contact.full_name || '—'}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {contact.company_id ? (
-                            <Badge variant="secondary">
-                              {companyNamesMap[contact.company_id] || '—'}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
+                  <TableBody>
+                    {filteredContacts.map((contact) => {
+                      const primaryOwnerId = contact.assigned_to_user_id || "";
+                      const isSelected = selectedIds.includes(contact.id);
+                      const hasPrimary = !!primaryOwnerId;
+                      const rowSaving = isRowSaving(contact.id);
+                      const isEditing = contact.id === editingContactId;
+
+                      return (
+                        <TableRow
+                          key={contact.id}
+                          className={[
+                            "border-gray-200 hover:bg-gray-50",
+                            isSelected ? "bg-primary/5" : "",
+                            !hasPrimary ? "bg-red-50 border-red-200" : "",
+                            rowSaving ? "opacity-50 pointer-events-none" : "",
+                            isEditing ? "ring-2 ring-blue-400 bg-blue-50/30" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        >
+                          {isAdmin && (
+                            <TableCell>
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleOne(contact.id)}
+                                aria-label={`Select ${contact.full_name}`}
+                              />
+                            </TableCell>
                           )}
-                        </TableCell>
 
-                        {/* Added By */}
-                        <TableCell className="text-xs text-muted-foreground">
-                          {contact.created_by_crm_user_id
-                            ? (ownerNamesMap[contact.created_by_crm_user_id] || '—')
-                            : '—'}
-                        </TableCell>
-
-                        {/* Primary Owner — professional dropdown, no pill badges */}
-                        <TableCell className="text-sm">
-                          {isAdmin ? (
-                            <select
-                              value={primaryOwnerId || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val) handleOwnerChange(contact.id, 'primary', val);
-                              }}
-                              disabled={!!savingCells[`${contact.id}-primary`]}
-                              className="w-full max-w-[160px] px-2 py-1.5 text-sm border border-input rounded-md bg-background hover:border-blue-500 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <option value="">Unassigned</option>
-                              {crmUsers.map(u => (
-                                <option key={u.id} value={u.id}>{u.full_name}</option>
-                              ))}
-                            </select>
-                          ) : primaryOwnerId ? (
-                            <span className="text-sm">{ownerNamesMap[primaryOwnerId] || 'Unknown'}</span>
-                          ) : (
-                            <span className="text-red-500 text-sm font-medium">Unassigned</span>
-                          )}
-                        </TableCell>
-
-                        {/* Secondary Owner — disabled if no primary */}
-                        <TableCell className="text-sm">
-                          {isAdmin ? (
-                            hasPrimary ? (
-                              <select
-                                value={secondaryOwnerId || ''}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === '' && secondaryOwnerId) {
-                                    handleRemoveSecondary(contact.id);
-                                    return;
-                                  }
-                                  if (val && val !== primaryOwnerId) {
-                                    handleOwnerChange(contact.id, 'secondary', val);
-                                  }
-                                }}
-                                disabled={!!savingCells[`${contact.id}-secondary`]}
-                                className="w-full max-w-[160px] px-2 py-1.5 text-sm border border-input rounded-md bg-muted/30 hover:border-gray-400 focus:border-gray-600 focus:ring-2 focus:ring-gray-200 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <option value="">None</option>
-                                {crmUsers.filter(u => u.id !== primaryOwnerId).map(u => (
-                                  <option key={u.id} value={u.id}>{u.full_name}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center text-xs text-muted-foreground cursor-not-allowed opacity-50">
-                                    —
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Assign primary owner first</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            )
-                          ) : secondaryOwnerId ? (
-                            <span className="text-sm">{ownerNamesMap[secondaryOwnerId] || 'Unknown'}</span>
-                          ) : (
-                            <span className="text-muted-foreground/50">—</span>
-                          )}
-                        </TableCell>
-
-                        {/* Stage */}
-                        <TableCell>
-                          {isAdmin ? (
-                            <Select
-                              value={contact.stage || 'COLD_CALLING'}
-                              onValueChange={(val) => handleStageChange(contact.id, val)}
-                              disabled={!!savingCells[`${contact.id}-stage`]}
-                            >
-                              <SelectTrigger className="h-7 w-[130px] text-xs border-gray-300 focus:ring-blue-500">
-                                <SelectValue>
-                                  <Badge className={`${STAGE_COLORS[contact.stage || 'COLD_CALLING']} text-xs`}>
-                                    {STAGE_LABELS[contact.stage || 'COLD_CALLING'] || contact.stage}
-                                  </Badge>
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {STAGE_OPTIONS.map(s => (
-                                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : contact.stage ? (
-                            <Badge className={STAGE_COLORS[contact.stage] || ''}>
-                              {STAGE_LABELS[contact.stage] || contact.stage}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-
-                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                          {formatCreatedDate(contact.created_at)}
-                        </TableCell>
-
-                        {isAdmin && (
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                                onClick={() => openEditPanel(contact)}
-                                title="Edit contact"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => handleDeleteContact(contact.id, contact.full_name || 'Unknown')}
-                                title="Delete contact"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {!hasPrimary && <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+                              {contact.full_name || "—"}
                             </div>
                           </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TooltipProvider>
-          </div>
-        )}
-      </CardContent>
-    </Card>
 
-    {/* Edit Contact Sheet (slides from right) */}
-    <ContactEditSheet
-      contactId={editContactId}
-      open={editSheetOpen}
-      onOpenChange={setEditSheetOpen}
-      onSuccess={handleEditSuccess}
-    />
+                          <TableCell>
+                            {contact.companies?.company_name ? (
+                              <Badge variant="secondary">{contact.companies.company_name}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+
+                          {/* Added By */}
+                          <TableCell className="text-xs text-muted-foreground">
+                            {contact.created_by_user?.full_name || "—"}
+                          </TableCell>
+
+                          {/* Owner */}
+                          <TableCell className="text-sm">
+                            {isAdmin ? (
+                              <select
+                                value={primaryOwnerId}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  handleAssignChange(contact.id, val === "" ? null : val);
+                                }}
+                                disabled={!!savingCells[`${contact.id}-assign`]}
+                                className="w-full max-w-[180px] px-2 py-1.5 text-sm border border-input rounded-md bg-background hover:border-blue-500 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <option value="">Unassigned</option>
+                                {crmUsers.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {u.full_name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : primaryOwnerId ? (
+                              <span className="text-sm">{contact.assigned_user?.full_name || "Unknown"}</span>
+                            ) : (
+                              <span className="text-red-500 text-sm font-medium">Unassigned</span>
+                            )}
+                          </TableCell>
+
+                          {/* Stage */}
+                          <TableCell>
+                            {isAdmin ? (
+                              <Select
+                                value={contact.stage || "COLD_CALLING"}
+                                onValueChange={(val) => handleStageChange(contact.id, val as AssignmentStage)}
+                                disabled={!!savingCells[`${contact.id}-stage`]}
+                              >
+                                <SelectTrigger className="h-7 w-[130px] text-xs border-gray-300 focus:ring-blue-500">
+                                  <SelectValue>
+                                    <Badge className={`${STAGE_COLORS[contact.stage || "COLD_CALLING"]} text-xs`}>
+                                      {STAGE_LABELS[contact.stage || "COLD_CALLING"] || contact.stage}
+                                    </Badge>
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {STAGE_OPTIONS.map((s) => (
+                                    <SelectItem key={s.value} value={s.value}>
+                                      {s.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : contact.stage ? (
+                              <Badge className={STAGE_COLORS[contact.stage] || ""}>
+                                {STAGE_LABELS[contact.stage] || contact.stage}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                            {formatCreatedDate(contact.created_at)}
+                          </TableCell>
+
+                          {isAdmin && (
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                                  onClick={() => openEditPanel(contact)}
+                                  title="Edit contact"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() => handleDeleteContact(contact.id, contact.full_name || "Unknown")}
+                                  title="Delete contact"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TooltipProvider>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit Contact Sheet (slides from right) */}
+      <ContactEditSheet
+        contactId={editContactId}
+        open={editSheetOpen}
+        onOpenChange={setEditSheetOpen}
+        onSuccess={handleEditSuccess}
+      />
     </>
   );
 }
