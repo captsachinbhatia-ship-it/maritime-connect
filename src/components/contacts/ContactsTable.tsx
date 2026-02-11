@@ -178,18 +178,22 @@ export function ContactsTable({
                       {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
                     </TableCell>
                     <TableCell>
-                      {contact.primary_phone || contact.phone ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="text-xs text-muted-foreground max-w-[110px] truncate block">
-                              {contact.primary_phone || contact.phone}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>{contact.primary_phone || contact.phone}</TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/50">—</span>
-                      )}
+                      {(() => {
+                        const phone = contact.primary_phone || contact.phone;
+                        if (!phone) return <span className="text-xs text-muted-foreground/50">—</span>;
+                        const code = contact.country_code ? `+${contact.country_code.replace(/^\+/, '')} ` : '';
+                        const display = `${code}${phone}`;
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-xs text-muted-foreground max-w-[130px] truncate block">
+                                {display}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>{display}</TooltipContent>
+                          </Tooltip>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {contact.email ? (
