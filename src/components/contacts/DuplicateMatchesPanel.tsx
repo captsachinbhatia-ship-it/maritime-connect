@@ -1,7 +1,7 @@
 import { AlertTriangle, UserCheck, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { maskPhone, maskEmail } from '@/lib/duplicateDetection';
 
 export interface DuplicateMatch {
@@ -101,7 +101,7 @@ export function DuplicateMatchesPanel({
         <span className="font-medium text-sm">Potential Duplicates Found</span>
       </div>
 
-      <ScrollArea className="max-h-[320px]">
+      <div className="max-h-[320px] overflow-y-auto pr-1">
         <div className="space-y-3">
           {highMatches.length > 0 && (
             <div className="space-y-2">
@@ -141,7 +141,12 @@ export function DuplicateMatchesPanel({
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
+      {(highMatches.length + possibleMatches.length) > 3 && (
+        <p className="text-xs text-muted-foreground text-center pt-1">
+          Scroll to see all {highMatches.length + possibleMatches.length} potential matches
+        </p>
+      )}
     </div>
   );
 }
