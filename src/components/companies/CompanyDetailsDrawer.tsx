@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { Building2, Globe, Mail, Phone, MapPin, Calendar, Tag, FileText, CheckCircle, XCircle } from 'lucide-react';
 import { CompanyActionsBar } from './CompanyActionsBar';
+import { DeleteCompanyDialog } from './DeleteCompanyDialog';
 import {
   Sheet,
   SheetContent,
@@ -11,19 +12,23 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { LinkedContactsList } from './LinkedContactsList';
+import { useAuth } from '@/contexts/AuthContext';
 import type { CompanyWithContactCount } from '@/types';
 
 interface CompanyDetailsDrawerProps {
   company: CompanyWithContactCount | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCompanyDeleted?: () => void;
 }
 
 export function CompanyDetailsDrawer({
   company,
   open,
   onOpenChange,
+  onCompanyDeleted,
 }: CompanyDetailsDrawerProps) {
+  const { isAdmin } = useAuth();
   if (!company) return null;
 
   const handleContactClick = (contactId: string) => {
@@ -205,6 +210,24 @@ export function CompanyDetailsDrawer({
           companyId={company.id}
           onContactClick={handleContactClick}
         />
+
+        {/* Admin-only: Delete Company */}
+        {isAdmin && (
+          <>
+            <Separator className="my-4" />
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-destructive">Danger Zone</h3>
+              <DeleteCompanyDialog
+                companyId={company.id}
+                companyName={company.company_name || 'Company'}
+                onDeleted={() => {
+                  onOpenChange(false);
+                  onCompanyDeleted?.();
+                }}
+              />
+            </div>
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );
