@@ -101,7 +101,7 @@ export function DuplicateMatchesPanel({
         <span className="font-medium text-sm">Potential Duplicates Found</span>
       </div>
 
-      <div className="max-h-[320px] overflow-y-auto pr-1">
+      <div className="max-h-[300px] overflow-y-auto overflow-x-hidden pr-1">
         <div className="space-y-3">
           {highMatches.length > 0 && (
             <div className="space-y-2">
