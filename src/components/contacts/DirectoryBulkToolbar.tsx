@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getActiveCrmUsers } from "@/services/assignPrimary";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabaseClient";
+import { useCrmUser } from "@/hooks/useCrmUser";
 
 type AssignmentStage = "COLD_CALLING" | "ASPIRATION" | "ACHIEVEMENT" | "INACTIVE";
 
@@ -24,10 +25,11 @@ const STAGES: { value: AssignmentStage; label: string }[] = [
 
 export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete }: DirectoryBulkToolbarProps) {
   const { toast } = useToast();
+  const { crmUserId } = useCrmUser();
 
   const [users, setUsers] = useState<Array<{ id: string; full_name: string }>>([]);
-  const [assigneeUserId, setAssigneeUserId] = useState<string>(""); // contacts.assigned_to_user_id
-  const [bulkStage, setBulkStage] = useState<string>(""); // contacts.stage
+  const [assigneeUserId, setAssigneeUserId] = useState<string>("");
+  const [bulkStage, setBulkStage] = useState<string>("");
   const [isApplying, setIsApplying] = useState(false);
 
   useEffect(() => {
@@ -42,24 +44,64 @@ export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete
   const hasAnyAction = !!assigneeUserId || !!bulkStage;
 
   const handleApply = async () => {
-    if (!hasAnyAction || count === 0) return;
+    if (!hasAnyAction || count === 0 || !crmUserId) return;
 
     setIsApplying(true);
+    const now = new Date().toISOString();
 
     try {
-      // 1) Bulk assignment -> contacts.assigned_to_user_id
       if (assigneeUserId) {
-        const { error } = await supabase
-          .from("contacts")
-          .update({ assigned_to_user_id: assigneeUserId })
-          .in("id", selectedIds);
+        // Get existing primary stages to preserve them
+        const { data: existingAssignments } = await supabase
+          .from("contact_assignments")
+          .select("contact_id, stage")
+          .in("contact_id", selectedIds)
+          .eq("status", "ACTIVE")
+          .is("ended_at", null)
+          .ilike("assignment_role", "primary");
 
+        const stageMap: Record<string, string> = {};
+        (existingAssignments || []).forEach((a: any) => {
+          stageMap[a.contact_id] = a.stage;
+        });
+
+        // Close existing primary assignments
+        await supabase
+          .from("contact_assignments")
+          .update({ status: "CLOSED", ended_at: now })
+          .in("contact_id", selectedIds)
+          .eq("status", "ACTIVE")
+          .is("ended_at", null)
+          .ilike("assignment_role", "primary");
+
+        // Insert new primary assignments with preserved or overridden stage
+        const payloads = selectedIds.map((id) => ({
+          contact_id: id,
+          assigned_to_crm_user_id: assigneeUserId,
+          assigned_by_crm_user_id: crmUserId,
+          assignment_role: "primary",
+          stage: bulkStage || stageMap[id] || "COLD_CALLING",
+          status: "ACTIVE",
+          assigned_at: now,
+          stage_changed_at: now,
+          stage_changed_by_crm_user_id: crmUserId,
+        }));
+
+        const { error } = await supabase.from("contact_assignments").insert(payloads);
         if (error) throw error;
-      }
-
-      // 2) Bulk stage -> contacts.stage
-      if (bulkStage) {
-        const { error } = await supabase.from("contacts").update({ stage: bulkStage }).in("id", selectedIds);
+      } else if (bulkStage) {
+        // Only stage change (no new assignee) → update existing active primary assignments
+        const { error } = await supabase
+          .from("contact_assignments")
+          .update({
+            stage: bulkStage,
+            stage_changed_at: now,
+            stage_changed_by_crm_user_id: crmUserId,
+          })
+          .in("contact_id", selectedIds)
+          .eq("status", "ACTIVE")
+          .is("ended_at", null)
+          .ilike("assignment_role", "primary");
 
         if (error) throw error;
       }
