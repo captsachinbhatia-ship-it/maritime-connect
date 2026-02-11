@@ -237,13 +237,11 @@ export default function BulkImport() {
     }
 
     if (eligible === 0) {
-      toast({ title: 'Import Complete', description: 'Import complete: 0 validated rows to import.', duration: 6000 });
+      toast({ title: 'Import Complete', description: 'Import complete: no validated rows to import.', duration: 6000 });
+    } else if (imported === 0 && skipped === 0) {
+      toast({ title: 'Import Complete', description: 'Import completed but no rows changed. Please refresh.', duration: 6000 });
     } else {
-      toast({
-        title: 'Import Complete!',
-        description: `Imported ${imported}, Duplicates skipped ${skipped}.`,
-        duration: 6000,
-      });
+      toast({ title: 'Import Complete!', description: `Imported ${imported}, Duplicates skipped ${skipped}.`, duration: 6000 });
     }
 
     // Refetch staging rows
