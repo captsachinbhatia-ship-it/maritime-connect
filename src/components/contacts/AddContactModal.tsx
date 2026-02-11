@@ -39,9 +39,9 @@ import {
 } from '@/components/ui/popover';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
-import { createContact, checkDuplicateContact, getAllCompaniesForDropdown } from '@/services/contacts';
-import { saveContactPhones, ContactPhoneInput } from '@/services/contactPhones';
+import { checkDuplicateContact, getAllCompaniesForDropdown } from '@/services/contacts';
 import { fetchContactsForDuplicateCheck, ContactForDuplicateCheck } from '@/services/duplicateContacts';
+import { supabase } from '@/lib/supabaseClient';
 import { AddCompanyMiniModal } from './AddCompanyMiniModal';
 import { PhoneInput } from '@/components/ui/phone-input';
 import { useToast } from '@/hooks/use-toast';
@@ -379,46 +379,35 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
         return;
       }
 
-      // Build phone string from phone rows for contacts.phone column
+      // Build phone/email from rows
       const validPhoneRows = phoneRows.filter(p => p.phone_number.trim());
       const primaryPhoneRow = validPhoneRows.find(p => p.is_primary) || validPhoneRows[0] || null;
-      const allPhonesString = validPhoneRows.map(p => p.phone_number.trim()).join(', ') || null;
+      const allEmails = emailRows.filter(e => e.email.trim()).map(e => e.email.trim()).join(', ') || null;
 
-      // Create contact - ensure empty strings become null
-      const result = await createContact({
-        full_name: data.full_name,
-        company_id: data.company_id || null,
-        designation: data.designation || null,
-        country_code: primaryPhoneRow?.phone_number ? null : null,
-        phone: allPhonesString,
-        phone_type: primaryPhoneRow?.phone_type || null,
-        email: emailRows.filter(e => e.email.trim()).map(e => e.email.trim()).join(', ') || null,
-        ice_handle: data.ice_handle || null,
-        preferred_channel: data.preferred_channel?.trim() || null,
-        notes: data.notes || null,
-      }, user.id);
+      // Call RPC add_contact_safe — handles company creation, phone insertion, constraints
+      const { data: newContactId, error: rpcError } = await supabase.rpc('add_contact_safe', {
+        p_full_name: data.full_name,
+        p_company_name: selectedCompany?.name ?? null,
+        p_designation: data.designation || null,
+        p_email: allEmails,
+        p_country_code: data.country_code || null,
+        p_phone: primaryPhoneRow?.phone_number?.trim() || null,
+        p_phone_type: primaryPhoneRow?.phone_type || null,
+        p_ice_handle: data.ice_handle || null,
+        p_preferred_channel: data.preferred_channel?.trim() || null,
+        p_notes: data.notes || null,
+      });
 
-      if (result.error) {
-        setSubmitError(result.error);
+      if (rpcError) {
+        setSubmitError(rpcError.message);
+        toast({ title: 'Create failed', description: rpcError.message, variant: 'destructive' });
         setIsSubmitting(false);
         return;
       }
 
-      // Save phone numbers to contact_phones table
-      if (result.data?.id) {
-        const validPhones = phoneRows.filter(p => p.phone_number.trim());
-        if (validPhones.length > 0) {
-          const phoneInputs: ContactPhoneInput[] = validPhones.map(p => ({
-            phone_type: p.phone_type,
-            phone_number: p.phone_number.trim(),
-            is_primary: p.is_primary,
-            notes: p.notes.trim() || undefined,
-          }));
-          await saveContactPhones(result.data.id, phoneInputs);
-        }
-      }
+      console.log('[AddContact] RPC add_contact_safe returned contact ID:', newContactId);
 
-      // Success
+      // Success — reset form and close
       reset();
       setSelectedCompany(null);
       setPhoneRows([{ id: crypto.randomUUID(), phone_type: 'Mobile', phone_number: '', is_primary: true, notes: '' }]);
