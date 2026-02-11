@@ -118,8 +118,20 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
-        <div className="mb-3 px-2 py-1.5 rounded-lg bg-sidebar-accent/50 truncate text-sm text-sidebar-foreground/80">
-          {isPreviewMode ? crmUser?.email : user?.email}
+        <div className="mb-3 flex items-center gap-3 px-2 py-1.5 rounded-lg bg-sidebar-accent/50">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+            {(isPreviewMode ? crmUser?.full_name : (crmUser?.full_name || user?.email))?.charAt(0)?.toUpperCase() || 'U'}
+          </div>
+          <div className="min-w-0 flex flex-col">
+            {(isPreviewMode ? crmUser?.full_name : crmUser?.full_name) && (
+              <span className="text-sm font-medium text-sidebar-foreground truncate">
+                {isPreviewMode ? crmUser?.full_name : crmUser?.full_name}
+              </span>
+            )}
+            <span className="text-xs text-sidebar-foreground/60 truncate">
+              {isPreviewMode ? crmUser?.email : user?.email}
+            </span>
+          </div>
         </div>
         <Button 
           variant="destructive" 
