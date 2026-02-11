@@ -31,8 +31,7 @@ import {
   insertStagingRows,
   fetchStagingRows,
   validateImportBatch,
-  importValidatedContacts,
-  importValidatedContactsClientSide,
+  importValidatedBatch,
 } from '@/services/bulkImport';
 import type { ParsedCsvRow, StagingRow } from '@/services/bulkImport';
 import { supabase } from '@/lib/supabaseClient';
@@ -203,28 +202,29 @@ export default function BulkImport() {
     else if (freshValidated > 0) setActiveTab('validated');
   };
 
-  // Import validated contacts
+  // Import validated contacts — RPC only, no client-side fallback
   const handleImport = async () => {
     if (!activeBatchId || !crmUserId) return;
     if (!(await verifySession('import'))) return;
 
     setImporting(true);
 
-    // Try RPC first, fallback to client-side
-    let { data, error } = await importValidatedContacts(activeBatchId);
-
-    if (error || (data && data.imported_count === 0 && validatedRows.length > 0)) {
-      console.warn('[BulkImport] RPC failed or imported 0, falling back to client-side.', error);
-      const fallback = await importValidatedContactsClientSide(activeBatchId, crmUserId);
-      data = fallback.data;
-      error = fallback.error;
-    }
+    console.log('[BulkImport] Calling import_validated_batch RPC for batch:', activeBatchId);
+    const { data, error } = await importValidatedBatch(activeBatchId, true);
 
     if (error) {
-      toast({ title: 'Import failed', description: error, variant: 'destructive' });
+      console.error('[BulkImport] RPC import_validated_batch failed:', error);
+      toast({
+        title: 'Bulk Import Failed',
+        description: error,
+        variant: 'destructive',
+        duration: 10000,
+      });
       setImporting(false);
       return;
     }
+
+    console.log('[BulkImport] Import complete:', data);
 
     // Refetch staging rows
     setStagingLoading(true);
@@ -233,17 +233,41 @@ export default function BulkImport() {
     setStagingLoading(false);
 
     if (data) {
-      const msg = [
-        `✅ Imported: ${data.imported_count} contact${data.imported_count !== 1 ? 's' : ''}`,
-        data.skipped_duplicate_count > 0 ? `⏭️ Skipped: ${data.skipped_duplicate_count} duplicate${data.skipped_duplicate_count !== 1 ? 's' : ''}` : null,
-      ].filter(Boolean).join('\n');
+      const imported = data.imported_count ?? 0;
+      const skipped = data.skipped_count ?? 0;
+      const failed = data.failed_count ?? 0;
 
-      toast({ title: 'Import Complete!', description: msg, duration: 6000 });
+      console.log(`[BulkImport] Imported: ${imported}, Skipped: ${skipped}, Failed: ${failed}`);
+      if (skipped > 0) {
+        console.log(`[BulkImport] Duplicates found: ${skipped}`);
+      }
 
-      // Invalidate contact list queries so All Contacts / Unassigned / My Added refresh
+      if (imported === 0 && validatedRows.length > 0) {
+        toast({
+          title: 'Import Warning',
+          description: `No contacts were imported. ${skipped} duplicates skipped, ${failed} failed. Check RLS policies or RPC function.`,
+          variant: 'destructive',
+          duration: 10000,
+        });
+      } else {
+        const parts = [
+          `✅ Imported: ${imported} contact${imported !== 1 ? 's' : ''}`,
+          skipped > 0 ? `⏭️ Skipped (Duplicates): ${skipped}` : null,
+          failed > 0 ? `❌ Failed: ${failed}` : null,
+        ].filter(Boolean).join('\n');
+
+        toast({ title: 'Import Complete!', description: parts, duration: 6000 });
+      }
+
+      // Refresh contact lists
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
       queryClient.invalidateQueries({ queryKey: ['unassigned-contacts'] });
       queryClient.invalidateQueries({ queryKey: ['my-added-contacts'] });
+
+      // If duplicates exist, switch to duplicates tab
+      if (skipped > 0) {
+        setActiveTab('duplicates');
+      }
     }
 
     setImporting(false);
