@@ -11,22 +11,29 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabaseClient';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
 import { ContactWithCompany } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { useCrmUser } from '@/hooks/useCrmUser';
-
-interface RawContact {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-  designation: string | null;
-  created_at: string | null;
-  company_id: string | null;
-  is_active: boolean;
-}
 
 interface DuplicateGroup {
   key: string;
@@ -41,6 +48,15 @@ interface DuplicateGroup {
   }>;
 }
 
+type PendingAction = {
+  action: 'keep_this' | 'keep_both' | 'delete';
+  keepId: string;
+  otherId: string;
+  keepName: string;
+  otherName: string;
+  rowKey: string;
+};
+
 export function DuplicateRiskTab() {
   const { crmUserId } = useCrmUser();
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
@@ -50,10 +66,13 @@ export function DuplicateRiskTab() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
 
+  // Confirmation dialog state
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Fetch all active contacts
       const { data: contacts, error } = await supabase
         .from('contacts')
         .select('id, full_name, email, designation, created_at, company_id, is_active')
@@ -71,7 +90,6 @@ export function DuplicateRiskTab() {
         return;
       }
 
-      // Fetch company names
       const companyIds = [...new Set(contacts.map(c => c.company_id).filter(Boolean))] as string[];
       let companyMap: Record<string, string> = {};
       if (companyIds.length > 0) {
@@ -84,7 +102,6 @@ export function DuplicateRiskTab() {
         }
       }
 
-      // Fetch primary phones
       const contactIds = contacts.map(c => c.id);
       let phoneMap: Record<string, string> = {};
       if (contactIds.length > 0) {
@@ -98,7 +115,6 @@ export function DuplicateRiskTab() {
         }
       }
 
-      // Group by normalized name + company (case-insensitive)
       const groupMap = new Map<string, DuplicateGroup['contacts']>();
       for (const c of contacts) {
         const name = (c.full_name || '').toLowerCase().trim();
@@ -119,7 +135,6 @@ export function DuplicateRiskTab() {
         });
       }
 
-      // Only keep groups with 2+ contacts (actual duplicates)
       const duplicateGroups: DuplicateGroup[] = [];
       for (const [key, members] of groupMap) {
         if (members.length >= 2) {
@@ -127,9 +142,7 @@ export function DuplicateRiskTab() {
         }
       }
 
-      // Sort by group size descending
       duplicateGroups.sort((a, b) => b.contacts.length - a.contacts.length);
-
       setGroups(duplicateGroups);
     } catch (err) {
       console.error('[DuplicateRiskTab] Failed:', err);
@@ -183,17 +196,25 @@ export function DuplicateRiskTab() {
     setDrawerOpen(true);
   };
 
-  const handleResolve = useCallback(async (
+  const requestAction = (
     action: 'keep_this' | 'keep_both' | 'delete',
     keepId: string,
     otherId: string,
+    keepName: string,
+    otherName: string,
     rowKey: string,
   ) => {
-    if (!crmUserId) {
-      toast({ title: 'Error', description: 'Not authenticated', variant: 'destructive' });
-      return;
-    }
+    setPendingAction({ action, keepId, otherId, keepName, otherName, rowKey });
+    setDeleteConfirmText('');
+  };
+
+  const executeResolve = useCallback(async () => {
+    if (!pendingAction || !crmUserId) return;
+    const { action, keepId, otherId, rowKey } = pendingAction;
+
     setActionInFlight(rowKey);
+    setPendingAction(null);
+
     try {
       const { error } = await supabase.rpc('resolve_duplicate_contact', {
         p_action: action,
@@ -211,7 +232,28 @@ export function DuplicateRiskTab() {
     } finally {
       setActionInFlight(null);
     }
-  }, [fetchData, crmUserId]);
+  }, [pendingAction, fetchData, crmUserId]);
+
+  const confirmDialogTitle = useMemo(() => {
+    if (!pendingAction) return '';
+    switch (pendingAction.action) {
+      case 'keep_this': return 'Keep First Contact?';
+      case 'keep_both': return 'Keep Both Contacts?';
+      case 'delete': return 'Delete Both Contacts?';
+    }
+  }, [pendingAction]);
+
+  const confirmDialogDescription = useMemo(() => {
+    if (!pendingAction) return '';
+    switch (pendingAction.action) {
+      case 'keep_this':
+        return `Keep "${pendingAction.keepName}" and archive "${pendingAction.otherName}"?`;
+      case 'keep_both':
+        return 'Both contacts will remain active. The duplicate flag will be cleared.';
+      case 'delete':
+        return '';
+    }
+  }, [pendingAction]);
 
   return (
     <>
@@ -240,6 +282,10 @@ export function DuplicateRiskTab() {
             <ContactsSearch value={search} onChange={setSearch} />
           </div>
 
+          <p className="text-xs text-muted-foreground mb-3">
+            Review potential duplicates. Choose an action. Changes are permanent.
+          </p>
+
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -252,100 +298,189 @@ export function DuplicateRiskTab() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {filteredGroups.map((group) => (
-                <Card key={group.key} className="border-amber-200 dark:border-amber-800">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[80px]">Matches</TableHead>
-                            <TableHead>Full Name</TableHead>
-                            <TableHead>Company</TableHead>
-                            <TableHead>Designation</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead className="w-[200px] text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {group.contacts.map((contact, idx) => {
-                            const otherContact = idx === 0 ? group.contacts[1] : group.contacts[0];
-                            const pairKey = `${contact.id}-${otherContact.id}`;
-                            return (
-                              <TableRow
-                                key={contact.id}
-                                className="cursor-pointer"
-                                onClick={() => handleRowClick(contact)}
-                              >
-                                <TableCell>
-                                  {idx === 0 && (
-                                    <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300 text-sm font-bold">
-                                      {group.contacts.length}
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                  {contact.full_name || '—'}
-                                </TableCell>
-                                <TableCell>
-                                  {contact.company_name ? (
-                                    <Badge variant="secondary">{contact.company_name}</Badge>
-                                  ) : (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                  {contact.designation || '—'}
-                                </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                  {contact.email || '—'}
-                                </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                  {contact.primary_phone || '—'}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={actionInFlight === pairKey}
-                                      onClick={() => handleResolve('keep_this', contact.id, otherContact.id, pairKey)}
-                                    >
-                                      <Check className="mr-1 h-3 w-3" /> Keep
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={actionInFlight === pairKey}
-                                      onClick={() => handleResolve('keep_both', contact.id, otherContact.id, pairKey)}
-                                    >
-                                      <CheckCheck className="mr-1 h-3 w-3" /> Both
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="destructive"
-                                      disabled={actionInFlight === pairKey}
-                                      onClick={() => handleResolve('delete', contact.id, otherContact.id, pairKey)}
-                                    >
-                                      <Trash2 className="mr-1 h-3 w-3" /> Delete
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <TooltipProvider>
+              <div className="space-y-4">
+                {filteredGroups.map((group) => (
+                  <Card key={group.key} className="border-amber-200 dark:border-amber-800">
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[80px]">Matches</TableHead>
+                              <TableHead>Full Name</TableHead>
+                              <TableHead>Company</TableHead>
+                              <TableHead>Designation</TableHead>
+                              <TableHead>Email</TableHead>
+                              <TableHead>Phone</TableHead>
+                              <TableHead className="w-[260px] text-right">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.contacts.map((contact, idx) => {
+                              const otherContact = idx === 0 ? group.contacts[1] : group.contacts[0];
+                              const pairKey = `${contact.id}-${otherContact.id}`;
+                              return (
+                                <TableRow
+                                  key={contact.id}
+                                  className="cursor-pointer"
+                                  onClick={() => handleRowClick(contact)}
+                                >
+                                  <TableCell>
+                                    {idx === 0 && (
+                                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300 text-sm font-bold">
+                                        {group.contacts.length}
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    {contact.full_name || '—'}
+                                  </TableCell>
+                                  <TableCell>
+                                    {contact.company_name ? (
+                                      <Badge variant="secondary">{contact.company_name}</Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {contact.designation || '—'}
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {contact.email || '—'}
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {contact.primary_phone || '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={actionInFlight === pairKey}
+                                            onClick={() => requestAction(
+                                              'keep_this',
+                                              contact.id,
+                                              otherContact.id,
+                                              contact.full_name || 'Unknown',
+                                              otherContact.full_name || 'Unknown',
+                                              pairKey,
+                                            )}
+                                          >
+                                            <Check className="mr-1 h-3 w-3" /> Keep First
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Keeps this contact, archives the duplicate</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={actionInFlight === pairKey}
+                                            onClick={() => requestAction(
+                                              'keep_both',
+                                              contact.id,
+                                              otherContact.id,
+                                              contact.full_name || 'Unknown',
+                                              otherContact.full_name || 'Unknown',
+                                              pairKey,
+                                            )}
+                                          >
+                                            <CheckCheck className="mr-1 h-3 w-3" /> Keep Both
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Marks both as separate contacts, clears duplicate flag</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="destructive"
+                                            disabled={actionInFlight === pairKey}
+                                            onClick={() => requestAction(
+                                              'delete',
+                                              contact.id,
+                                              otherContact.id,
+                                              contact.full_name || 'Unknown',
+                                              otherContact.full_name || 'Unknown',
+                                              pairKey,
+                                            )}
+                                          >
+                                            <Trash2 className="mr-1 h-3 w-3" /> Delete Both
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Permanently deletes BOTH contacts</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TooltipProvider>
           )}
         </CardContent>
       </Card>
+
+      {/* Confirmation dialog */}
+      <AlertDialog open={!!pendingAction} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialogTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingAction?.action === 'delete' ? (
+                <div className="space-y-3">
+                  <p className="flex items-center gap-1.5 text-destructive font-medium">
+                    <AlertTriangle className="h-4 w-4" />
+                    This cannot be undone. Both contacts will be permanently deleted.
+                  </p>
+                  <p>
+                    Deleting: <strong>{pendingAction.keepName}</strong> and <strong>{pendingAction.otherName}</strong>
+                  </p>
+                  <div>
+                    <p className="text-sm mb-1">Type <strong>DELETE</strong> to confirm:</p>
+                    <Input
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="DELETE"
+                      className="max-w-[200px]"
+                    />
+                  </div>
+                </div>
+              ) : (
+                confirmDialogDescription
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeResolve}
+              disabled={pendingAction?.action === 'delete' && deleteConfirmText !== 'DELETE'}
+              className={pendingAction?.action === 'delete' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
+            >
+              {pendingAction?.action === 'keep_this' && 'Keep First'}
+              {pendingAction?.action === 'keep_both' && 'Keep Both'}
+              {pendingAction?.action === 'delete' && 'Delete Both'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ContactDetailsDrawer
         contact={selectedContact}
