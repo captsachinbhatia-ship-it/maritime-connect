@@ -361,14 +361,19 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
         return;
       }
 
+      // Build phone string from phone rows for contacts.phone column
+      const validPhoneRows = phoneRows.filter(p => p.phone_number.trim());
+      const primaryPhoneRow = validPhoneRows.find(p => p.is_primary) || validPhoneRows[0] || null;
+      const allPhonesString = validPhoneRows.map(p => p.phone_number.trim()).join(', ') || null;
+
       // Create contact - ensure empty strings become null
       const result = await createContact({
         full_name: data.full_name,
         company_id: data.company_id || null,
         designation: data.designation || null,
-        country_code: null,
-        phone: null,
-        phone_type: null,
+        country_code: primaryPhoneRow?.phone_number ? null : null,
+        phone: allPhonesString,
+        phone_type: primaryPhoneRow?.phone_type || null,
         email: data.email || null,
         ice_handle: data.ice_handle || null,
         preferred_channel: data.preferred_channel?.trim() || null,

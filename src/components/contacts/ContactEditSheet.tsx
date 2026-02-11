@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Loader2, Plus, X, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { PhoneInput } from '@/components/ui/phone-input';
 import {
   Sheet,
   SheetContent,
@@ -23,12 +22,33 @@ import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/hooks/use-toast';
 
 const PREFERRED_CHANNELS = ['Email', 'Phone', 'WhatsApp', 'ICE', 'LinkedIn'];
-const STAGE_OPTIONS = [
-  { value: 'COLD_CALLING', label: 'Cold Calling' },
-  { value: 'ASPIRATION', label: 'Aspiration' },
-  { value: 'ACHIEVEMENT', label: 'Achievement' },
-  { value: 'INACTIVE', label: 'Inactive' },
+
+const COUNTRY_CODES = [
+  { code: '+1', flag: '🇺🇸', label: 'US' },
+  { code: '+44', flag: '🇬🇧', label: 'UK' },
+  { code: '+91', flag: '🇮🇳', label: 'IN' },
+  { code: '+971', flag: '🇦🇪', label: 'AE' },
+  { code: '+65', flag: '🇸🇬', label: 'SG' },
+  { code: '+852', flag: '🇭🇰', label: 'HK' },
+  { code: '+86', flag: '🇨🇳', label: 'CN' },
+  { code: '+81', flag: '🇯🇵', label: 'JP' },
+  { code: '+82', flag: '🇰🇷', label: 'KR' },
+  { code: '+49', flag: '🇩🇪', label: 'DE' },
+  { code: '+33', flag: '🇫🇷', label: 'FR' },
+  { code: '+39', flag: '🇮🇹', label: 'IT' },
+  { code: '+34', flag: '🇪🇸', label: 'ES' },
+  { code: '+31', flag: '🇳🇱', label: 'NL' },
+  { code: '+46', flag: '🇸🇪', label: 'SE' },
+  { code: '+47', flag: '🇳🇴', label: 'NO' },
+  { code: '+45', flag: '🇩🇰', label: 'DK' },
+  { code: '+61', flag: '🇦🇺', label: 'AU' },
+  { code: '+64', flag: '🇳🇿', label: 'NZ' },
+  { code: '+27', flag: '🇿🇦', label: 'ZA' },
+  { code: '+55', flag: '🇧🇷', label: 'BR' },
+  { code: '+52', flag: '🇲🇽', label: 'MX' },
 ];
+
+const PHONE_TYPES = ['Mobile', 'Office', 'Home', 'WhatsApp'];
 
 interface ContactEditSheetProps {
   contactId: string | null;
@@ -37,17 +57,43 @@ interface ContactEditSheetProps {
   onSuccess: () => void;
 }
 
+interface PhoneEntry {
+  country_code: string;
+  type: string;
+  number: string;
+  is_primary: boolean;
+}
+
+interface EmailEntry {
+  email: string;
+  is_primary: boolean;
+}
+
 interface ContactData {
   id: string;
   full_name: string;
   designation: string;
-  phone_numbers: string[];
-  emails: string[];
+  phone_numbers: PhoneEntry[];
+  emails: EmailEntry[];
   ice_handle: string;
   preferred_channel: string;
-  stage: string;
   notes: string;
   company_name: string;
+}
+
+/** Parse a phone string like "+91 9876543210" into country_code and number */
+function parsePhoneWithCode(raw: string): { country_code: string; number: string } {
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(\+\d{1,4})\s+(.+)$/);
+  if (match) {
+    return { country_code: match[1], number: match[2] };
+  }
+  // Check if starts with + but no space
+  const match2 = trimmed.match(/^(\+\d{1,4})(\d.*)$/);
+  if (match2) {
+    return { country_code: match2[1], number: match2[2] };
+  }
+  return { country_code: '+91', number: trimmed };
 }
 
 export function ContactEditSheet({ contactId, open, onOpenChange, onSuccess }: ContactEditSheetProps) {
@@ -76,15 +122,35 @@ export function ContactEditSheet({ contactId, open, onOpenChange, onSuccess }: C
       return;
     }
 
+    // Parse phone numbers with country codes
+    const phoneNumbers: PhoneEntry[] = data.phone
+      ? data.phone.split(',').map((p: string, idx: number) => {
+          const parsed = parsePhoneWithCode(p);
+          return {
+            country_code: parsed.country_code,
+            type: 'Mobile',
+            number: parsed.number,
+            is_primary: idx === 0,
+          };
+        })
+      : [{ country_code: '+91', type: 'Mobile', number: '', is_primary: true }];
+
+    // Parse emails
+    const emails: EmailEntry[] = data.email
+      ? data.email.split(',').map((e: string, idx: number) => ({
+          email: e.trim(),
+          is_primary: idx === 0,
+        }))
+      : [{ email: '', is_primary: true }];
+
     setContact({
       id: data.id,
       full_name: data.full_name || '',
       designation: data.designation || '',
-      phone_numbers: data.phone ? data.phone.split(',').map((p: string) => p.trim()) : [''],
-      emails: data.email ? data.email.split(',').map((e: string) => e.trim()) : [''],
+      phone_numbers: phoneNumbers,
+      emails: emails,
       ice_handle: data.ice_handle || '',
       preferred_channel: data.preferred_channel || '',
-      stage: data.stage || 'COLD_CALLING',
       notes: data.notes || '',
       company_name: data.companies?.company_name || '',
     });
@@ -96,33 +162,45 @@ export function ContactEditSheet({ contactId, open, onOpenChange, onSuccess }: C
     setContact({ ...contact, [field]: value });
   };
 
-  const updatePhoneAt = (index: number, value: string) => {
+  // Phone helpers
+  const updatePhone = (index: number, field: keyof PhoneEntry, value: string | boolean) => {
     if (!contact) return;
     const newPhones = [...contact.phone_numbers];
-    newPhones[index] = value;
+    if (field === 'is_primary' && value === true) {
+      // Unset all others
+      newPhones.forEach((p, i) => { p.is_primary = i === index; });
+    } else {
+      (newPhones[index] as any)[field] = value;
+    }
     setContact({ ...contact, phone_numbers: newPhones });
   };
 
   const addPhone = () => {
     if (!contact) return;
-    setContact({ ...contact, phone_numbers: [...contact.phone_numbers, ''] });
+    setContact({
+      ...contact,
+      phone_numbers: [...contact.phone_numbers, { country_code: '+91', type: 'Mobile', number: '', is_primary: false }],
+    });
   };
 
   const removePhone = (index: number) => {
     if (!contact || contact.phone_numbers.length <= 1) return;
-    setContact({ ...contact, phone_numbers: contact.phone_numbers.filter((_, i) => i !== index) });
+    const newPhones = contact.phone_numbers.filter((_, i) => i !== index);
+    if (!newPhones.some(p => p.is_primary) && newPhones.length > 0) newPhones[0].is_primary = true;
+    setContact({ ...contact, phone_numbers: newPhones });
   };
 
-  const updateEmailAt = (index: number, value: string) => {
+  // Email helpers
+  const updateEmail = (index: number, value: string) => {
     if (!contact) return;
     const newEmails = [...contact.emails];
-    newEmails[index] = value;
+    newEmails[index] = { ...newEmails[index], email: value };
     setContact({ ...contact, emails: newEmails });
   };
 
   const addEmail = () => {
     if (!contact) return;
-    setContact({ ...contact, emails: [...contact.emails, ''] });
+    setContact({ ...contact, emails: [...contact.emails, { email: '', is_primary: false }] });
   };
 
   const removeEmail = (index: number) => {
@@ -138,16 +216,24 @@ export function ContactEditSheet({ contactId, open, onOpenChange, onSuccess }: C
 
     setSaving(true);
 
-    const phone = contact.phone_numbers.filter(p => p.trim()).join(', ') || null;
-    const email = contact.emails.filter(e => e.trim()).join(', ') || null;
+    // Format phones: "+91 9876543210, +44 7700900123"
+    const formattedPhones = contact.phone_numbers
+      .filter(p => p.number.trim())
+      .map(p => `${p.country_code} ${p.number.trim()}`)
+      .join(', ') || null;
+
+    const formattedEmails = contact.emails
+      .filter(e => e.email.trim())
+      .map(e => e.email.trim())
+      .join(', ') || null;
 
     const { error } = await supabase
       .from('contacts')
       .update({
         full_name: contact.full_name.trim(),
         designation: contact.designation || null,
-        phone,
-        email,
+        phone: formattedPhones,
+        email: formattedEmails,
         ice_handle: contact.ice_handle || null,
         preferred_channel: contact.preferred_channel || null,
         notes: contact.notes || null,
@@ -214,28 +300,68 @@ export function ContactEditSheet({ contactId, open, onOpenChange, onSuccess }: C
               />
             </div>
 
-            {/* Phone Numbers (multiple) */}
-            <div className="space-y-2">
+            {/* Phone Numbers with Country Code */}
+            <div className="space-y-3">
               <Label>Phone Numbers</Label>
               {contact.phone_numbers.map((phone, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <PhoneInput
-                    value={phone}
-                    onChange={(val) => updatePhoneAt(index, val)}
-                    placeholder="+1 234 567 8900"
-                    className="flex-1"
-                  />
-                  {contact.phone_numbers.length > 1 && (
+                <div key={index} className="flex items-start gap-2 p-3 rounded-lg border bg-muted/30">
+                  <div className="flex-1 space-y-2">
+                    <div className="grid grid-cols-[110px_100px_1fr] gap-2">
+                      {/* Country Code */}
+                      <select
+                        value={phone.country_code}
+                        onChange={(e) => updatePhone(index, 'country_code', e.target.value)}
+                        className="px-2 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {COUNTRY_CODES.map(cc => (
+                          <option key={cc.code} value={cc.code}>
+                            {cc.flag} {cc.code}
+                          </option>
+                        ))}
+                      </select>
+                      {/* Phone Type */}
+                      <select
+                        value={phone.type}
+                        onChange={(e) => updatePhone(index, 'type', e.target.value)}
+                        className="px-2 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        {PHONE_TYPES.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      {/* Number */}
+                      <Input
+                        type="tel"
+                        inputMode="tel"
+                        value={phone.number}
+                        onChange={(e) => updatePhone(index, 'number', e.target.value)}
+                        placeholder="1234567890"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 pt-1">
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant={phone.is_primary ? 'default' : 'ghost'}
                       size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                      onClick={() => removePhone(index)}
+                      className="h-8 w-8"
+                      onClick={() => updatePhone(index, 'is_primary', true)}
+                      title={phone.is_primary ? 'Primary' : 'Set as primary'}
                     >
-                      <X className="h-4 w-4" />
+                      <Star className={`h-4 w-4 ${phone.is_primary ? 'fill-current' : ''}`} />
                     </Button>
-                  )}
+                    {contact.phone_numbers.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => removePhone(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
               <Button type="button" variant="link" size="sm" className="px-0 text-primary" onClick={addPhone}>
@@ -247,12 +373,12 @@ export function ContactEditSheet({ contactId, open, onOpenChange, onSuccess }: C
             {/* Email Addresses (multiple) */}
             <div className="space-y-2">
               <Label>Email Addresses</Label>
-              {contact.emails.map((email, index) => (
+              {contact.emails.map((emailEntry, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <Input
                     type="email"
-                    value={email}
-                    onChange={(e) => updateEmailAt(index, e.target.value)}
+                    value={emailEntry.email}
+                    onChange={(e) => updateEmail(index, e.target.value)}
                     placeholder="email@example.com"
                     className="flex-1"
                   />
