@@ -229,32 +229,37 @@ export function BulkImportTab({ onImportComplete }: BulkImportTabProps) {
     const { data, error } = await importValidatedContacts(activeBatchId);
 
     if (error) {
+      console.error('[BulkImport] RPC import_validated_contacts failed:', error);
       toast({ title: 'Import failed', description: error, variant: 'destructive' });
       setImporting(false);
       return;
     }
 
+    console.log('[BulkImport] Import complete:', data);
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const eligible = Number((row as any)?.eligible_count ?? 0);
+    const imported = Number((row as any)?.imported_count ?? 0);
+    const skipped = Number((row as any)?.skipped_duplicate_count ?? 0);
+
+    console.log(`[BulkImport] Imported: ${imported}, Skipped: ${skipped}, Eligible: ${eligible}`);
+    if (skipped > 0) {
+      console.log(`[BulkImport] Duplicates found: ${skipped}`);
+    }
+
+    if (eligible === 0) {
+      toast({ title: 'Import Complete', description: 'Import complete: no validated rows to import.', duration: 6000 });
+    } else if (imported === 0 && skipped === 0) {
+      toast({ title: 'Import Complete', description: 'Import completed but no rows changed. Please refresh.', duration: 6000 });
+    } else {
+      toast({ title: 'Import Complete!', description: `Imported ${imported}, Duplicates skipped ${skipped}.`, duration: 6000 });
+    }
+
+    // Always refresh staging rows and summary
     await loadStagingRows();
 
-    if (data) {
-      const row = Array.isArray(data) ? data[0] : data;
-      const imported = Number((row as any)?.imported_count ?? 0);
-      const skipped = Number((row as any)?.skipped_duplicate_count ?? 0);
-
-      const successMessage = [
-        `✅ Imported: ${imported} contact${imported !== 1 ? 's' : ''}`,
-        skipped > 0 ? `⏭️ Skipped: ${skipped} duplicate${skipped !== 1 ? 's' : ''}` : null,
-      ].filter(Boolean).join('\n');
-
-      toast({
-        title: 'Import Complete!',
-        description: successMessage,
-        duration: 6000,
-      });
-
-      // Notify parent to navigate to My Added tab
-      onImportComplete?.(imported, skipped);
-    }
+    // Notify parent
+    onImportComplete?.(imported, skipped);
     setImporting(false);
   };
 
