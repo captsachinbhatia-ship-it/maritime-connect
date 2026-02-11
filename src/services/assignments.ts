@@ -215,7 +215,7 @@ export async function upsertOwners(params: {
     // This prevents race conditions and ensures unique constraint is satisfied
     const { data: closedRows, error: closeAllError } = await supabase
       .from('contact_assignments')
-      .update({ status: 'CLOSED' })
+      .update({ status: 'CLOSED', ended_at: new Date().toISOString() })
       .eq('contact_id', contact_id)
       .eq('status', 'ACTIVE')
       .select('id');
@@ -334,7 +334,7 @@ export async function upsertAssignment(params: {
     // Close all existing ACTIVE rows for this contact
     const { error: closeError } = await supabase
       .from('contact_assignments')
-      .update({ status: 'CLOSED' })
+      .update({ status: 'CLOSED', ended_at: new Date().toISOString() })
       .eq('contact_id', contact_id)
       .eq('status', 'ACTIVE');
 
@@ -500,7 +500,7 @@ export async function updateStage(params: {
       console.log(`[updateStage] Closing assignment ${assignment.id} (${assignment.assignment_role})`);
       const { error: closeError } = await supabase
         .from('contact_assignments')
-        .update({ status: 'CLOSED' })
+        .update({ status: 'CLOSED', ended_at: now })
         .eq('id', assignment.id);
 
       if (closeError) {
@@ -615,7 +615,7 @@ export async function addAssignment(params: {
       console.log(`[addAssignment] Closing existing ${assignment_role} assignment:`, existingRoleAssignment.id);
       const { error: closeError } = await supabase
         .from('contact_assignments')
-        .update({ status: 'CLOSED' })
+        .update({ status: 'CLOSED', ended_at: new Date().toISOString() })
         .eq('id', existingRoleAssignment.id);
 
       if (closeError) {

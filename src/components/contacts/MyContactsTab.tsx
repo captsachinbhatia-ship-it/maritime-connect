@@ -103,8 +103,9 @@ export function MyContactsTab() {
         .from('contact_assignments')
         .select('stage')
         .eq('status', 'ACTIVE')
+        .is('ended_at', null)
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .in('assignment_role', ['primary']);
+        .ilike('assignment_role', 'primary');
 
       const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
       (allAssignments || []).forEach(a => {
@@ -132,8 +133,9 @@ export function MyContactsTab() {
         .from('contact_assignments')
         .select('contact_id, stage')
         .eq('status', 'ACTIVE')
+        .is('ended_at', null)
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .in('assignment_role', ['primary'])
+        .ilike('assignment_role', 'primary')
         .eq('stage', activeStage);
 
       if (assignmentError) {
@@ -152,12 +154,19 @@ export function MyContactsTab() {
       }
 
       // Fetch contacts from the view
-      const { data: contactsData, error: contactsError } = await supabase
+      let contactsQuery = supabase
         .from('contacts_with_primary_phone')
         .select('*')
         .in('id', contactIds)
-        .eq('is_active', true)
         .order('full_name', { ascending: true });
+
+      if (activeStage === 'INACTIVE') {
+        contactsQuery = contactsQuery.eq('is_active', false);
+      } else {
+        contactsQuery = contactsQuery.eq('is_active', true);
+      }
+
+      const { data: contactsData, error: contactsError } = await contactsQuery;
 
       if (contactsError) {
         setError(contactsError.message);

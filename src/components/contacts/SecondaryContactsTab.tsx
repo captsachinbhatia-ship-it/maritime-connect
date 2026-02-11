@@ -87,8 +87,9 @@ export function SecondaryContactsTab() {
         .from('contact_assignments')
         .select('contact_id')
         .eq('status', 'ACTIVE')
+        .is('ended_at', null)
         .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .in('assignment_role', ['secondary']);
+        .ilike('assignment_role', 'secondary');
 
       if (secondaryError) {
         setError(secondaryError.message);
@@ -111,7 +112,8 @@ export function SecondaryContactsTab() {
         .select('contact_id, stage, assigned_to_crm_user_id')
         .in('contact_id', contactIds)
         .eq('status', 'ACTIVE')
-        .in('assignment_role', ['primary']);
+        .is('ended_at', null)
+        .ilike('assignment_role', 'primary');
 
       if (primaryError) {
         setError(primaryError.message);
@@ -135,7 +137,6 @@ export function SecondaryContactsTab() {
         .from('contacts_with_primary_phone')
         .select('*')
         .in('id', contactIds)
-        .eq('is_active', true)
         .order('full_name', { ascending: true });
 
       if (contactsError) {
