@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
-import { Loader2, RefreshCw, BookOpen, Filter, AlertTriangle } from 'lucide-react';
+import { Loader2, RefreshCw, BookOpen, Filter, AlertTriangle, User, Users } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -89,6 +89,17 @@ export function DirectoryTab() {
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({ column: 'full_name', direction: 'asc' });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [savingCells, setSavingCells] = useState<Record<string, boolean>>({});
+
+  // Editing pin: keep row in position during assignment changes
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const editingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (editingTimerRef.current) clearTimeout(editingTimerRef.current);
+    };
+  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -199,8 +210,12 @@ export function DirectoryTab() {
       filtered = filtered.filter(c => (c.stage || '') === stageFilter);
     }
 
-    // Sort: unassigned first, then by sort config
+    // Sort: editing row pinned first, then unassigned, then by sort config
     filtered = [...filtered].sort((a, b) => {
+      // Pin editing row at top
+      if (a.id === editingContactId) return -1;
+      if (b.id === editingContactId) return 1;
+
       const aHasPrimary = !!ownersMap[a.id]?.primary?.assigned_to_crm_user_id;
       const bHasPrimary = !!ownersMap[b.id]?.primary?.assigned_to_crm_user_id;
 
@@ -240,7 +255,7 @@ export function DirectoryTab() {
     });
 
     return filtered;
-  }, [contacts, nameFilter, companyFilter, ownerFilter, stageFilter, sortConfig, companyNamesMap, ownersMap]);
+  }, [contacts, nameFilter, companyFilter, ownerFilter, stageFilter, sortConfig, companyNamesMap, ownersMap, editingContactId]);
 
   const handleSort = (column: SortColumn) => {
     setSortConfig(prev => ({
@@ -258,16 +273,34 @@ export function DirectoryTab() {
     }
   };
 
-  // Inline Primary/Secondary change — uses Supabase RPC
+  // Pin the editing contact row and clear after timeout
+  const pinEditingRow = (contactId: string) => {
+    if (editingTimerRef.current) clearTimeout(editingTimerRef.current);
+    setEditingContactId(contactId);
+    editingTimerRef.current = setTimeout(() => {
+      setEditingContactId(null);
+    }, 3000);
+  };
+
+  // Inline Primary/Secondary change — uses reassign RPC for already-assigned contacts
   const handleOwnerChange = async (
     contactId: string,
     role: 'primary' | 'secondary',
     newUserId: string,
   ) => {
     if (!crmUserId) return;
+
     const cellKey = `${contactId}-${role}`;
     const prevOwners = ownersMap[contactId];
+    const currentOwnerId = role === 'primary'
+      ? prevOwners?.primary?.assigned_to_crm_user_id
+      : prevOwners?.secondary?.assigned_to_crm_user_id;
+
+    // Skip if same owner
+    if (currentOwnerId === newUserId) return;
+
     setSavingCells(prev => ({ ...prev, [cellKey]: true }));
+    pinEditingRow(contactId);
 
     // Validate: secondary requires primary
     if (role === 'secondary') {
@@ -279,12 +312,31 @@ export function DirectoryTab() {
       }
     }
 
-    const { data: rpcResult, error: rpcError } = await supabase.rpc('assign_contact_owner', {
-      p_contact_id: contactId,
-      p_assigned_to: newUserId,
-      p_assignment_role: role.toUpperCase(),
-      p_assigned_by: crmUserId,
-    });
+    // Use reassign RPC for already-assigned contacts, assign RPC for new assignments
+    const isReassignment = !!currentOwnerId;
+
+    let rpcError: any = null;
+    let rpcResult: any = null;
+
+    if (isReassignment) {
+      const { data, error } = await supabase.rpc('reassign_contact_owner', {
+        p_contact_id: contactId,
+        p_new_owner_id: newUserId,
+        p_assignment_role: role.toUpperCase(),
+        p_reassigned_by: crmUserId,
+      });
+      rpcError = error;
+      rpcResult = data;
+    } else {
+      const { data, error } = await supabase.rpc('assign_contact_owner', {
+        p_contact_id: contactId,
+        p_assigned_to: newUserId,
+        p_assignment_role: role.toUpperCase(),
+        p_assigned_by: crmUserId,
+      });
+      rpcError = error;
+      rpcResult = data;
+    }
 
     setSavingCells(prev => ({ ...prev, [cellKey]: false }));
 
@@ -412,7 +464,7 @@ export function DirectoryTab() {
           <DirectorySummaryTable
             ownersMap={ownersMap}
             ownerNamesMap={ownerNamesMap}
-            contactCountryMap={contactCountryMap}
+            contacts={contacts}
           />
         )}
 
@@ -501,8 +553,18 @@ export function DirectoryTab() {
                       <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
                     <TableHead>Added By</TableHead>
-                    <TableHead>Primary Owner</TableHead>
-                    <TableHead>Secondary Owner</TableHead>
+                    <TableHead>
+                      <span className="flex items-center gap-1">
+                        <User className="h-3.5 w-3.5" />
+                        Primary Owner
+                      </span>
+                    </TableHead>
+                    <TableHead>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3.5 w-3.5" />
+                        Secondary Owner
+                      </span>
+                    </TableHead>
                     <TableHead>
                       <SortableHeader label="Stage" column="stage" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
@@ -519,6 +581,7 @@ export function DirectoryTab() {
                     const isSelected = selectedIds.includes(contact.id);
                     const hasPrimary = !!primaryOwnerId;
                     const rowSaving = isRowSaving(contact.id);
+                    const isEditing = contact.id === editingContactId;
 
                     return (
                       <TableRow
@@ -528,6 +591,7 @@ export function DirectoryTab() {
                           isSelected ? 'bg-primary/5' : '',
                           !hasPrimary ? 'bg-red-50 border-red-200' : '',
                           rowSaving ? 'opacity-50 pointer-events-none' : '',
+                          isEditing ? 'ring-2 ring-blue-400 bg-blue-50/30' : '',
                         ].filter(Boolean).join(' ')}
                       >
                         {isAdmin && (
@@ -564,95 +628,59 @@ export function DirectoryTab() {
                             : '—'}
                         </TableCell>
 
-                        {/* Primary Owner */}
+                        {/* Primary Owner — professional dropdown, no pill badges */}
                         <TableCell className="text-sm">
                           {isAdmin ? (
-                            <Select
-                              value={primaryOwnerId || '_unassigned'}
-                              onValueChange={(val) => {
-                                if (val !== '_unassigned') handleOwnerChange(contact.id, 'primary', val);
+                            <select
+                              value={primaryOwnerId || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val) handleOwnerChange(contact.id, 'primary', val);
                               }}
                               disabled={!!savingCells[`${contact.id}-primary`]}
+                              className="w-full max-w-[160px] px-2 py-1.5 text-sm border border-input rounded-md bg-background hover:border-blue-500 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <SelectTrigger className="h-7 w-[150px] text-xs border-gray-300 focus:ring-blue-500">
-                                <SelectValue>
-                                  {primaryOwnerId ? (
-                                    <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-0 text-xs font-medium">
-                                      {ownerNamesMap[primaryOwnerId] || 'Unknown'}
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-red-500 font-medium">Unassigned</span>
-                                  )}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="_unassigned" disabled>Unassigned</SelectItem>
-                                {crmUsers.map(u => (
-                                  <SelectItem key={u.id} value={u.id}>
-                                    {u.full_name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              <option value="">Unassigned</option>
+                              {crmUsers.map(u => (
+                                <option key={u.id} value={u.id}>{u.full_name}</option>
+                              ))}
+                            </select>
                           ) : primaryOwnerId ? (
-                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-0 font-medium">
-                              {ownerNamesMap[primaryOwnerId] || 'Unknown'}
-                            </Badge>
+                            <span className="text-sm">{ownerNamesMap[primaryOwnerId] || 'Unknown'}</span>
                           ) : (
-                            <Badge variant="outline" className="text-red-500 border-red-200 border-dashed font-normal">
-                              Unassigned
-                            </Badge>
+                            <span className="text-red-500 text-sm font-medium">Unassigned</span>
                           )}
                         </TableCell>
 
-                        {/* Secondary Owner — DISABLED if no primary */}
+                        {/* Secondary Owner — disabled if no primary */}
                         <TableCell className="text-sm">
                           {isAdmin ? (
                             hasPrimary ? (
-                              <Select
-                                value={secondaryOwnerId || '_none'}
-                                onValueChange={(val) => {
-                                  if (val === '_none') {
-                                    // Remove secondary via RPC
-                                    if (secondaryOwnerId) handleRemoveSecondary(contact.id);
+                              <select
+                                value={secondaryOwnerId || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === '' && secondaryOwnerId) {
+                                    handleRemoveSecondary(contact.id);
                                     return;
                                   }
-                                  if (val === primaryOwnerId) return; // safety
-                                  handleOwnerChange(contact.id, 'secondary', val);
+                                  if (val && val !== primaryOwnerId) {
+                                    handleOwnerChange(contact.id, 'secondary', val);
+                                  }
                                 }}
                                 disabled={!!savingCells[`${contact.id}-secondary`]}
+                                className="w-full max-w-[160px] px-2 py-1.5 text-sm border border-input rounded-md bg-muted/30 hover:border-gray-400 focus:border-gray-600 focus:ring-2 focus:ring-gray-200 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <SelectTrigger className="h-7 w-[150px] text-xs border-gray-300 focus:ring-blue-500">
-                                  <SelectValue>
-                                    {secondaryOwnerId ? (
-                                      <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-0 text-xs font-medium">
-                                        {ownerNamesMap[secondaryOwnerId] || 'Unknown'}
-                                      </Badge>
-                                    ) : (
-                                      <span className="text-muted-foreground">None</span>
-                                    )}
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="_none">None</SelectItem>
-                                  {crmUsers.map(u => (
-                                    <SelectItem
-                                      key={u.id}
-                                      value={u.id}
-                                      disabled={u.id === primaryOwnerId}
-                                    >
-                                      {u.full_name}{u.id === primaryOwnerId ? ' (Primary)' : ''}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                <option value="">None</option>
+                                {crmUsers.filter(u => u.id !== primaryOwnerId).map(u => (
+                                  <option key={u.id} value={u.id}>{u.full_name}</option>
+                                ))}
+                              </select>
                             ) : (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground cursor-not-allowed">
-                                    <Badge variant="outline" className="border-dashed text-muted-foreground text-xs font-normal opacity-50">
-                                      —
-                                    </Badge>
+                                  <span className="inline-flex items-center text-xs text-muted-foreground cursor-not-allowed opacity-50">
+                                    —
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -661,9 +689,7 @@ export function DirectoryTab() {
                               </Tooltip>
                             )
                           ) : secondaryOwnerId ? (
-                            <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-0 font-medium">
-                              {ownerNamesMap[secondaryOwnerId] || 'Unknown'}
-                            </Badge>
+                            <span className="text-sm">{ownerNamesMap[secondaryOwnerId] || 'Unknown'}</span>
                           ) : (
                             <span className="text-muted-foreground/50">—</span>
                           )}

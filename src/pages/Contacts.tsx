@@ -3,7 +3,6 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
-import { UnassignedContactsTab } from '@/components/contacts/UnassignedContactsTab';
 import { DirectoryTab } from '@/components/contacts/DirectoryTab';
 import { MyContactsTab } from '@/components/contacts/MyContactsTab';
 import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
@@ -14,9 +13,9 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, UserPlus, Users2, AlertTriangle, Clock, BookOpen, FileUp } from 'lucide-react';
 
-type TabType = 'directory' | 'my-contacts' | 'unassigned' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
+type TabType = 'directory' | 'my-contacts' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
 
-const ALL_TABS: TabType[] = ['directory', 'my-contacts', 'secondary', 'my-added', 'unassigned', 'duplicate-risk', 'pending-requests'];
+const ALL_TABS: TabType[] = ['directory', 'my-contacts', 'secondary', 'my-added', 'duplicate-risk', 'pending-requests'];
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -25,6 +24,8 @@ export default function Contacts() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const tabParam = searchParams.get('tab');
+    // Redirect old 'unassigned' tab to directory
+    if (tabParam === 'unassigned') return 'directory';
     if (tabParam && ALL_TABS.includes(tabParam as TabType)) return tabParam as TabType;
     return 'directory';
   });
@@ -33,15 +34,19 @@ export default function Contacts() {
   // Counts
   const [secondaryCount, setSecondaryCount] = useState(0);
   const [directoryCount, setDirectoryCount] = useState(0);
-  const [unassignedCount, setUnassignedCount] = useState(0);
   const [duplicateRiskCount, setDuplicateRiskCount] = useState(0);
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
   const [myAddedCount, setMyAddedCount] = useState(0);
   const [myContactsCount, setMyContactsCount] = useState(0);
 
-  // Sync tab from URL param (keep param in URL for deep-link / refresh)
+  // Sync tab from URL param
   useEffect(() => {
     const tabParam = searchParams.get('tab');
+    if (tabParam === 'unassigned') {
+      setActiveTab('directory');
+      setSearchParams({ tab: 'directory' }, { replace: true });
+      return;
+    }
     if (tabParam && ALL_TABS.includes(tabParam as TabType) && tabParam !== activeTab) {
       setActiveTab(tabParam as TabType);
     }
@@ -110,13 +115,6 @@ export default function Contacts() {
     setMyAddedCount(addedCount || 0);
 
     // Admin-only counts
-    try {
-      const { count: unCount } = await supabase
-        .from('v_unassigned_contacts')
-        .select('*', { count: 'exact', head: true });
-      setUnassignedCount(unCount || 0);
-    } catch { setUnassignedCount(0); }
-
     try {
       const { count: dupCount } = await supabase
         .from('contact_duplicate_risk')
@@ -216,14 +214,6 @@ export default function Contacts() {
             </TabsTrigger>
             {isAdmin && (
               <TabsTrigger
-                value="unassigned"
-                className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-              >
-                Unassigned ({unassignedCount})
-              </TabsTrigger>
-            )}
-            {isAdmin && (
-              <TabsTrigger
                 value="duplicate-risk"
                 className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
               >
@@ -258,12 +248,6 @@ export default function Contacts() {
         <TabsContent value="my-added" className="mt-4">
           <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadCounts} />
         </TabsContent>
-
-        {isAdmin && (
-          <TabsContent value="unassigned" className="mt-4">
-            <UnassignedContactsTab key={`unassigned-${refreshKey}`} />
-          </TabsContent>
-        )}
 
         {isAdmin && (
           <TabsContent value="duplicate-risk" className="mt-4">
