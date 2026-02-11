@@ -49,20 +49,6 @@ interface DirectoryContact {
   created_by_crm_user_id: string | null;
   stage: AssignmentStage | null;
   created_at: string | null;
-
-  // joined objects – Supabase may return object or array
-  companies?: any;
-  assigned_user?: any;
-  created_by_user?: any;
-
-  // other fields that may exist in your table but not required here
-  designation?: string | null;
-  ice_handle?: string | null;
-  preferred_channel?: string | null;
-  notes?: string | null;
-  country?: string | null;
-
-  // archive flags in your schema
   is_archived?: boolean | null;
   archived_at?: string | null;
 }
@@ -78,6 +64,8 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
   const [contacts, setContacts] = useState<DirectoryContact[]>([]);
   const [crmUsers, setCrmUsers] = useState<Array<{ id: string; full_name: string }>>([]);
+  const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
+  const [userNamesMap, setUserNamesMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   // filters
@@ -132,25 +120,10 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
         setCrmUsers(usersResult.data.map((u) => ({ id: u.id, full_name: u.full_name })));
       }
 
-      // Directory source of truth: contacts.assigned_to_user_id + joins
+      // Directory source of truth: contacts table (no FK joins)
       const { data, error } = await supabase
         .from("contacts")
-        .select(
-          `
-          id,
-          full_name,
-          company_id,
-          assigned_to_user_id,
-          created_by_crm_user_id,
-          stage,
-          created_at,
-          is_archived,
-          archived_at,
-          companies:company_id ( company_name ),
-          assigned_user:assigned_to_user_id ( full_name ),
-          created_by_user:created_by_crm_user_id ( full_name )
-        `,
-        )
+        .select("id, full_name, company_id, assigned_to_user_id, created_by_crm_user_id, stage, created_at, is_archived, archived_at")
         .eq("is_archived", false)
         .order("created_at", { ascending: false });
 
@@ -160,7 +133,26 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
         return;
       }
 
-      setContacts((data || []) as DirectoryContact[]);
+      const contactsList = (data || []) as DirectoryContact[];
+      setContacts(contactsList);
+
+      // Build lookup maps for company names and user names
+      const companyIds = Array.from(new Set(contactsList.map(c => c.company_id).filter(Boolean))) as string[];
+      const userIds = Array.from(new Set(contactsList.flatMap(c => [c.assigned_to_user_id, c.created_by_crm_user_id]).filter(Boolean))) as string[];
+
+      let cMap: Record<string, string> = {};
+      if (companyIds.length > 0) {
+        const { data: comps } = await supabase.from("companies").select("id, company_name").in("id", companyIds);
+        (comps || []).forEach((c: any) => { cMap[c.id] = c.company_name; });
+      }
+      setCompanyNamesMap(cMap);
+
+      let uMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: users } = await supabase.from("crm_users").select("id, full_name").in("id", userIds);
+        (users || []).forEach((u: any) => { uMap[u.id] = u.full_name; });
+      }
+      setUserNamesMap(uMap);
     } catch (e: any) {
       toast({ title: "Directory load failed", description: e?.message || "Unexpected error", variant: "destructive" });
       setContacts([]);
@@ -204,7 +196,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     if (companyFilter.trim()) {
       const s = companyFilter.toLowerCase().trim();
       filtered = filtered.filter((c) => {
-        const name = c.companies?.company_name || "";
+        const name = c.company_id ? (companyNamesMap[c.company_id] || "") : "";
         return name.toLowerCase().includes(s);
       });
     }
@@ -244,8 +236,8 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
           bVal = (b.full_name || "").toLowerCase();
           break;
         case "company":
-          aVal = (a.companies?.company_name || "").toLowerCase();
-          bVal = (b.companies?.company_name || "").toLowerCase();
+          aVal = (a.company_id ? companyNamesMap[a.company_id] || "" : "").toLowerCase();
+          bVal = (b.company_id ? companyNamesMap[b.company_id] || "" : "").toLowerCase();
           break;
         case "stage":
           aVal = (a.stage || "").toLowerCase();
@@ -264,7 +256,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     });
 
     return filtered;
-  }, [contacts, nameFilter, companyFilter, ownerFilter, addedByFilter, stageFilter, sortConfig, editingContactId]);
+  }, [contacts, nameFilter, companyFilter, ownerFilter, addedByFilter, stageFilter, sortConfig, editingContactId, companyNamesMap]);
 
   const handleSort = (column: SortColumn) => {
     setSortConfig((prev) => ({
@@ -644,8 +636,8 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                           </TableCell>
 
                           <TableCell>
-                            {contact.companies?.company_name ? (
-                              <Badge variant="secondary">{contact.companies.company_name}</Badge>
+                            {contact.company_id && companyNamesMap[contact.company_id] ? (
+                              <Badge variant="secondary">{companyNamesMap[contact.company_id]}</Badge>
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
@@ -653,7 +645,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
                           {/* Added By */}
                           <TableCell className="text-xs text-muted-foreground">
-                            {contact.created_by_user?.full_name || "—"}
+                            {contact.created_by_crm_user_id ? (userNamesMap[contact.created_by_crm_user_id] || "—") : "—"}
                           </TableCell>
 
                           {/* Owner */}
@@ -676,7 +668,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                                 ))}
                               </select>
                             ) : primaryOwnerId ? (
-                              <span className="text-sm">{contact.assigned_user?.full_name || "Unknown"}</span>
+                              <span className="text-sm">{contact.assigned_to_user_id ? (userNamesMap[contact.assigned_to_user_id] || "Unknown") : "Unknown"}</span>
                             ) : (
                               <span className="text-red-500 text-sm font-medium">Unassigned</span>
                             )}
