@@ -342,7 +342,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       ? prevOwners?.primary?.assigned_to_crm_user_id
       : prevOwners?.secondary?.assigned_to_crm_user_id;
 
-    // Skip if same owner
+    // Idempotent: skip if same owner
     if (currentOwnerId === newUserId) return;
 
     setSavingCells(prev => ({ ...prev, [cellKey]: true }));
@@ -360,15 +360,23 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
     try {
       const now = new Date().toISOString();
-      const roleUpper = role === 'primary' ? 'primary' : 'secondary';
+      // DB accepts lowercase role values via lower(trim()) constraint
+      const roleLower = role === 'primary' ? 'primary' : 'secondary';
 
-      // Step 1: Close existing ACTIVE assignment for this role
+      // Step 1: Close existing ACTIVE assignment for this contact+role
+      // Must match both status=ACTIVE AND ended_at IS NULL (DB definition of active)
+      // Use case-insensitive match by trying both cases
       const { error: closeError } = await supabase
         .from('contact_assignments')
-        .update({ status: 'CLOSED', ended_at: now })
+        .update({
+          status: 'CLOSED',
+          ended_at: now,
+          updated_by_crm_user_id: crmUserId,
+        })
         .eq('contact_id', contactId)
         .eq('status', 'ACTIVE')
-        .eq('assignment_role', roleUpper);
+        .is('ended_at', null)
+        .ilike('assignment_role', roleLower);
 
       if (closeError) {
         console.error('[handleOwnerChange] Close error:', closeError);
@@ -377,26 +385,29 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
         return;
       }
 
-      // Step 2: Get current stage from existing primary assignment (preserve it)
-      let currentStage = 'COLD_CALLING';
+      // Step 2: Get current stage from existing contact (preserve it)
+      let currentStage = 'ASPIRATION';
       const existingContact = contacts.find(c => c.id === contactId);
       if (existingContact?.stage) {
         currentStage = existingContact.stage;
       }
 
-      // Step 3: Insert new ACTIVE assignment
+      // Step 3: Insert new ACTIVE assignment with valid values
       const { error: insertError } = await supabase
         .from('contact_assignments')
         .insert({
           contact_id: contactId,
           assigned_to_crm_user_id: newUserId,
           assigned_by_crm_user_id: crmUserId,
-          assignment_role: roleUpper,
+          assignment_role: roleLower,
           stage: currentStage,
           status: 'ACTIVE',
           assigned_at: now,
+          ended_at: null,
           stage_changed_at: now,
           stage_changed_by_crm_user_id: crmUserId,
+          created_by_crm_user_id: crmUserId,
+          updated_by_crm_user_id: crmUserId,
         });
 
       if (insertError) {
@@ -424,23 +435,35 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     }
   };
 
-  // Remove secondary owner via RPC
+  // Remove secondary owner
   const handleRemoveSecondary = async (contactId: string) => {
     if (!crmUserId) return;
     const cellKey = `${contactId}-secondary`;
     setSavingCells(prev => ({ ...prev, [cellKey]: true }));
 
-    const { error: rpcError } = await supabase.rpc('remove_secondary_owner', {
-      p_contact_id: contactId,
-      p_removed_by: crmUserId,
-    });
+    // Close existing active secondary assignment directly
+    const now = new Date().toISOString();
+    const { error: closeError } = await supabase
+      .from('contact_assignments')
+      .update({
+        status: 'CLOSED',
+        ended_at: now,
+        updated_by_crm_user_id: crmUserId,
+      })
+      .eq('contact_id', contactId)
+      .eq('status', 'ACTIVE')
+      .is('ended_at', null)
+      .ilike('assignment_role', 'secondary');
 
     setSavingCells(prev => ({ ...prev, [cellKey]: false }));
 
-    if (rpcError) {
-      toast({ title: 'Remove failed', description: rpcError.message, variant: 'destructive' });
+    if (closeError) {
+      console.error('[handleRemoveSecondary] Error:', closeError);
+      toast({ title: 'Remove failed', description: 'Could not remove secondary owner. Please retry.', variant: 'destructive' });
       return;
     }
+
+    toast({ title: 'Secondary owner removed' });
 
     // Refetch owners
     const { data: refreshed } = await getOwnersForContacts([contactId]);

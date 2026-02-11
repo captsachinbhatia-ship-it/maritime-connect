@@ -36,9 +36,10 @@ export function DirectorySummaryTable({
   ownerNamesMap,
   contacts,
 }: DirectorySummaryTableProps) {
-  // Count unassigned (contacts without a primary owner)
+  // Count unassigned (non-archived contacts without a primary owner)
   const unassignedCount = useMemo(() => {
     return contacts.filter(c => {
+      if ((c as any).is_archived) return false;
       const owners = ownersMap[c.id];
       return !owners?.primary?.assigned_to_crm_user_id;
     }).length;

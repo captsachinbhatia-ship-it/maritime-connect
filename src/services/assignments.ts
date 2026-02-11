@@ -74,7 +74,8 @@ export async function getContactOwners(contactId: string): Promise<{
       .select('*')
       .eq('contact_id', contactId)
       .eq('status', 'ACTIVE')
-      .in('assignment_role', ['primary', 'secondary']);
+      .is('ended_at', null)
+      .order('assigned_at', { ascending: false });
 
     if (error) {
       return { data: null, error: error.message };
@@ -86,10 +87,10 @@ export async function getContactOwners(contactId: string): Promise<{
     };
 
     data?.forEach(assignment => {
-      const role = (assignment.assignment_role || '').toLowerCase();
-      if (role === 'primary') {
+      const role = (assignment.assignment_role || '').toLowerCase().trim();
+      if (role === 'primary' && !owners.primary) {
         owners.primary = assignment as ContactAssignment;
-      } else if (role === 'secondary') {
+      } else if (role === 'secondary' && !owners.secondary) {
         owners.secondary = assignment as ContactAssignment;
       }
     });
@@ -113,14 +114,17 @@ export async function getOwnersForContacts(contactIds: string[]): Promise<{
       return { data: {}, error: null };
     }
 
+    // Fetch ALL active assignments (no role filter — handle case-insensitive in JS)
     const { data, error } = await supabase
       .from('contact_assignments')
       .select('*')
       .in('contact_id', contactIds)
       .eq('status', 'ACTIVE')
-      .in('assignment_role', ['primary', 'secondary']);
+      .is('ended_at', null)
+      .order('assigned_at', { ascending: false });
 
     if (error) {
+      console.error('[getOwnersForContacts] Query error:', error);
       return { data: null, error: error.message };
     }
 
@@ -136,10 +140,11 @@ export async function getOwnersForContacts(contactIds: string[]): Promise<{
       if (!ownersMap[contactId]) {
         ownersMap[contactId] = { primary: null, secondary: null };
       }
-      const role = (assignment.assignment_role || '').toLowerCase();
-      if (role === 'primary') {
+      const role = (assignment.assignment_role || '').toLowerCase().trim();
+      // Take the first (latest by assigned_at) for each role
+      if (role === 'primary' && !ownersMap[contactId].primary) {
         ownersMap[contactId].primary = assignment as ContactAssignment;
-      } else if (role === 'secondary') {
+      } else if (role === 'secondary' && !ownersMap[contactId].secondary) {
         ownersMap[contactId].secondary = assignment as ContactAssignment;
       }
     });
