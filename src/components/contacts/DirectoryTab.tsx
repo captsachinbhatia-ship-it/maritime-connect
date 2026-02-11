@@ -626,6 +626,8 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                     <TableHead>
                       <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Added By</TableHead>
                     <TableHead>
                       <span className="flex items-center gap-1">
@@ -696,6 +698,38 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+
+                        {/* Phone */}
+                        <TableCell className="text-xs text-muted-foreground">
+                          {contact.phone ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="max-w-[120px] truncate block">{contact.phone.split(',')[0].trim()}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {contact.phone.split(',').map((p, i) => (
+                                  <div key={i}>{p.trim()}</div>
+                                ))}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : '—'}
+                        </TableCell>
+
+                        {/* Email */}
+                        <TableCell className="text-xs text-muted-foreground">
+                          {contact.email ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="max-w-[140px] truncate block">{contact.email.split(',')[0].trim()}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {contact.email.split(',').map((e, i) => (
+                                  <div key={i}>{e.trim()}</div>
+                                ))}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : '—'}
                         </TableCell>
 
                         {/* Added By */}
