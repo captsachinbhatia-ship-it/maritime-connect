@@ -44,6 +44,7 @@ import { saveContactPhones, ContactPhoneInput } from '@/services/contactPhones';
 import { fetchContactsForDuplicateCheck, ContactForDuplicateCheck } from '@/services/duplicateContacts';
 import { AddCompanyMiniModal } from './AddCompanyMiniModal';
 import { PhoneInput } from '@/components/ui/phone-input';
+import { useToast } from '@/hooks/use-toast';
 import { DuplicateMatchesPanel, DuplicateMatch } from './DuplicateMatchesPanel';
 import { HighMatchConfirmDialog } from './HighMatchConfirmDialog';
 import {
@@ -98,6 +99,7 @@ interface PhoneRow {
 
 export function AddContactModal({ onSuccess }: AddContactModalProps) {
   const { user, crmUser } = useAuth();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -424,9 +426,15 @@ export function AddContactModal({ onSuccess }: AddContactModalProps) {
       setEmailInput('');
       setEmailError(null);
       setOpen(false);
+      toast({
+        title: 'Contact created',
+        description: `"${data.full_name}" has been added successfully.`,
+      });
       onSuccess();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      const message = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setSubmitError(message);
+      toast({ title: 'Error creating contact', description: message, variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
