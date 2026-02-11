@@ -163,6 +163,10 @@ export default function Companies() {
         company={selectedCompany}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        onCompanyDeleted={() => {
+          setDrawerOpen(false);
+          fetchCompanies();
+        }}
       />
 
       <AddCompanyModal

@@ -328,7 +328,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     }, 3000);
   };
 
-  // Inline Primary/Secondary change — uses reassign RPC for already-assigned contacts
+  // Inline Primary/Secondary change — uses close-then-insert pattern to avoid constraint errors
   const handleOwnerChange = async (
     contactId: string,
     role: 'primary' | 'secondary',
@@ -358,52 +358,69 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       }
     }
 
-    // Use reassign RPC for already-assigned contacts, assign RPC for new assignments
-    const isReassignment = !!currentOwnerId;
+    try {
+      const now = new Date().toISOString();
+      const roleUpper = role === 'primary' ? 'primary' : 'secondary';
 
-    let rpcError: any = null;
-    let rpcResult: any = null;
+      // Step 1: Close existing ACTIVE assignment for this role
+      const { error: closeError } = await supabase
+        .from('contact_assignments')
+        .update({ status: 'CLOSED', ended_at: now })
+        .eq('contact_id', contactId)
+        .eq('status', 'ACTIVE')
+        .eq('assignment_role', roleUpper);
 
-    if (isReassignment) {
-      const { data, error } = await supabase.rpc('reassign_contact_owner', {
-        p_contact_id: contactId,
-        p_new_owner_id: newUserId,
-        p_assignment_role: role.toUpperCase(),
-        p_reassigned_by: crmUserId,
-      });
-      rpcError = error;
-      rpcResult = data;
-    } else {
-      const { data, error } = await supabase.rpc('assign_contact_owner', {
-        p_contact_id: contactId,
-        p_assigned_to: newUserId,
-        p_assignment_role: role.toUpperCase(),
-        p_assigned_by: crmUserId,
-      });
-      rpcError = error;
-      rpcResult = data;
-    }
+      if (closeError) {
+        console.error('[handleOwnerChange] Close error:', closeError);
+        toast({ title: 'Assignment failed', description: 'Could not update assignment. Please retry.', variant: 'destructive' });
+        setSavingCells(prev => ({ ...prev, [cellKey]: false }));
+        return;
+      }
 
-    setSavingCells(prev => ({ ...prev, [cellKey]: false }));
+      // Step 2: Get current stage from existing primary assignment (preserve it)
+      let currentStage = 'COLD_CALLING';
+      const existingContact = contacts.find(c => c.id === contactId);
+      if (existingContact?.stage) {
+        currentStage = existingContact.stage;
+      }
 
-    if (rpcError) {
-      toast({ title: 'Save failed', description: rpcError.message, variant: 'destructive' });
-      setOwnersMap(prev => ({ ...prev, [contactId]: prevOwners || { primary: null, secondary: null } }));
-      return;
-    }
+      // Step 3: Insert new ACTIVE assignment
+      const { error: insertError } = await supabase
+        .from('contact_assignments')
+        .insert({
+          contact_id: contactId,
+          assigned_to_crm_user_id: newUserId,
+          assigned_by_crm_user_id: crmUserId,
+          assignment_role: roleUpper,
+          stage: currentStage,
+          status: 'ACTIVE',
+          assigned_at: now,
+          stage_changed_at: now,
+          stage_changed_by_crm_user_id: crmUserId,
+        });
 
-    if (rpcResult && typeof rpcResult === 'object' && !rpcResult.success) {
-      toast({ title: 'Save failed', description: rpcResult.message || rpcResult.error || 'Unknown error', variant: 'destructive' });
-      return;
-    }
+      if (insertError) {
+        console.error('[handleOwnerChange] Insert error:', insertError);
+        toast({ title: 'Assignment failed', description: 'Could not save assignment. Please retry.', variant: 'destructive' });
+        setSavingCells(prev => ({ ...prev, [cellKey]: false }));
+        return;
+      }
 
-    const userName = crmUsers.find(u => u.id === newUserId)?.full_name || 'Unknown';
-    setOwnerNamesMap(prev => ({ ...prev, [newUserId]: userName }));
+      toast({ title: 'Assignment updated' });
 
-    // Refetch owners for this contact
-    const { data: refreshed } = await getOwnersForContacts([contactId]);
-    if (refreshed) {
-      setOwnersMap(prev => ({ ...prev, ...refreshed }));
+      const userName = crmUsers.find(u => u.id === newUserId)?.full_name || 'Unknown';
+      setOwnerNamesMap(prev => ({ ...prev, [newUserId]: userName }));
+
+      // Refetch owners for this contact
+      const { data: refreshed } = await getOwnersForContacts([contactId]);
+      if (refreshed) {
+        setOwnersMap(prev => ({ ...prev, ...refreshed }));
+      }
+    } catch (err) {
+      console.error('[handleOwnerChange] Unexpected error:', err);
+      toast({ title: 'Assignment failed', description: 'An unexpected error occurred. Please retry.', variant: 'destructive' });
+    } finally {
+      setSavingCells(prev => ({ ...prev, [cellKey]: false }));
     }
   };
 
@@ -567,6 +584,40 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
           />
         )}
 
+        {/* Owner filter tabs (admin-only) */}
+        {isAdmin && !isLoading && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            <span className="text-xs font-medium text-muted-foreground mr-1">Filter by owner:</span>
+            <Badge
+              variant={ownerFilter === 'unassigned' ? 'default' : 'outline'}
+              className={`cursor-pointer text-xs px-2.5 py-1 transition-colors ${ownerFilter === 'unassigned' ? 'bg-red-600 hover:bg-red-700' : 'border-red-300 text-red-600 hover:bg-red-50'}`}
+              onClick={() => setOwnerFilter(ownerFilter === 'unassigned' ? 'all' : 'unassigned')}
+            >
+              ⚠ Unassigned ({contacts.filter(c => !ownersMap[c.id]?.primary?.assigned_to_crm_user_id).length})
+            </Badge>
+            {crmUsers.map(u => {
+              const pCount = Object.values(ownersMap).filter(o => o.primary?.assigned_to_crm_user_id === u.id).length;
+              const sCount = Object.values(ownersMap).filter(o => o.secondary?.assigned_to_crm_user_id === u.id).length;
+              const isActive = ownerFilter === u.id;
+              return (
+                <Badge
+                  key={u.id}
+                  variant={isActive ? 'default' : 'outline'}
+                  className={`cursor-pointer text-xs px-2.5 py-1 transition-colors ${isActive ? '' : 'hover:bg-primary/10'}`}
+                  onClick={() => setOwnerFilter(isActive ? 'all' : u.id)}
+                >
+                  {u.full_name} (P:{pCount} / S:{sCount})
+                </Badge>
+              );
+            })}
+            {ownerFilter !== 'all' && (
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground" onClick={() => setOwnerFilter('all')}>
+                ✕ Reset
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Header filters */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <Input
@@ -581,25 +632,24 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
             onChange={(e) => setCompanyFilter(e.target.value)}
             className="h-8 w-[150px] text-sm"
           />
-          <div className="flex items-center gap-1.5">
-            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-              <SelectTrigger className="h-8 w-[180px] text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Owners</SelectItem>
-                <SelectItem value="unassigned" className="text-red-600 font-medium">
-                  ⚠ Unassigned ({contacts.filter(c => !ownersMap[c.id]?.primary?.assigned_to_crm_user_id).length})
-                </SelectItem>
-                {crmUsers.map(u => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.full_name} ({ownerCounts[u.id] || 0})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!isAdmin && (
+            <div className="flex items-center gap-1.5">
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                <SelectTrigger className="h-8 w-[180px] text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Owners</SelectItem>
+                  {crmUsers.map(u => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.full_name} ({ownerCounts[u.id] || 0})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {/* Stage filter buttons with counts */}
           <div className="flex items-center gap-1.5 ml-auto flex-wrap">
             <Button
@@ -654,8 +704,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                     <TableHead>
                       <SortableHeader label="Company" column="company" currentSort={sortConfig} onSort={handleSort} />
                     </TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Email</TableHead>
                     <TableHead>Added By</TableHead>
                     <TableHead>
                       <span className="flex items-center gap-1">
@@ -726,39 +774,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
-                        </TableCell>
-
-                        {/* Phone - from contact_phones primary */}
-                        <TableCell className="text-sm text-muted-foreground">
-                          {(() => {
-                            const primaryPhone = primaryPhoneMap[contact.id];
-                            if (primaryPhone) {
-                              const code = contact.country_code ? `+${contact.country_code.replace(/^\+/, '')} ` : '';
-                              return <span>{code}{primaryPhone}</span>;
-                            }
-                            // Fallback to contacts.phone
-                            if (contact.phone) {
-                              const code = contact.country_code ? `+${contact.country_code.replace(/^\+/, '')} ` : '';
-                              return <span>{code}{contact.phone.split(',')[0].trim()}</span>;
-                            }
-                            return '—';
-                          })()}
-                        </TableCell>
-
-                        {/* Email */}
-                        <TableCell className="text-xs text-muted-foreground">
-                          {contact.email ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="max-w-[140px] truncate block">{contact.email.split(',')[0].trim()}</span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {contact.email.split(',').map((e, i) => (
-                                  <div key={i}>{e.trim()}</div>
-                                ))}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : '—'}
                         </TableCell>
 
                         {/* Added By */}
