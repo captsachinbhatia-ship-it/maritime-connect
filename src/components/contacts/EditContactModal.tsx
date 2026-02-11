@@ -90,44 +90,50 @@
      }
    }, [contact, open, form]);
  
-   const handleSubmit = async (data: ContactFormData) => {
-     if (!contact) return;
- 
-     setIsSubmitting(true);
-     setSubmitError(null);
- 
-     try {
-       const { error } = await supabase
-         .from('contacts')
-         .update({
-           full_name: data.full_name,
-           designation: data.designation || null,
-           email: data.email || null,
-           ice_handle: data.ice_handle || null,
-           preferred_channel: data.preferred_channel || null,
-           notes: data.notes || null,
-         })
-         .eq('id', contact.id);
- 
-       if (error) {
-         setSubmitError(error.message);
-         setIsSubmitting(false);
-         return;
-       }
- 
-       toast({
-         title: 'Contact updated',
-         description: 'The contact has been updated successfully.',
-       });
- 
-       onSuccess();
-       onOpenChange(false);
-     } catch (err) {
-       setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred');
-     } finally {
-       setIsSubmitting(false);
-     }
-   };
+  const handleSubmit = async (data: ContactFormData) => {
+    if (!contact) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const { data: returnedId, error: rpcError } = await supabase.rpc('update_contact_safe', {
+        p_contact_id: contact.id,
+        p_full_name: data.full_name || null,
+        p_company_name: null,
+        p_designation: data.designation || null,
+        p_email: data.email || null,
+        p_country_code: null,
+        p_phone: null,
+        p_phone_type: null,
+        p_ice_handle: data.ice_handle || null,
+        p_preferred_channel: data.preferred_channel || null,
+        p_notes: data.notes || null,
+      });
+
+      if (rpcError) {
+        setSubmitError(rpcError.message);
+        toast({ title: 'Update failed', description: rpcError.message, variant: 'destructive' });
+        setIsSubmitting(false);
+        return;
+      }
+
+      console.log('[EditContact] RPC update_contact_safe returned:', returnedId);
+
+      toast({
+        title: 'Contact updated',
+        description: 'The contact has been updated successfully.',
+      });
+
+      onSuccess();
+      onOpenChange(false);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      toast({ title: 'Update failed', description: err instanceof Error ? err.message : 'Unexpected error', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
  
    const handleClose = (isOpen: boolean) => {
      if (!isOpen) {
