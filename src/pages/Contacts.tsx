@@ -73,38 +73,46 @@ export default function Contacts() {
 
   // Fetch counts from unified view
   const loadCounts = useCallback(async () => {
-    if (!crmUser?.id) return;
-    const currentCrmUserId = crmUser.id;
+    if (!crmUser) return;
 
     try {
-      // Directory (global safe)
-      const { count: dirCount } = await supabase
-        .from("v_directory_contacts_ro")
-        .select("contact_id", { count: "exact", head: true });
+      // 1️⃣ Global totals (Admin-level truth)
+      const { data: summaryData } = await supabase
+        .from("v_admin_contact_summary")
+        .select("*")
+        .eq("sort_key", 0)
+        .maybeSingle();
 
-      // My Primary (scoped)
+      if (summaryData) {
+        setDirectoryCount(summaryData.clean_active_contacts || 0);
+      }
+
+      // 2️⃣ My Primary
       const { count: primaryCount } = await supabase
         .from("v_my_primary_contacts")
-        .select("contact_id", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true });
 
-      // My Secondary (scoped)
+      setMyPrimaryCount(primaryCount || 0);
+
+      // 3️⃣ My Secondary
       const { count: secondaryCount } = await supabase
         .from("v_my_secondary_contacts")
-        .select("contact_id", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true });
 
-      // My Added (creator-owned)
+      setMySecondaryCount(secondaryCount || 0);
+
+      // 4️⃣ My Added
       const { count: addedCount } = await supabase
         .from("contacts")
-        .select("id", { count: "exact", head: true })
-        .eq("created_by_crm_user_id", currentCrmUserId)
-        .eq("is_deleted", false);
+        .select("*", { count: "exact", head: true })
+        .eq("created_by_crm_user_id", crmUser.id)
+        .eq("is_deleted", false)
+        .eq("is_archived", false)
+        .eq("is_active", true);
 
-      setDirectoryCount(dirCount ?? 0);
-      setMyPrimaryCount(primaryCount ?? 0);
-      setMySecondaryCount(secondaryCount ?? 0);
-      setMyAddedCount(addedCount ?? 0);
-    } catch {
-      // silent
+      setMyAddedCount(addedCount || 0);
+    } catch (e) {
+      console.error("Count load failed", e);
     }
   }, [crmUser]);
 
