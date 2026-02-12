@@ -21,6 +21,7 @@ import MyFollowups from "./pages/MyFollowups";
 import FollowupsOversight from "./pages/FollowupsOversight";
 import AdminUsers from "./pages/AdminUsers";
 import DailyWorkDone from "./pages/DailyWorkDone";
+import AdminSummary from "./pages/AdminSummary";
 import BulkImport from "./pages/BulkImport";
 
 import CompleteProfile from "./pages/CompleteProfile";
@@ -61,6 +62,7 @@ const App = () => {
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="admin-users" element={<AdminUsers />} />
                 <Route path="admin/daily-work-done" element={<DailyWorkDone />} />
+                <Route path="admin/summary" element={<AdminSummary />} />
                 <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
                 <Route path="enquiries/new" element={<CreateEnquiry />} />
