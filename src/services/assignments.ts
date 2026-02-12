@@ -1,186 +1,263 @@
-import { useState, useEffect } from "react";
-import { Loader2, AlertCircle, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { listCrmUsersForAssignment, CrmUserForAssignment } from "@/services/profiles";
-import { upsertOwners, ContactOwners } from "@/services/assignments";
-import { toast } from "@/hooks/use-toast";
+import { supabase } from '@/lib/supabaseClient';
 
-interface AssignOwnersModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  contactId: string;
-  contactName: string;
-  currentOwners: ContactOwners | null;
-  onSuccess: () => void;
+export type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+export type AssignmentRole = 'primary' | 'secondary';
+
+export interface ContactAssignment {
+  id: string;
+  contact_id: string;
+  assigned_to_crm_user_id: string | null;
+  assigned_by_crm_user_id: string | null;
+  assignment_role: string;
+  stage: string | null;
+  status: string;
+  created_at: string;
+  assigned_at: string | null;
+  ended_at: string | null;
+  stage_changed_at: string | null;
+  stage_changed_by: string | null;
 }
 
-const NONE_VALUE = "__none__";
+export interface ContactOwners {
+  primary: ContactAssignment | null;
+  secondary: ContactAssignment | null;
+}
 
-export function AssignOwnersModal({
-  open,
-  onOpenChange,
-  contactId,
-  contactName,
-  currentOwners,
-  onSuccess,
-}: AssignOwnersModalProps) {
-  const [crmUsers, setCrmUsers] = useState<CrmUserForAssignment[]>([]);
-  const [primaryOwnerId, setPrimaryOwnerId] = useState<string>("");
-  const [secondaryOwnerId, setSecondaryOwnerId] = useState<string>(NONE_VALUE);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+// --------------- Queries ---------------
 
-  useEffect(() => {
-    if (!open) return;
+export async function getAssignmentsByContact(
+  contactId: string
+): Promise<{ data: ContactAssignment[] | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('contact_assignments')
+    .select('*')
+    .eq('contact_id', contactId)
+    .order('created_at', { ascending: false });
 
-    loadCrmUsers();
+  if (error) return { data: null, error: error.message };
+  return { data: data as ContactAssignment[], error: null };
+}
 
-    // Pre-fill with current owners
-    setPrimaryOwnerId(currentOwners?.primary?.assigned_to_crm_user_id || "");
-    setSecondaryOwnerId(currentOwners?.secondary?.assigned_to_crm_user_id || NONE_VALUE);
-  }, [open, currentOwners]);
+export async function getContactOwners(
+  contactId: string
+): Promise<{ data: ContactOwners | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('contact_assignments')
+    .select('*')
+    .eq('contact_id', contactId)
+    .eq('status', 'ACTIVE')
+    .is('ended_at', null);
 
-  const loadCrmUsers = async () => {
-    setIsLoading(true);
-    setError(null);
+  if (error) return { data: null, error: error.message };
 
-    const result = await listCrmUsersForAssignment();
+  const rows = (data || []) as ContactAssignment[];
+  const primary = rows.find((r) => r.assignment_role?.toLowerCase() === 'primary') || null;
+  const secondary = rows.find((r) => r.assignment_role?.toLowerCase() === 'secondary') || null;
 
-    if (result.error) setError(result.error);
-    else setCrmUsers(result.data || []);
+  return { data: { primary, secondary }, error: null };
+}
 
-    setIsLoading(false);
-  };
+export async function getOwnersForContacts(
+  contactIds: string[]
+): Promise<{ data: Record<string, ContactOwners> | null; error: string | null }> {
+  if (contactIds.length === 0) return { data: {}, error: null };
 
-  const handleSave = async () => {
-    if (!primaryOwnerId) {
-      setError("Please select a Primary Owner");
-      return;
+  const { data, error } = await supabase
+    .from('contact_assignments')
+    .select('*')
+    .in('contact_id', contactIds)
+    .eq('status', 'ACTIVE')
+    .is('ended_at', null);
+
+  if (error) return { data: null, error: error.message };
+
+  const map: Record<string, ContactOwners> = {};
+  for (const row of (data || []) as ContactAssignment[]) {
+    if (!map[row.contact_id]) map[row.contact_id] = { primary: null, secondary: null };
+    const role = row.assignment_role?.toLowerCase();
+    if (role === 'primary') map[row.contact_id].primary = row;
+    else if (role === 'secondary') map[row.contact_id].secondary = row;
+  }
+
+  return { data: map, error: null };
+}
+
+// --------------- Mutations ---------------
+
+/** Close-then-insert pattern for primary + optional secondary */
+export async function upsertOwners(params: {
+  contact_id: string;
+  primary_owner_id: string;
+  secondary_owner_id?: string | null;
+  stage?: AssignmentStage;
+}): Promise<{ data: boolean | null; error: string | null }> {
+  const { contact_id, primary_owner_id, secondary_owner_id } = params;
+  const now = new Date().toISOString();
+
+  try {
+    // Resolve current user for assigned_by
+    const { data: { user } } = await supabase.auth.getUser();
+    let assignedByCrmUserId: string | null = null;
+    if (user) {
+      const { data: profile } = await supabase
+        .from('crm_users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+      assignedByCrmUserId = profile?.id || null;
     }
 
-    if (secondaryOwnerId !== NONE_VALUE && primaryOwnerId === secondaryOwnerId) {
-      setError("Primary and Secondary owner cannot be the same user.");
-      return;
+    // Determine stage: use provided, or preserve existing, or default
+    let stage: string = params.stage || 'COLD_CALLING';
+    if (!params.stage) {
+      const { data: existing } = await supabase
+        .from('contact_assignments')
+        .select('stage')
+        .eq('contact_id', contact_id)
+        .eq('status', 'ACTIVE')
+        .is('ended_at', null)
+        .ilike('assignment_role', 'primary')
+        .maybeSingle();
+      if (existing?.stage) stage = existing.stage;
     }
 
-    setIsSaving(true);
-    setError(null);
+    // Close all existing ACTIVE assignments for this contact
+    await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', contact_id)
+      .eq('status', 'ACTIVE')
+      .is('ended_at', null);
 
-    const result = await upsertOwners({
-      contact_id: contactId,
-      primary_owner_id: primaryOwnerId,
-      secondary_owner_id: secondaryOwnerId === NONE_VALUE ? null : secondaryOwnerId,
-      // stage intentionally not set here; service preserves existing stage or defaults
+    // Insert primary
+    const { error: primaryError } = await supabase
+      .from('contact_assignments')
+      .insert({
+        contact_id,
+        assigned_to_crm_user_id: primary_owner_id,
+        assigned_by_crm_user_id: assignedByCrmUserId,
+        assignment_role: 'primary',
+        stage,
+        status: 'ACTIVE',
+      });
+
+    if (primaryError) return { data: null, error: primaryError.message };
+
+    // Insert secondary if provided
+    if (secondary_owner_id) {
+      const { error: secondaryError } = await supabase
+        .from('contact_assignments')
+        .insert({
+          contact_id,
+          assigned_to_crm_user_id: secondary_owner_id,
+          assigned_by_crm_user_id: assignedByCrmUserId,
+          assignment_role: 'secondary',
+          stage,
+          status: 'ACTIVE',
+        });
+
+      if (secondaryError) return { data: null, error: secondaryError.message };
+    }
+
+    return { data: true, error: null };
+  } catch (e: any) {
+    return { data: null, error: e?.message || 'Unexpected error in upsertOwners' };
+  }
+}
+
+/** Simple single-row upsert for quick assignment (e.g. from Unassigned list) */
+export async function upsertAssignment(params: {
+  contact_id: string;
+  assigned_to_crm_user_id: string;
+  stage: string;
+}): Promise<{ data: boolean | null; error: string | null }> {
+  return upsertOwners({
+    contact_id: params.contact_id,
+    primary_owner_id: params.assigned_to_crm_user_id,
+    stage: params.stage as AssignmentStage,
+  });
+}
+
+/** Add a single assignment (primary or secondary) without closing others of different role */
+export async function addAssignment(params: {
+  contact_id: string;
+  assigned_to_crm_user_id: string;
+  assignment_role: AssignmentRole;
+  stage: AssignmentStage;
+}): Promise<{ data: boolean | null; error: string | null }> {
+  const now = new Date().toISOString();
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    let assignedByCrmUserId: string | null = null;
+    if (user) {
+      const { data: profile } = await supabase
+        .from('crm_users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+      assignedByCrmUserId = profile?.id || null;
+    }
+
+    // Close existing ACTIVE assignment of the SAME role for this contact
+    await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', params.contact_id)
+      .eq('status', 'ACTIVE')
+      .is('ended_at', null)
+      .ilike('assignment_role', params.assignment_role);
+
+    // Insert new
+    const { error } = await supabase
+      .from('contact_assignments')
+      .insert({
+        contact_id: params.contact_id,
+        assigned_to_crm_user_id: params.assigned_to_crm_user_id,
+        assigned_by_crm_user_id: assignedByCrmUserId,
+        assignment_role: params.assignment_role,
+        stage: params.assignment_role === 'primary' ? params.stage : 'COLD_CALLING',
+        status: 'ACTIVE',
+      });
+
+    if (error) return { data: null, error: error.message };
+    return { data: true, error: null };
+  } catch (e: any) {
+    return { data: null, error: e?.message || 'Unexpected error in addAssignment' };
+  }
+}
+
+/** Change stage on the ACTIVE PRIMARY assignment, with INACTIVE request logic */
+export async function changeContactStage(params: {
+  contact_id: string;
+  to_stage: AssignmentStage;
+}): Promise<{ data: { action: string } | null; error: string | null }> {
+  try {
+    // Try RPC first
+    const { data, error } = await supabase.rpc('change_contact_stage', {
+      p_contact_id: params.contact_id,
+      p_to_stage: params.to_stage,
     });
 
-    if (result.error) {
-      setError(result.error);
-      setIsSaving(false);
-      return;
+    if (error) {
+      // Fallback: direct update on contact_assignments
+      const { error: updateError } = await supabase
+        .from('contact_assignments')
+        .update({
+          stage: params.to_stage,
+          stage_changed_at: new Date().toISOString(),
+        })
+        .eq('contact_id', params.contact_id)
+        .eq('status', 'ACTIVE')
+        .is('ended_at', null)
+        .ilike('assignment_role', 'primary');
+
+      if (updateError) return { data: null, error: updateError.message };
+      return { data: { action: 'UPDATED' }, error: null };
     }
 
-    toast({
-      title: "Success",
-      description: "Owners updated successfully.",
-    });
-
-    setIsSaving(false);
-    onOpenChange(false);
-    onSuccess();
-  };
-
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) setError(null);
-    onOpenChange(newOpen);
-  };
-
-  const formatUserLabel = (user: CrmUserForAssignment): string => user.full_name;
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Assign Owners
-          </DialogTitle>
-          <DialogDescription>
-            Set Primary and Secondary owners for <strong>{contactName}</strong>
-          </DialogDescription>
-        </DialogHeader>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Primary Owner *</Label>
-              <Select value={primaryOwnerId} onValueChange={setPrimaryOwnerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select primary owner..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {crmUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {formatUserLabel(user)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Required. Main contact owner.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Secondary Owner</Label>
-              <Select value={secondaryOwnerId} onValueChange={setSecondaryOwnerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select secondary owner..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_VALUE}>None</SelectItem>
-                  {crmUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id} disabled={user.id === primaryOwnerId}>
-                      {formatUserLabel(user)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Optional. Backup contact owner.</p>
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving || isLoading || !primaryOwnerId}>
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Owners
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+    return { data: data || { action: 'UPDATED' }, error: null };
+  } catch (e: any) {
+    return { data: null, error: e?.message || 'Unexpected error in changeContactStage' };
+  }
 }
