@@ -423,8 +423,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       {/* Owner Summary Table */}
       {isAdmin && !isLoading && contacts.length > 0 && (
         <OwnerSummaryTable
-          contacts={contacts}
-          userNamesMap={userNamesMap}
           activeFilter={ownerSummaryFilter}
           onFilterChange={setOwnerSummaryFilter}
         />

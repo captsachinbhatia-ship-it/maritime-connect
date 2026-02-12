@@ -18,7 +18,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCrmUser } from '@/hooks/useCrmUser';
-import { getCompanyNamesMap } from '@/services/contacts';
 import { getUserNames } from '@/services/interactions';
 import { getNudgeStatusMap } from '@/services/nudgeStatus';
 import { ContactsSearch } from './ContactsSearch';
@@ -53,13 +52,13 @@ const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
 interface SecondaryContact extends ContactWithCompany {
   stage: string | null;
   primary_owner_id: string | null;
+  company_name?: string | null;
 }
 
 export function SecondaryContactsTab() {
   const { session, loading: authLoading } = useAuth();
   const { crmUserId } = useCrmUser();
   const [contacts, setContacts] = useState<SecondaryContact[]>([]);
-  const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [primaryOwnerNamesMap, setPrimaryOwnerNamesMap] = useState<Record<string, string>>({});
   const [nudgeStatusMap, setNudgeStatusMap] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -69,6 +68,7 @@ export function SecondaryContactsTab() {
   // Drawer state
   const [drawerContact, setDrawerContact] = useState<SecondaryContact | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
   const loadContacts = useCallback(async () => {
     if (!session || !crmUserId) {
       setContacts([]);
@@ -80,85 +80,28 @@ export function SecondaryContactsTab() {
     setError(null);
 
     try {
-      const currentCrmUserId = crmUserId;
-
-      // Get ACTIVE SECONDARY assignments for the current user
-      const { data: secondaryAssignments, error: secondaryError } = await supabase
-        .from('contact_assignments')
-        .select('contact_id')
-        .eq('status', 'ACTIVE')
-        .is('ended_at', null)
-        .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .ilike('assignment_role', 'secondary');
-
-      if (secondaryError) {
-        setError(secondaryError.message);
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      const contactIds = (secondaryAssignments || []).map(a => a.contact_id);
-
-      if (contactIds.length === 0) {
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Get the PRIMARY assignments for these contacts to determine stage and primary owner
-      const { data: primaryAssignments, error: primaryError } = await supabase
-        .from('contact_assignments')
-        .select('contact_id, stage, assigned_to_crm_user_id')
-        .in('contact_id', contactIds)
-        .eq('status', 'ACTIVE')
-        .is('ended_at', null)
-        .ilike('assignment_role', 'primary');
-
-      if (primaryError) {
-        setError(primaryError.message);
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Build stage map and primary owner map
-      const stageMap: Record<string, string> = {};
-      const primaryOwnerMap: Record<string, string> = {};
-      (primaryAssignments || []).forEach(a => {
-        stageMap[a.contact_id] = a.stage;
-        if (a.assigned_to_crm_user_id) {
-          primaryOwnerMap[a.contact_id] = a.assigned_to_crm_user_id;
-        }
-      });
-
-      // Fetch contacts from the view
-      const { data: contactsData, error: contactsError } = await supabase
-        .from('contacts_with_primary_phone')
+      // Single query to the secondary contacts view
+      const { data: viewData, error: viewError } = await supabase
+        .from('v_my_secondary_contacts')
         .select('*')
-        .in('id', contactIds)
         .order('full_name', { ascending: true });
 
-      if (contactsError) {
-        setError(contactsError.message);
+      if (viewError) {
+        setError(viewError.message);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      let contactsList = (contactsData || []).map(c => ({
-        ...c,
-        stage: stageMap[c.id] || null,
-        primary_owner_id: primaryOwnerMap[c.id] || null,
-      })) as SecondaryContact[];
+      let contactsList = (viewData || []) as SecondaryContact[];
 
       // Fetch last interaction data
       if (contactsList.length > 0) {
-        const contactIdsForInteraction = contactsList.map(c => c.id);
+        const contactIds = contactsList.map(c => c.id);
         const { data: lastInteractionData } = await supabase
           .from('v_contacts_last_interaction')
           .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
-          .in('contact_id', contactIdsForInteraction);
+          .in('contact_id', contactIds);
 
         if (lastInteractionData && lastInteractionData.length > 0) {
           const liMap: Record<string, { last_interaction_at: string | null; last_interaction_type: string | null; last_interaction_outcome: string | null }> = {};
@@ -174,37 +117,26 @@ export function SecondaryContactsTab() {
             ...liMap[c.id],
           }));
         }
-      }
 
-      setContacts(contactsList);
-
-      // Fetch company names
-      const companyIds = contactsList
-        .map(c => c.company_id)
-        .filter((id): id is string => id !== null);
-
-      if (companyIds.length > 0) {
-        const namesResult = await getCompanyNamesMap(companyIds);
-        if (namesResult.data) {
-          setCompanyNamesMap(namesResult.data);
+        // Resolve primary owner names
+        const primaryOwnerIds = contactsList
+          .map(c => c.primary_owner_id)
+          .filter((id): id is string => !!id);
+        if (primaryOwnerIds.length > 0) {
+          const ownerNamesResult = await getUserNames([...new Set(primaryOwnerIds)]);
+          if (ownerNamesResult.data) {
+            setPrimaryOwnerNamesMap(ownerNamesResult.data);
+          }
         }
-      }
 
-      // Fetch primary owner names
-      const primaryOwnerIds = Object.values(primaryOwnerMap).filter(Boolean);
-      if (primaryOwnerIds.length > 0) {
-        const ownerNamesResult = await getUserNames(primaryOwnerIds);
-        if (ownerNamesResult.data) {
-          setPrimaryOwnerNamesMap(ownerNamesResult.data);
-        }
-      }
-      // Fetch nudge status for all contacts
-      if (contactIds.length > 0) {
+        // Fetch nudge status
         const nudgeResult = await getNudgeStatusMap(contactIds);
         if (nudgeResult.data) {
           setNudgeStatusMap(nudgeResult.data);
         }
       }
+
+      setContacts(contactsList);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load contacts');
     } finally {
@@ -224,7 +156,7 @@ export function SecondaryContactsTab() {
     const searchLower = search.toLowerCase().trim();
     return contacts.filter(contact => {
       const fullName = (contact.full_name || '').toLowerCase();
-      const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
+      const companyName = ((contact as any).company_name || '').toLowerCase();
       const email = (contact.email || '').toLowerCase();
       const phone = (contact.primary_phone || '').toLowerCase();
       return fullName.includes(searchLower) || 
@@ -232,15 +164,15 @@ export function SecondaryContactsTab() {
              email.includes(searchLower) || 
              phone.includes(searchLower);
     });
-  }, [contacts, search, companyNamesMap]);
+  }, [contacts, search]);
 
-  // Row click disabled for secondary contacts to protect private details
   const handleRowClick = (e: React.MouseEvent, contact: SecondaryContact) => {
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('[role="menu"]') || target.closest('[role="checkbox"]')) return;
     setDrawerContact(contact);
     setDrawerOpen(true);
   };
+
   const formatLastInteraction = (contact: SecondaryContact) => {
     if (!contact.last_interaction_at) return null;
     const type = contact.last_interaction_type || '';
@@ -355,9 +287,9 @@ export function SecondaryContactsTab() {
                           <span className="text-sm">{primaryOwnerName}</span>
                         </TableCell>
                         <TableCell>
-                          {contact.company_id ? (
+                          {(contact as any).company_name ? (
                             <Badge variant="secondary">
-                              {companyNamesMap[contact.company_id] || '-'}
+                              {(contact as any).company_name}
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -409,7 +341,7 @@ export function SecondaryContactsTab() {
 
       <ContactDetailsDrawer
         contact={drawerContact}
-        companyName={drawerContact?.company_id ? companyNamesMap[drawerContact.company_id] || null : null}
+        companyName={(drawerContact as any)?.company_name || null}
         currentStage={drawerContact?.stage || null}
         isOpen={drawerOpen}
         onClose={() => {
@@ -417,8 +349,7 @@ export function SecondaryContactsTab() {
           setDrawerContact(null);
         }}
         onOwnersChange={loadContacts}
-        onCompanyChange={(newCompanyId, newCompanyName) => {
-          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
+        onCompanyChange={() => {
           loadContacts();
         }}
       />
