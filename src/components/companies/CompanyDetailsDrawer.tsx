@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { format } from 'date-fns';
-import { Building2, Globe, Mail, Phone, MapPin, Calendar, Tag, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { Building2, Globe, Mail, Phone, MapPin, Calendar, Tag, FileText, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { CompanyActionsBar } from './CompanyActionsBar';
-import { DeleteCompanyDialog } from './DeleteCompanyDialog';
+import { DeleteCompanyModal } from './DeleteCompanyModal';
 import {
   Sheet,
   SheetContent,
@@ -29,6 +31,7 @@ export function CompanyDetailsDrawer({
   onCompanyDeleted,
 }: CompanyDetailsDrawerProps) {
   const { isAdmin } = useAuth();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   if (!company) return null;
 
   const handleContactClick = (contactId: string) => {
@@ -217,14 +220,19 @@ export function CompanyDetailsDrawer({
             <Separator className="my-4" />
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-destructive">Danger Zone</h3>
-              <DeleteCompanyDialog
+              <DeleteCompanyModal
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
                 companyId={company.id}
                 companyName={company.company_name || 'Company'}
-                onDeleted={() => {
+                onSuccess={() => {
                   onOpenChange(false);
                   onCompanyDeleted?.();
                 }}
               />
+              <Button variant="destructive" size="sm" className="w-full" onClick={() => setDeleteOpen(true)}>
+                Delete Company
+              </Button>
             </div>
           </>
         )}
