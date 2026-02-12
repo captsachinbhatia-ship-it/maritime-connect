@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { PhoneCall, Mail, Video, MessageSquare, FileEdit, Users, Bell } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -26,6 +27,16 @@ import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
 import { ContactWithCompany } from '@/types';
 
 type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+
+type StageFilter = 'ALL' | 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+
+const STAGE_CHIPS: { value: StageFilter; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'COLD_CALLING', label: 'Cold Calling' },
+  { value: 'ASPIRATION', label: 'Aspiration' },
+  { value: 'ACHIEVEMENT', label: 'Achievement' },
+  { value: 'INACTIVE', label: 'Inactive' },
+];
 
 const STAGE_LABELS: Record<string, string> = {
   COLD_CALLING: 'Cold Calling',
@@ -64,6 +75,7 @@ export function SecondaryContactsTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [activeStage, setActiveStage] = useState<StageFilter>('ALL');
 
   // Drawer state
   const [drawerContact, setDrawerContact] = useState<SecondaryContact | null>(null);
@@ -150,11 +162,25 @@ export function SecondaryContactsTab() {
     }
   }, [loadContacts, authLoading]);
 
-  // Client-side search filter
+  // Stage counts from full dataset
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = { ALL: contacts.length, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+    contacts.forEach(c => {
+      const key = (c.stage ?? '').trim().toUpperCase();
+      if (key in counts) counts[key]++;
+    });
+    return counts;
+  }, [contacts]);
+
+  // Filter by active stage then search
   const filteredContacts = useMemo(() => {
-    if (!search.trim()) return contacts;
+    let list = contacts;
+    if (activeStage !== 'ALL') {
+      list = list.filter(c => (c.stage ?? '').trim().toUpperCase() === activeStage);
+    }
+    if (!search.trim()) return list;
     const searchLower = search.toLowerCase().trim();
-    return contacts.filter(contact => {
+    return list.filter(contact => {
       const fullName = (contact.full_name || '').toLowerCase();
       const companyName = ((contact as any).company_name || '').toLowerCase();
       const email = (contact.email || '').toLowerCase();
@@ -164,7 +190,7 @@ export function SecondaryContactsTab() {
              email.includes(searchLower) || 
              phone.includes(searchLower);
     });
-  }, [contacts, search]);
+  }, [contacts, activeStage, search]);
 
   const handleRowClick = (e: React.MouseEvent, contact: SecondaryContact) => {
     const target = e.target as HTMLElement;
@@ -211,7 +237,16 @@ export function SecondaryContactsTab() {
             </Alert>
           )}
 
-          <div className="mb-4">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <Tabs value={activeStage} onValueChange={(val) => { setActiveStage(val as StageFilter); setSearch(''); }}>
+              <TabsList>
+                {STAGE_CHIPS.map((chip) => (
+                  <TabsTrigger key={chip.value} value={chip.value}>
+                    {chip.label} ({stageCounts[chip.value] ?? 0})
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
             <ContactsSearch value={search} onChange={setSearch} />
           </div>
 
