@@ -1,65 +1,85 @@
-import { useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { RotateCcw } from 'lucide-react';
-import { DirectoryRow } from '@/types/directory';
+import { supabase } from '@/lib/supabaseClient';
+import { getUserNames } from '@/services/interactions';
 
 export interface OwnerFilterState {
   type: 'primary' | 'secondary' | 'unassigned';
   userId?: string;
 }
 
-interface UserRow {
-  userId: string;
-  name: string;
-  primaryCount: number;
-  secondaryCount: number;
+interface SummaryRow {
+  user_id: string | null;
+  primary_count: number;
+  secondary_count: number;
   total: number;
 }
 
 interface OwnerSummaryTableProps {
-  contacts: DirectoryRow[];
-  userNamesMap: Record<string, string>;
   activeFilter: OwnerFilterState | null;
   onFilterChange: (filter: OwnerFilterState | null) => void;
 }
 
 export function OwnerSummaryTable({
-  contacts,
-  userNamesMap,
   activeFilter,
   onFilterChange,
 }: OwnerSummaryTableProps) {
-  const { userRows, unassignedCount } = useMemo(() => {
-    const primaryCounts: Record<string, number> = {};
-    const secondaryCounts: Record<string, number> = {};
-    let unassigned = 0;
+  const [rows, setRows] = useState<SummaryRow[]>([]);
+  const [userNamesMap, setUserNamesMap] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(true);
 
-    contacts.forEach((c) => {
-      if (c.is_unassigned || !c.primary_owner_id) {
-        unassigned++;
-      } else {
-        primaryCounts[c.primary_owner_id] = (primaryCounts[c.primary_owner_id] || 0) + 1;
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('v_owner_summary')
+          .select('*');
+
+        if (error || !data) {
+          setRows([]);
+          setIsLoading(false);
+          return;
+        }
+
+        setRows(data as SummaryRow[]);
+
+        // Resolve user names
+        const userIds = (data as SummaryRow[])
+          .map(r => r.user_id)
+          .filter((id): id is string => !!id);
+        if (userIds.length > 0) {
+          const namesResult = await getUserNames(userIds);
+          if (namesResult.data) setUserNamesMap(namesResult.data);
+        }
+      } catch {
+        setRows([]);
+      } finally {
+        setIsLoading(false);
       }
-      if (c.secondary_owner_id) {
-        secondaryCounts[c.secondary_owner_id] = (secondaryCounts[c.secondary_owner_id] || 0) + 1;
+    };
+    load();
+  }, []);
+
+  const { userRows, unassignedRow } = useMemo(() => {
+    let unassigned: SummaryRow | null = null;
+    const users: (SummaryRow & { name: string })[] = [];
+
+    rows.forEach(r => {
+      if (!r.user_id) {
+        unassigned = r;
+      } else {
+        users.push({ ...r, name: userNamesMap[r.user_id] || 'Unknown' });
       }
     });
 
-    // Merge all user IDs
-    const allIds = new Set([...Object.keys(primaryCounts), ...Object.keys(secondaryCounts)]);
-    const rows: UserRow[] = Array.from(allIds).map((userId) => ({
-      userId,
-      name: userNamesMap[userId] || 'Unknown',
-      primaryCount: primaryCounts[userId] || 0,
-      secondaryCount: secondaryCounts[userId] || 0,
-      total: (primaryCounts[userId] || 0) + (secondaryCounts[userId] || 0),
-    }));
-
-    rows.sort((a, b) => a.name.localeCompare(b.name));
-    return { userRows: rows, unassignedCount: unassigned };
-  }, [contacts, userNamesMap]);
+    users.sort((a, b) => a.name.localeCompare(b.name));
+    return { userRows: users, unassignedRow: unassigned as SummaryRow | null };
+  }, [rows, userNamesMap]);
 
   const isActive = (type: OwnerFilterState['type'], userId?: string) => {
     if (!activeFilter) return false;
@@ -95,7 +115,19 @@ export function OwnerSummaryTable({
     );
   };
 
-  if (userRows.length === 0 && unassignedCount === 0) return null;
+  if (isLoading) {
+    return (
+      <Card className="mb-4">
+        <CardContent className="p-3">
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (userRows.length === 0 && !unassignedRow) return null;
+
+  const unassignedCount = unassignedRow?.primary_count ?? 0;
 
   return (
     <Card className="mb-4">
@@ -144,19 +176,19 @@ export function OwnerSummaryTable({
             {/* User rows */}
             {userRows.map((row) => (
               <TableRow
-                key={row.userId}
+                key={row.user_id}
                 className={`hover:bg-muted/50 ${
-                  isActive('primary', row.userId) || isActive('secondary', row.userId)
+                  isActive('primary', row.user_id!) || isActive('secondary', row.user_id!)
                     ? 'bg-primary/5'
                     : ''
                 }`}
               >
                 <TableCell className="py-1.5 text-sm">{row.name}</TableCell>
                 <TableCell className="py-1.5 text-center">
-                  {cellButton(row.primaryCount, 'primary', row.userId)}
+                  {cellButton(row.primary_count, 'primary', row.user_id!)}
                 </TableCell>
                 <TableCell className="py-1.5 text-center">
-                  {cellButton(row.secondaryCount, 'secondary', row.userId)}
+                  {cellButton(row.secondary_count, 'secondary', row.user_id!)}
                 </TableCell>
                 <TableCell className="py-1.5 text-center font-semibold tabular-nums text-sm">
                   {row.total}

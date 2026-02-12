@@ -98,7 +98,7 @@ export function MyContactsTab() {
     try {
       const countPromises = STAGES.map(async (stage) => {
         const { count, error } = await supabase
-          .from('v_my_primary_pipeline')
+          .from('v_my_primary_contacts')
           .select('id', { count: 'exact', head: true })
           .eq('stage', stage.value);
         return { stage: stage.value, count: error ? 0 : (count ?? 0) };
@@ -123,7 +123,7 @@ export function MyContactsTab() {
     try {
       // Single query to the pipeline view filtered by stage
       const { data: pipelineData, error: pipelineError } = await supabase
-        .from('v_my_primary_pipeline')
+        .from('v_my_primary_contacts')
         .select('*')
         .eq('stage', activeStage)
         .order('full_name', { ascending: true });
