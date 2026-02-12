@@ -74,13 +74,6 @@ export function MyContactsTab() {
   const { crmUserId } = useCrmUser();
   const { toast } = useToast();
   const [activeStage, setActiveStage] = useState<StageType>('COLD_CALLING');
-  const [contacts, setContacts] = useState<ContactWithCompany[]>([]);
-  const [stageCounts, setStageCounts] = useState<Record<StageType, number>>({
-    COLD_CALLING: 0,
-    ASPIRATION: 0,
-    ACHIEVEMENT: 0,
-    INACTIVE: 0,
-  });
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingStage, setIsUpdatingStage] = useState<string | null>(null);
@@ -93,26 +86,12 @@ export function MyContactsTab() {
   const [nudgeContact, setNudgeContact] = useState<{ id: string; name: string } | null>(null);
   const [inactiveContact, setInactiveContact] = useState<{ id: string; name: string } | null>(null);
 
-  const loadStageCounts = useCallback(async () => {
-    if (!session || !crmUserId) return;
-    try {
-      const countPromises = STAGES.map(async (stage) => {
-        const { count, error } = await supabase
-          .from('v_my_primary_contacts')
-          .select('id', { count: 'exact', head: true })
-          .eq('stage', stage.value);
-        return { stage: stage.value, count: error ? 0 : (count ?? 0) };
-      });
-      const results = await Promise.all(countPromises);
-      const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
-      results.forEach(r => { counts[r.stage] = r.count; });
-      setStageCounts(counts);
-    } catch { /* keep existing counts */ }
-  }, [session, crmUserId]);
+  // All contacts across all stages (fetched once)
+  const [allContacts, setAllContacts] = useState<ContactWithCompany[]>([]);
 
   const loadContacts = useCallback(async () => {
     if (!session || !crmUserId) {
-      setContacts([]);
+      setAllContacts([]);
       setIsLoading(false);
       return;
     }
@@ -121,16 +100,15 @@ export function MyContactsTab() {
     setError(null);
 
     try {
-      // Single query to the pipeline view filtered by stage
+      // Fetch ALL contacts (no stage filter) so we can derive counts client-side
       const { data: pipelineData, error: pipelineError } = await supabase
         .from('v_my_primary_contacts')
         .select('*')
-        .eq('stage', activeStage)
         .order('full_name', { ascending: true });
 
       if (pipelineError) {
         setError(pipelineError.message);
-        setContacts([]);
+        setAllContacts([]);
         setIsLoading(false);
         return;
       }
@@ -163,7 +141,7 @@ export function MyContactsTab() {
         }
       }
 
-      setContacts(contactsList);
+      setAllContacts(contactsList);
 
       // Fetch next follow-up dates
       const contactIdsForFollowups = contactsList.map(c => c.id);
@@ -178,7 +156,22 @@ export function MyContactsTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeStage, session, crmUserId]);
+  }, [session, crmUserId]);
+
+  // Compute stage counts from the full dataset
+  const stageCounts = useMemo(() => {
+    const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+    allContacts.forEach(c => {
+      const key = ((c as any).stage ?? '').trim().toUpperCase() as StageType;
+      if (key in counts) counts[key]++;
+    });
+    return counts;
+  }, [allContacts]);
+
+  // Contacts for the active stage
+  const contacts = useMemo(() => {
+    return allContacts.filter(c => ((c as any).stage ?? '').trim().toUpperCase() === activeStage);
+  }, [allContacts, activeStage]);
 
   // Client-side search filter for multi-field search
   const filteredContacts = useMemo(() => {
@@ -199,9 +192,8 @@ export function MyContactsTab() {
   useEffect(() => {
     if (!authLoading) {
       loadContacts();
-      loadStageCounts();
     }
-  }, [loadContacts, loadStageCounts, authLoading]);
+  }, [loadContacts, authLoading]);
 
   const handleStageUpdate = async (contactId: string, newStage: StageType) => {
     setIsUpdatingStage(contactId);
@@ -234,9 +226,8 @@ export function MyContactsTab() {
         });
       }
 
-      // Refresh the list and counts
+      // Refresh the list (counts derived automatically)
       loadContacts();
-      loadStageCounts();
     } catch (err) {
       toast({
         variant: 'destructive',
