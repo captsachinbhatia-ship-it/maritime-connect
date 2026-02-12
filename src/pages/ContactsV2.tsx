@@ -1,5 +1,17 @@
-import { useEffect } from 'react';
-import { BookOpen, User, Users2, UserPlus, Search, ChevronLeft, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  BookOpen,
+  User,
+  Users2,
+  UserPlus,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  AlertCircle,
+  FileUp,
+} from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,7 +34,7 @@ import {
   type ContactV2Row,
 } from '@/hooks/useContactsV2Data';
 
-// ── Constants ────────────────────────────────────────────────────
+// ── Tab metadata ─────────────────────────────────────────────────
 const TAB_META: { value: TabKey; label: string; icon: React.ElementType }[] = [
   { value: 'directory', label: 'Directory', icon: BookOpen },
   { value: 'my-primary', label: 'My Primary', icon: User },
@@ -74,12 +86,22 @@ function StageChipBar({
 }
 
 // ── Status badge ─────────────────────────────────────────────────
-function StatusBadge({ active }: { active: boolean }) {
-  return active ? (
-    <Badge variant="outline" className="text-xs border-green-300 text-green-700 dark:border-green-700 dark:text-green-400">Active</Badge>
-  ) : (
-    <Badge variant="outline" className="text-xs border-muted text-muted-foreground">Inactive</Badge>
-  );
+function StatusBadge({ active }: { active: boolean | null }) {
+  if (active === true) {
+    return (
+      <Badge variant="outline" className="text-xs border-green-300 text-green-700 dark:border-green-700 dark:text-green-400">
+        Active
+      </Badge>
+    );
+  }
+  if (active === false) {
+    return (
+      <Badge variant="outline" className="text-xs border-muted text-muted-foreground">
+        Inactive
+      </Badge>
+    );
+  }
+  return <span className="text-muted-foreground/50">—</span>;
 }
 
 // ── Table skeleton ───────────────────────────────────────────────
@@ -102,7 +124,9 @@ function TableSkeleton() {
           {Array.from({ length: 8 }).map((_, i) => (
             <TableRow key={i}>
               {Array.from({ length: 7 }).map((_, j) => (
-                <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
+                <TableCell key={j}>
+                  <Skeleton className="h-4 w-24" />
+                </TableCell>
               ))}
             </TableRow>
           ))}
@@ -143,22 +167,26 @@ function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab:
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.id}>
-              <TableCell className="font-medium">{row.full_name || '—'}</TableCell>
+              <TableCell className="font-medium">{row.full_name}</TableCell>
               <TableCell>
                 {row.company_name ? (
-                  <Badge variant="secondary" className="text-xs">{row.company_name}</Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {row.company_name}
+                  </Badge>
                 ) : (
                   <span className="text-muted-foreground/50">—</span>
                 )}
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground">{row.designation || '—'}</TableCell>
-              <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate">{row.email || '—'}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">{row.phone || '—'}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">{row.designation ?? '—'}</TableCell>
+              <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate">
+                {row.email ?? '—'}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">{row.phone ?? '—'}</TableCell>
               {showOwners && (
-                <TableCell className="text-sm text-muted-foreground">{row.primary_owner || '—'}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{row.primary_owner ?? '—'}</TableCell>
               )}
               {showOwners && (
-                <TableCell className="text-sm text-muted-foreground">{row.secondary_owner || '—'}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{row.secondary_owner ?? '—'}</TableCell>
               )}
               <TableCell>
                 {row.stage ? (
@@ -181,7 +209,7 @@ function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab:
 }
 
 // ── Pagination ───────────────────────────────────────────────────
-function Pagination({
+function PaginationBar({
   page,
   totalPages,
   totalRows,
@@ -195,15 +223,29 @@ function Pagination({
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between pt-2">
-      <p className="text-xs text-muted-foreground">{totalRows} result{totalRows !== 1 ? 's' : ''}</p>
+      <p className="text-xs text-muted-foreground">
+        {totalRows} result{totalRows !== 1 ? 's' : ''}
+      </p>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page === 0} onClick={() => onPageChange(page - 1)}>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          disabled={page === 0}
+          onClick={() => onPageChange(page - 1)}
+        >
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <span className="text-sm text-muted-foreground tabular-nums">
           {page + 1} / {totalPages}
         </span>
-        <Button variant="outline" size="icon" className="h-8 w-8" disabled={page >= totalPages - 1} onClick={() => onPageChange(page + 1)}>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          disabled={page >= totalPages - 1}
+          onClick={() => onPageChange(page + 1)}
+        >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -221,21 +263,31 @@ export default function ContactsV2() {
     isLoading,
     error,
     authLoading,
-    filteredRows,
-    pagedRows,
-    stageCounts,
+    rows,
+    totalRows,
     totalPages,
+    stageCounts,
     changeTab,
     setStageFilter,
     setSearch,
-    setPage,
-    fetchData,
+    changePage,
+    fetchAll,
   } = useContactsV2Data();
+
+  // Debounce search
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = (val: string) => {
+    // Optimistic UI update for input
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearch(val);
+    }, 350);
+  };
 
   // Initial fetch
   useEffect(() => {
     if (!authLoading) {
-      fetchData(activeTab);
+      fetchAll(activeTab, 'ALL', '', 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
@@ -251,9 +303,17 @@ export default function ContactsV2() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
-        <p className="mt-1 text-muted-foreground">Browse and manage your contacts</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
+          <p className="mt-1 text-muted-foreground">Browse and manage your contacts</p>
+        </div>
+        <Button asChild>
+          <Link to="/contacts/bulk-import">
+            <FileUp className="mr-2 h-4 w-4" />
+            Bulk Import
+          </Link>
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -278,10 +338,11 @@ export default function ContactsV2() {
         <div className="relative w-full max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            key={activeTab}
             type="text"
             placeholder="Search name, company, email, phone…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            defaultValue={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
           />
         </div>
@@ -296,11 +357,11 @@ export default function ContactsV2() {
       )}
 
       {/* Table */}
-      {isLoading ? <TableSkeleton /> : <ContactsV2Table rows={pagedRows} activeTab={activeTab} />}
+      {isLoading ? <TableSkeleton /> : <ContactsV2Table rows={rows} activeTab={activeTab} />}
 
       {/* Pagination */}
       {!isLoading && (
-        <Pagination page={page} totalPages={totalPages} totalRows={filteredRows.length} onPageChange={setPage} />
+        <PaginationBar page={page} totalPages={totalPages} totalRows={totalRows} onPageChange={changePage} />
       )}
     </div>
   );
