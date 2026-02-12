@@ -3,19 +3,15 @@ import { format } from "date-fns";
 import { Loader2, RefreshCw, Users } from "lucide-react";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { supabase } from "@/lib/supabaseClient";
-import { getOwnersForContacts, ContactOwners } from "@/services/assignments";
 import { getUserNames } from "@/services/interactions";
-import { getCompanyNamesMap } from "@/services/contacts";
+import { fetchAssignedRows } from "@/services/directoryView";
+import { DirectoryRow, AssignmentStage } from "@/types/directory";
 import { useAuth } from "@/contexts/AuthContext";
-
-type AssignmentStage = "COLD_CALLING" | "ASPIRATION" | "ACHIEVEMENT" | "INACTIVE";
 
 const STAGE_LABELS: Record<string, string> = {
   COLD_CALLING: "Cold Calling",
@@ -31,25 +27,11 @@ const STAGE_COLORS: Record<string, string> = {
   INACTIVE: "bg-gray-100 text-gray-800",
 };
 
-interface AssignedContact {
-  id: string;
-  full_name: string | null;
-  company_id: string | null;
-  email: string | null;
-  primary_phone: string | null;
-  created_at: string | null;
-  created_by_crm_user_id: string | null;
-  is_active?: boolean | null;
-  stage?: AssignmentStage | null;
-}
-
 export function AssignedContactsTab() {
   const { isAdmin } = useAuth();
 
-  const [contacts, setContacts] = useState<AssignedContact[]>([]);
-  const [ownersMap, setOwnersMap] = useState<Record<string, ContactOwners>>({});
-  const [ownerNamesMap, setOwnerNamesMap] = useState<Record<string, string>>({});
-  const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
+  const [contacts, setContacts] = useState<DirectoryRow[]>([]);
+  const [userNamesMap, setUserNamesMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
@@ -57,80 +39,26 @@ export function AssignedContactsTab() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1️⃣ Get ACTIVE PRIMARY assignments only (STRICT UPPERCASE)
-      const { data: primaryAssignments, error: assignmentError } = await supabase
-        .from("contact_assignments")
-        .select("contact_id, stage")
-        .eq("status", "ACTIVE")
-        .eq("assignment_role", "PRIMARY");
-
-      if (assignmentError) {
-        console.error("Assignment fetch failed:", assignmentError);
+      const { data: rows, error } = await fetchAssignedRows();
+      if (error) {
+        console.error("AssignedContactsTab fetch failed:", error);
         setContacts([]);
         return;
       }
 
-      const contactIds = (primaryAssignments || []).map((a) => a.contact_id);
+      setContacts(rows);
 
-      if (contactIds.length === 0) {
-        setContacts([]);
-        return;
-      }
-
-      const stageMap: Record<string, AssignmentStage> = {};
-      primaryAssignments?.forEach((a: any) => {
-        stageMap[a.contact_id] = a.stage;
+      // Resolve user names
+      const allUserIds = new Set<string>();
+      rows.forEach((c) => {
+        if (c.created_by_crm_user_id) allUserIds.add(c.created_by_crm_user_id);
+        if (c.primary_owner_id) allUserIds.add(c.primary_owner_id);
+        if (c.secondary_owner_id) allUserIds.add(c.secondary_owner_id);
       });
 
-      // 2️⃣ Fetch contacts from SAFE VIEW
-      const { data: contactsData, error: contactsError } = await supabase
-        .from("contacts_with_primary_phone")
-        .select("*")
-        .in("id", contactIds)
-        .order("full_name", { ascending: true });
-
-      if (contactsError) {
-        console.error("Contact fetch failed:", contactsError);
-        setContacts([]);
-        return;
-      }
-
-      const enrichedContacts: AssignedContact[] =
-        (contactsData || []).map((c: any) => ({
-          ...c,
-          stage: stageMap[c.id] || null,
-        })) || [];
-
-      setContacts(enrichedContacts);
-
-      // 3️⃣ Fetch owners map (PRIMARY + SECONDARY)
-      const ownersResult = await getOwnersForContacts(contactIds);
-      if (ownersResult.data) {
-        setOwnersMap(ownersResult.data);
-
-        const userIds = new Set<string>();
-
-        Object.values(ownersResult.data).forEach((o) => {
-          if (o.primary?.assigned_to_crm_user_id) userIds.add(o.primary.assigned_to_crm_user_id);
-          if (o.secondary?.assigned_to_crm_user_id) userIds.add(o.secondary.assigned_to_crm_user_id);
-        });
-
-        enrichedContacts.forEach((c) => {
-          if (c.created_by_crm_user_id) userIds.add(c.created_by_crm_user_id);
-        });
-
-        if (userIds.size > 0) {
-          const namesResult = await getUserNames(Array.from(userIds));
-          if (namesResult.data) setOwnerNamesMap(namesResult.data);
-        }
-      }
-
-      // 4️⃣ Fetch company names
-      const companyIds = Array.from(new Set(enrichedContacts.map((c) => c.company_id).filter(Boolean))) as string[];
-
-      if (companyIds.length > 0) {
-        const namesResult = await getCompanyNamesMap(companyIds);
-        if (namesResult.data) setCompanyNamesMap(namesResult.data);
+      if (allUserIds.size > 0) {
+        const namesResult = await getUserNames(Array.from(allUserIds));
+        if (namesResult.data) setUserNamesMap(namesResult.data);
       }
     } catch (err) {
       console.error("AssignedContactsTab fetch failed:", err);
@@ -216,7 +144,6 @@ export function AssignedContactsTab() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Company</TableHead>
-                  <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Added By</TableHead>
                   <TableHead>Primary Owner</TableHead>
@@ -227,43 +154,39 @@ export function AssignedContactsTab() {
               </TableHeader>
 
               <TableBody>
-                {filteredContacts.map((contact) => {
-                  const owners = ownersMap[contact.id];
-                  const primaryOwnerId = owners?.primary?.assigned_to_crm_user_id;
-                  const secondaryOwnerId = owners?.secondary?.assigned_to_crm_user_id;
+                {filteredContacts.map((contact) => (
+                  <TableRow key={contact.id}>
+                    <TableCell className="font-medium">{contact.full_name || "—"}</TableCell>
 
-                  return (
-                    <TableRow key={contact.id}>
-                      <TableCell className="font-medium">{contact.full_name || "—"}</TableCell>
+                    <TableCell>{contact.company_name || "—"}</TableCell>
 
-                      <TableCell>{contact.company_id ? companyNamesMap[contact.company_id] || "—" : "—"}</TableCell>
+                    <TableCell>{contact.email || "—"}</TableCell>
 
-                      <TableCell>{contact.primary_phone || "—"}</TableCell>
+                    <TableCell>
+                      {contact.created_by_crm_user_id ? userNamesMap[contact.created_by_crm_user_id] || "—" : "—"}
+                    </TableCell>
 
-                      <TableCell>{contact.email || "—"}</TableCell>
+                    <TableCell>
+                      {contact.primary_owner_id ? userNamesMap[contact.primary_owner_id] || "—" : "Unassigned"}
+                    </TableCell>
 
-                      <TableCell>
-                        {contact.created_by_crm_user_id ? ownerNamesMap[contact.created_by_crm_user_id] || "—" : "—"}
-                      </TableCell>
+                    <TableCell>
+                      {contact.secondary_owner_id ? userNamesMap[contact.secondary_owner_id] || "—" : "—"}
+                    </TableCell>
 
-                      <TableCell>{primaryOwnerId ? ownerNamesMap[primaryOwnerId] || "—" : "Unassigned"}</TableCell>
+                    <TableCell>
+                      {contact.primary_stage ? (
+                        <Badge className={STAGE_COLORS[contact.primary_stage] || ""}>
+                          {STAGE_LABELS[contact.primary_stage] || contact.primary_stage}
+                        </Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
 
-                      <TableCell>{secondaryOwnerId ? ownerNamesMap[secondaryOwnerId] || "—" : "—"}</TableCell>
-
-                      <TableCell>
-                        {contact.stage ? (
-                          <Badge className={STAGE_COLORS[contact.stage] || ""}>
-                            {STAGE_LABELS[contact.stage] || contact.stage}
-                          </Badge>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-
-                      <TableCell>{formatDate(contact.created_at)}</TableCell>
-                    </TableRow>
-                  );
-                })}
+                    <TableCell>{formatDate(contact.created_at)}</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>

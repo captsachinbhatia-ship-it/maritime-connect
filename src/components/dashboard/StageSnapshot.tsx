@@ -1,23 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/lib/supabaseClient';
-import { getCurrentCrmUserId } from '@/services/profiles';
 import { BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface StageCounts {
-  COLD_CALLING: number;
-  ASPIRATION: number;
-  ACHIEVEMENT: number;
-  INACTIVE: number;
-}
+import { fetchDashboardMetrics } from '@/services/dashboardMetrics';
+import { AssignmentStage } from '@/types/directory';
 
 const stageConfig = [
-  { key: 'COLD_CALLING', label: 'Cold Calling', color: 'bg-blue-500' },
-  { key: 'ASPIRATION', label: 'Aspiration', color: 'bg-amber-500' },
-  { key: 'ACHIEVEMENT', label: 'Achievement', color: 'bg-emerald-500' },
-  { key: 'INACTIVE', label: 'Inactive', color: 'bg-slate-400' },
+  { key: 'COLD_CALLING' as AssignmentStage, label: 'Cold Calling', color: 'bg-blue-500' },
+  { key: 'ASPIRATION' as AssignmentStage, label: 'Aspiration', color: 'bg-amber-500' },
+  { key: 'ACHIEVEMENT' as AssignmentStage, label: 'Achievement', color: 'bg-emerald-500' },
+  { key: 'INACTIVE' as AssignmentStage, label: 'Inactive', color: 'bg-slate-400' },
 ] as const;
 
 interface StageSnapshotProps {
@@ -26,7 +19,7 @@ interface StageSnapshotProps {
 }
 
 export function StageSnapshot({ crmUserId: crmUserIdProp }: StageSnapshotProps = {}) {
-  const [counts, setCounts] = useState<StageCounts>({
+  const [counts, setCounts] = useState<Record<AssignmentStage, number>>({
     COLD_CALLING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
@@ -38,52 +31,12 @@ export function StageSnapshot({ crmUserId: crmUserIdProp }: StageSnapshotProps =
     const fetchStageCounts = async () => {
       setIsLoading(true);
       try {
-        let userId: string | null = null;
-
-        if (crmUserIdProp === undefined) {
-          const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-          if (crmError || !currentCrmUserId) {
-            setIsLoading(false);
-            return;
-          }
-          userId = currentCrmUserId;
-        } else {
-          userId = crmUserIdProp;
+        const { data: metrics } = await fetchDashboardMetrics();
+        if (metrics) {
+          // If filtering by specific user, we still show global stage counts
+          // (per-user filtering would need a separate view query)
+          setCounts(metrics.byStage);
         }
-
-        let assignQuery = supabase
-          .from('contact_assignments')
-          .select('contact_id, stage')
-          .eq('status', 'ACTIVE')
-          .in('assignment_role', ['primary', 'secondary']);
-
-        if (userId) {
-          assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
-        }
-
-        const { data: assignments } = await assignQuery;
-
-        const latestByContact = new Map<string, string>();
-        (assignments || []).forEach(a => {
-          if (!latestByContact.has(a.contact_id)) {
-            latestByContact.set(a.contact_id, a.stage);
-          }
-        });
-
-        const stageCounts: StageCounts = {
-          COLD_CALLING: 0,
-          ASPIRATION: 0,
-          ACHIEVEMENT: 0,
-          INACTIVE: 0,
-        };
-
-        latestByContact.forEach(stage => {
-          if (stage in stageCounts) {
-            stageCounts[stage as keyof StageCounts]++;
-          }
-        });
-
-        setCounts(stageCounts);
       } catch (error) {
         console.error('Failed to fetch stage counts:', error);
       } finally {

@@ -7,19 +7,15 @@ import { HeartPulse, AlertTriangle, AlertCircle, Building2 } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+import { fetchDashboardMetrics } from '@/services/dashboardMetrics';
+import { AssignmentStage } from '@/types/directory';
 
-interface StageCounts {
-  COLD_CALLING: number;
-  ASPIRATION: number;
-  ACHIEVEMENT: number;
-}
-
-const ACTIVE_STAGES = ['COLD_CALLING', 'ASPIRATION', 'ACHIEVEMENT'] as const;
+const ACTIVE_STAGES: AssignmentStage[] = ['COLD_CALLING', 'ASPIRATION', 'ACHIEVEMENT'];
 
 const stageConfig = [
-  { key: 'COLD_CALLING' as const, label: 'Cold Calling', color: 'bg-blue-500', tab: 'my-contacts' },
-  { key: 'ASPIRATION' as const, label: 'Aspiration', color: 'bg-amber-500', tab: 'my-contacts' },
-  { key: 'ACHIEVEMENT' as const, label: 'Achievement', color: 'bg-emerald-500', tab: 'my-contacts' },
+  { key: 'COLD_CALLING' as AssignmentStage, label: 'Cold Calling', color: 'bg-blue-500', tab: 'my-contacts' },
+  { key: 'ASPIRATION' as AssignmentStage, label: 'Aspiration', color: 'bg-amber-500', tab: 'my-contacts' },
+  { key: 'ACHIEVEMENT' as AssignmentStage, label: 'Achievement', color: 'bg-emerald-500', tab: 'my-contacts' },
 ];
 
 interface ContactHealthSnapshotProps {
@@ -30,7 +26,7 @@ interface ContactHealthSnapshotProps {
 export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealthSnapshotProps = {}) {
   const navigate = useNavigate();
   const { crmUser } = useAuth();
-  const [counts, setCounts] = useState<StageCounts>({
+  const [counts, setCounts] = useState<Record<string, number>>({
     COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0,
   });
   const [totalActive, setTotalActive] = useState(0);
@@ -52,31 +48,29 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
         userId = crmUserIdProp;
       }
 
-      // Fetch assignments and new companies in parallel
-      let assignQuery = supabase
-        .from('contact_assignments')
-        .select('contact_id, stage')
-        .eq('status', 'ACTIVE')
-        .in('assignment_role', ['primary'])
-        .in('stage', [...ACTIVE_STAGES]);
-
-      if (userId) {
-        assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
-      }
-
+      // Fetch from unified view + companies count in parallel
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      const [assignResult, companiesResult] = await Promise.all([
-        assignQuery,
+      // For user-specific filtering, query view directly with filter
+      let viewQuery = supabase
+        .from('v_directory_contacts')
+        .select('id, primary_owner_id, primary_stage');
+
+      if (userId) {
+        viewQuery = viewQuery.eq('primary_owner_id', userId);
+      }
+
+      const [viewResult, companiesResult] = await Promise.all([
+        viewQuery,
         supabase
           .from('companies')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', sevenDaysAgo.toISOString()),
       ]);
 
-      if (assignResult.error) {
-        setError(`Assignments: ${assignResult.error.message}`);
+      if (viewResult.error) {
+        setError(`View: ${viewResult.error.message}`);
         return;
       }
       if (companiesResult.error) {
@@ -86,24 +80,23 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
 
       setNewCompanies7d(companiesResult.count ?? 0);
 
-      const assignments = assignResult.data || [];
-      const latestByContact = new Map<string, string>();
-      assignments.forEach(a => {
-        if (!latestByContact.has(a.contact_id)) {
-          latestByContact.set(a.contact_id, a.stage);
+      const rows = viewResult.data || [];
+      const sc: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
+
+      // Only count active stages
+      const activeRows = rows.filter(r => r.primary_stage && ACTIVE_STAGES.includes(r.primary_stage as AssignmentStage));
+
+      activeRows.forEach(r => {
+        if (r.primary_stage && r.primary_stage in sc) {
+          sc[r.primary_stage]++;
         }
       });
 
-      const sc: StageCounts = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
-      latestByContact.forEach(stage => {
-        if (stage in sc) sc[stage as keyof StageCounts]++;
-      });
       setCounts(sc);
-
-      const contactIds = [...latestByContact.keys()];
-      setTotalActive(contactIds.length);
+      setTotalActive(activeRows.length);
 
       // Stale contacts (no interaction > 14 days)
+      const contactIds = activeRows.map(r => r.id);
       if (contactIds.length > 0) {
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
@@ -230,7 +223,7 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
                   <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', color)} />
                   <div className="min-w-0">
                     <p className="text-[10px] text-muted-foreground leading-tight truncate">{label}</p>
-                    <p className="text-sm font-bold tabular-nums">{counts[key]}</p>
+                    <p className="text-sm font-bold tabular-nums">{counts[key] || 0}</p>
                   </div>
                 </div>
               ))}

@@ -1,25 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/lib/supabaseClient';
 import { Loader2, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface StageCounts {
-  COLD_CALLING: number;
-  ASPIRATION: number;
-  ACHIEVEMENT: number;
-  INACTIVE: number;
-}
+import { fetchDashboardMetrics } from '@/services/dashboardMetrics';
+import { AssignmentStage } from '@/types/directory';
 
 const stageConfig = [
-  { key: 'COLD_CALLING', label: 'Cold Calling', color: 'bg-blue-500' },
-  { key: 'ASPIRATION', label: 'Aspiration', color: 'bg-amber-500' },
-  { key: 'ACHIEVEMENT', label: 'Achievement', color: 'bg-emerald-500' },
-  { key: 'INACTIVE', label: 'Inactive', color: 'bg-slate-400' },
+  { key: 'COLD_CALLING' as AssignmentStage, label: 'Cold Calling', color: 'bg-blue-500' },
+  { key: 'ASPIRATION' as AssignmentStage, label: 'Aspiration', color: 'bg-amber-500' },
+  { key: 'ACHIEVEMENT' as AssignmentStage, label: 'Achievement', color: 'bg-emerald-500' },
+  { key: 'INACTIVE' as AssignmentStage, label: 'Inactive', color: 'bg-slate-400' },
 ] as const;
 
 export function PipelineHealth() {
-  const [counts, setCounts] = useState<StageCounts>({
+  const [counts, setCounts] = useState<Record<AssignmentStage, number>>({
     COLD_CALLING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
@@ -30,36 +24,11 @@ export function PipelineHealth() {
   useEffect(() => {
     const fetchPipelineHealth = async () => {
       setIsLoading(true);
-
       try {
-        // Get all active assignments
-        const { data: assignments } = await supabase
-          .from('contact_assignments')
-          .select('contact_id, stage')
-          .eq('status', 'ACTIVE');
-
-        // Deduplicate by contact_id (latest assignment per contact)
-        const latestByContact = new Map<string, string>();
-        (assignments || []).forEach(a => {
-          if (!latestByContact.has(a.contact_id)) {
-            latestByContact.set(a.contact_id, a.stage);
-          }
-        });
-
-        const stageCounts: StageCounts = {
-          COLD_CALLING: 0,
-          ASPIRATION: 0,
-          ACHIEVEMENT: 0,
-          INACTIVE: 0,
-        };
-
-        latestByContact.forEach(stage => {
-          if (stage in stageCounts) {
-            stageCounts[stage as keyof StageCounts]++;
-          }
-        });
-
-        setCounts(stageCounts);
+        const { data: metrics } = await fetchDashboardMetrics();
+        if (metrics) {
+          setCounts(metrics.byStage);
+        }
       } catch (error) {
         console.error('Failed to fetch pipeline health:', error);
       } finally {
