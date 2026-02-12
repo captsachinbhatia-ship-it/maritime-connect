@@ -26,7 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCrmUser } from '@/hooks/useCrmUser';
-import { getCompanyNamesMap } from '@/services/contacts';
+// Company name comes from the pipeline view — no separate lookup needed
 import { changeContactStage } from '@/services/assignments';
 import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
@@ -81,7 +81,6 @@ export function MyContactsTab() {
     ACHIEVEMENT: 0,
     INACTIVE: 0,
   });
-  const [companyNamesMap, setCompanyNamesMap] = useState<Record<string, string>>({});
   const [nextFollowupMap, setNextFollowupMap] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingStage, setIsUpdatingStage] = useState<string | null>(null);
@@ -97,20 +96,16 @@ export function MyContactsTab() {
   const loadStageCounts = useCallback(async () => {
     if (!session || !crmUserId) return;
     try {
-      const currentCrmUserId = crmUserId;
-
-      const { data: allAssignments } = await supabase
-        .from('contact_assignments')
-        .select('stage')
-        .eq('status', 'ACTIVE')
-        .is('ended_at', null)
-        .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .ilike('assignment_role', 'primary');
-
-      const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
-      (allAssignments || []).forEach(a => {
-        if (a.stage in counts) counts[a.stage as StageType]++;
+      const countPromises = STAGES.map(async (stage) => {
+        const { count, error } = await supabase
+          .from('v_my_primary_pipeline')
+          .select('id', { count: 'exact', head: true })
+          .eq('stage', stage.value);
+        return { stage: stage.value, count: error ? 0 : (count ?? 0) };
       });
+      const results = await Promise.all(countPromises);
+      const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+      results.forEach(r => { counts[r.stage] = r.count; });
       setStageCounts(counts);
     } catch { /* keep existing counts */ }
   }, [session, crmUserId]);
@@ -126,58 +121,23 @@ export function MyContactsTab() {
     setError(null);
 
     try {
-      const currentCrmUserId = crmUserId;
-
-      // Get ACTIVE PRIMARY assignments for the current user in the selected stage
-      const { data: primaryAssignments, error: assignmentError } = await supabase
-        .from('contact_assignments')
-        .select('contact_id, stage')
-        .eq('status', 'ACTIVE')
-        .is('ended_at', null)
-        .eq('assigned_to_crm_user_id', currentCrmUserId)
-        .ilike('assignment_role', 'primary')
-        .eq('stage', activeStage);
-
-      if (assignmentError) {
-        setError(assignmentError.message);
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      const contactIds = (primaryAssignments || []).map(a => a.contact_id);
-
-      if (contactIds.length === 0) {
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Fetch contacts from the view
-      let contactsQuery = supabase
-        .from('contacts_with_primary_phone')
+      // Single query to the pipeline view filtered by stage
+      const { data: pipelineData, error: pipelineError } = await supabase
+        .from('v_my_primary_pipeline')
         .select('*')
-        .in('id', contactIds)
+        .eq('stage', activeStage)
         .order('full_name', { ascending: true });
 
-      if (activeStage === 'INACTIVE') {
-        contactsQuery = contactsQuery.eq('is_active', false);
-      } else {
-        contactsQuery = contactsQuery.eq('is_active', true);
-      }
-
-      const { data: contactsData, error: contactsError } = await contactsQuery;
-
-      if (contactsError) {
-        setError(contactsError.message);
+      if (pipelineError) {
+        setError(pipelineError.message);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      let contactsList = (contactsData || []) as ContactWithCompany[];
+      let contactsList = (pipelineData || []) as ContactWithCompany[];
 
-      // Fetch last interaction data (try to include subject/notes if view supports it)
+      // Fetch last interaction data
       if (contactsList.length > 0) {
         const contactIdsForInteraction = contactsList.map(c => c.id);
         const { data: lastInteractionData } = await supabase
@@ -205,18 +165,6 @@ export function MyContactsTab() {
 
       setContacts(contactsList);
 
-      // Fetch company names
-      const companyIds = contactsList
-        .map(c => c.company_id)
-        .filter((id): id is string => id !== null);
-
-      if (companyIds.length > 0) {
-        const namesResult = await getCompanyNamesMap(companyIds);
-        if (namesResult.data) {
-          setCompanyNamesMap(namesResult.data);
-        }
-      }
-
       // Fetch next follow-up dates
       const contactIdsForFollowups = contactsList.map(c => c.id);
       if (contactIdsForFollowups.length > 0) {
@@ -238,7 +186,7 @@ export function MyContactsTab() {
     const searchLower = search.toLowerCase().trim();
     return contacts.filter(contact => {
       const fullName = (contact.full_name || '').toLowerCase();
-      const companyName = contact.company_id ? (companyNamesMap[contact.company_id] || '').toLowerCase() : '';
+      const companyName = ((contact as any).company_name || '').toLowerCase();
       const email = (contact.email || '').toLowerCase();
       const phone = (contact.primary_phone || '').toLowerCase();
       return fullName.includes(searchLower) || 
@@ -246,7 +194,7 @@ export function MyContactsTab() {
              email.includes(searchLower) || 
              phone.includes(searchLower);
     });
-  }, [contacts, search, companyNamesMap]);
+  }, [contacts, search]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -404,7 +352,7 @@ export function MyContactsTab() {
                         {contact.full_name || '-'}
                       </TableCell>
                       <TableCell>
-                        {contact.company_id ? companyNamesMap[contact.company_id] || '-' : '-'}
+                        {(contact as any).company_name || '-'}
                       </TableCell>
                       <TableCell>
                         {(() => {
@@ -581,7 +529,7 @@ export function MyContactsTab() {
 
       <ContactDetailsDrawer
         contact={selectedContact}
-        companyName={selectedContact?.company_id ? companyNamesMap[selectedContact.company_id] || null : null}
+        companyName={(selectedContact as any)?.company_name || null}
         currentStage={activeStage}
         isOpen={drawerOpen}
         onClose={() => {
@@ -589,8 +537,7 @@ export function MyContactsTab() {
           setSelectedContact(null);
         }}
         onOwnersChange={loadContacts}
-        onCompanyChange={(newCompanyId, newCompanyName) => {
-          setCompanyNamesMap(prev => ({ ...prev, [newCompanyId]: newCompanyName }));
+        onCompanyChange={() => {
           loadContacts();
         }}
       />
