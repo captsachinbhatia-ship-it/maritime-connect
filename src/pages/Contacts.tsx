@@ -77,25 +77,41 @@ export default function Contacts() {
 
   // Fetch counts from unified view
   const loadCounts = useCallback(async () => {
-    if (!crmUser) return;
-    const currentCrmUserId = crmUser.id;
-    if (!currentCrmUserId) return;
+  if (!crmUser?.id) return;
+  const currentCrmUserId = crmUser.id;
 
-    try {
-      const { data, error } = await supabase
-        .from('v_directory_contacts')
-        .select('id, primary_owner_id, secondary_owner_id, created_by_crm_user_id');
+  try {
+    // Directory (global safe)
+    const { count: dirCount } = await supabase
+      .from('v_directory_contacts_ro')
+      .select('contact_id', { count: 'exact', head: true });
 
-      if (error || !data) return;
+    // My Primary (scoped)
+    const { count: primaryCount } = await supabase
+      .from('v_my_primary_contacts')
+      .select('contact_id', { count: 'exact', head: true });
 
-      setDirectoryCount(data.length);
-      setMyPrimaryCount(data.filter(r => r.primary_owner_id === currentCrmUserId).length);
-      setMySecondaryCount(data.filter(r => r.secondary_owner_id === currentCrmUserId).length);
-      setMyAddedCount(data.filter(r => r.created_by_crm_user_id === currentCrmUserId).length);
-    } catch {
-      // silent
-    }
-  }, [crmUser]);
+    // My Secondary (scoped)
+    const { count: secondaryCount } = await supabase
+      .from('v_my_secondary_contacts')
+      .select('contact_id', { count: 'exact', head: true });
+
+    // My Added (creator-owned)
+    const { count: addedCount } = await supabase
+      .from('contacts')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by_crm_user_id', currentCrmUserId)
+      .eq('is_deleted', false);
+
+    setDirectoryCount(dirCount ?? 0);
+    setMyPrimaryCount(primaryCount ?? 0);
+    setMySecondaryCount(secondaryCount ?? 0);
+    setMyAddedCount(addedCount ?? 0);
+  } catch {
+    // silent
+  }
+}, [crmUser]);
+}, [crmUser]);
 
   useEffect(() => {
     if (!authLoading && crmUser) {
