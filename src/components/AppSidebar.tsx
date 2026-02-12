@@ -41,6 +41,7 @@ const navItems = [
 const adminNavItems = [
   { title: 'Follow-ups Oversight', url: '/followups-oversight', icon: ClipboardCheck },
   { title: 'Daily Work Done', url: '/admin/daily-work-done', icon: Activity },
+  { title: 'Admin Summary', url: '/admin/summary', icon: BarChart3 },
   { title: 'Admin – Users', url: '/admin-users', icon: UserCog },
 ];
 
