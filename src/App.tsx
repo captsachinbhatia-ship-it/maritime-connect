@@ -13,6 +13,7 @@ import AccountSecurity from "./pages/AccountSecurity";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
+import ContactsV2 from "./pages/ContactsV2";
 import Enquiries from "./pages/Enquiries";
 import CreateEnquiry from "./pages/CreateEnquiry";
 import EnquiryDetail from "./pages/EnquiryDetail";
@@ -56,7 +57,9 @@ const App = () => {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="companies" element={<Companies />} />
-                <Route path="contacts" element={<Contacts />} />
+                <Route path="contacts" element={<ContactsV2 />} />
+                <Route path="contacts-v2" element={<ContactsV2 />} />
+                <Route path="contacts-old" element={<Contacts />} />
                 <Route path="contacts/bulk-import" element={<BulkImport />} />
                 <Route path="followups" element={<MyFollowups />} />
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
