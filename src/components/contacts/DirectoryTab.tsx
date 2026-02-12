@@ -16,7 +16,6 @@ import { getUserNames } from "@/services/interactions";
 import { SortableHeader, type SortColumn, type SortDirection } from "./ColumnFilters";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCrmUser } from "@/hooks/useCrmUser";
 import { DirectoryBulkToolbar } from "./DirectoryBulkToolbar";
 import { ContactEditSheet } from "./ContactEditSheet";
 import { useToast } from "@/hooks/use-toast";
@@ -60,7 +59,6 @@ interface DirectoryTabProps {
 
 export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const { isAdmin } = useAuth();
-  const { crmUserId } = useCrmUser();
   const { toast } = useToast();
 
   const [contacts, setContacts] = useState<DirectoryContact[]>([]);
@@ -113,12 +111,10 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     }
   };
 
-  // Helper to get primary owner ID from ownersMap
   const getPrimaryOwnerId = (contactId: string): string | null => {
     return ownersMap[contactId]?.primary?.assigned_to_crm_user_id || null;
   };
 
-  // Helper to get stage from ownersMap (contact_assignments is truth)
   const getContactStage = (contactId: string): AssignmentStage | null => {
     return (ownersMap[contactId]?.primary?.stage as AssignmentStage) || null;
   };
@@ -126,13 +122,13 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Load active CRM users (for dropdown + filters)
+      // Load active CRM users
       const usersResult = await getActiveCrmUsers();
       if (usersResult.data) {
         setCrmUsers(usersResult.data.map((u) => ({ id: u.id, full_name: u.full_name })));
       }
 
-      // Directory: contacts table (flat, no FK joins)
+      // Directory contacts
       const { data, error } = await supabase
         .from("contacts")
         .select("id, full_name, company_id, created_by_crm_user_id, created_at, is_archived, archived_at")
@@ -150,26 +146,22 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
       const contactIds = contactsList.map((c) => c.id);
 
-      // Fetch ownership from contact_assignments (source of truth)
+      // Owners map
       let fetchedOwnersMap: Record<string, ContactOwners> = {};
       if (contactIds.length > 0) {
         const ownersResult = await getOwnersForContacts(contactIds);
-        if (ownersResult.data) {
-          fetchedOwnersMap = ownersResult.data;
-        }
+        if (ownersResult.data) fetchedOwnersMap = ownersResult.data;
       }
       setOwnersMap(fetchedOwnersMap);
 
-      // Build company names map
+      // Companies
       const companyIds = Array.from(new Set(contactsList.map((c) => c.company_id).filter(Boolean))) as string[];
       if (companyIds.length > 0) {
         const namesResult = await getCompanyNamesMap(companyIds);
-        if (namesResult.data) {
-          setCompanyNamesMap(namesResult.data);
-        }
+        if (namesResult.data) setCompanyNamesMap(namesResult.data);
       }
 
-      // Build user names map from created_by + owner IDs
+      // User names map: created_by + owners
       const allUserIds = new Set<string>();
       contactsList.forEach((c) => {
         if (c.created_by_crm_user_id) allUserIds.add(c.created_by_crm_user_id);
@@ -181,9 +173,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
       if (allUserIds.size > 0) {
         const namesResult = await getUserNames(Array.from(allUserIds));
-        if (namesResult.data) {
-          setUserNamesMap(namesResult.data);
-        }
+        if (namesResult.data) setUserNamesMap(namesResult.data);
       }
     } catch (e: any) {
       toast({ title: "Directory load failed", description: e?.message || "Unexpected error", variant: "destructive" });
@@ -198,7 +188,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     fetchData();
   }, [fetchData]);
 
-  // Stage counts derived from contact_assignments (via ownersMap)
+  // Stage counts
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
     contacts.forEach((c) => {
@@ -208,7 +198,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     return counts;
   }, [contacts, ownersMap]);
 
-  // Owner counts derived from contact_assignments (via ownersMap)
+  // Owner counts
   const ownerCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     contacts.forEach((c) => {
@@ -229,7 +219,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     if (companyFilter.trim()) {
       const s = companyFilter.toLowerCase().trim();
       filtered = filtered.filter((c) => {
-        const name = c.company_id ? (companyNamesMap[c.company_id] || "") : "";
+        const name = c.company_id ? companyNamesMap[c.company_id] || "" : "";
         return name.toLowerCase().includes(s);
       });
     }
@@ -248,7 +238,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       filtered = filtered.filter((c) => (getContactStage(c.id) || "") === stageFilter);
     }
 
-    // Sort: editing row pinned first, then unassigned first, then sort config
+    // Sort: editing row pinned first, then unassigned first
     const dir = sortConfig.direction === "asc" ? 1 : -1;
 
     filtered = [...filtered].sort((a, b) => {
@@ -289,7 +279,18 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     });
 
     return filtered;
-  }, [contacts, nameFilter, companyFilter, ownerFilter, addedByFilter, stageFilter, sortConfig, editingContactId, companyNamesMap, ownersMap]);
+  }, [
+    contacts,
+    nameFilter,
+    companyFilter,
+    ownerFilter,
+    addedByFilter,
+    stageFilter,
+    sortConfig,
+    editingContactId,
+    companyNamesMap,
+    ownersMap,
+  ]);
 
   const handleSort = (column: SortColumn) => {
     setSortConfig((prev) => ({
@@ -317,7 +318,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const isRowSaving = (contactId: string) =>
     !!savingCells[`${contactId}-assign`] || !!savingCells[`${contactId}-stage`];
 
-  // Assignment change → writes to contact_assignments (close-then-insert)
+  // Assignment change
   const handleAssignChange = async (contactId: string, newUserId: string | null) => {
     if (!isAdmin) return;
 
@@ -329,24 +330,23 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       const now = new Date().toISOString();
       const currentOwners = ownersMap[contactId];
       let currentSecondary = currentOwners?.secondary?.assigned_to_crm_user_id || null;
-      const currentStage = (currentOwners?.primary?.stage as AssignmentStage) || "COLD_CALLING";
+      const currentStage = (currentOwners?.primary?.stage as AssignmentStage) || "ASPIRATION";
 
       if (newUserId === null) {
-        // Unassign: close primary assignment only
+        // Unassign: close PRIMARY only (strict uppercase, no ilike)
         const { error } = await supabase
           .from("contact_assignments")
           .update({ status: "CLOSED", ended_at: now })
           .eq("contact_id", contactId)
           .eq("status", "ACTIVE")
-          .is("ended_at", null)
-          .ilike("assignment_role", "primary");
+          .eq("assignment_role", "PRIMARY");
 
         if (error) {
           toast({ title: "Assignment failed", description: error.message, variant: "destructive" });
           return;
         }
       } else {
-        // If new primary is the current secondary, clear secondary (promote)
+        // promote secondary to primary => clear secondary
         if (currentSecondary === newUserId) {
           currentSecondary = null;
         }
@@ -373,7 +373,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     }
   };
 
-  // Stage change → writes to contact_assignments via changeContactStage
+  // Stage change
   const handleStageChange = async (contactId: string, newStage: AssignmentStage) => {
     if (!isAdmin) return;
 
@@ -417,7 +417,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     const confirmed = window.confirm(`⚠️ Delete "${contactName}"?\n\nThis will archive the contact.\n\nContinue?`);
     if (!confirmed) return;
 
-    // Archive the contact
     const { error } = await supabase
       .from("contacts")
       .update({ is_archived: true, archived_at: new Date().toISOString() })
@@ -428,7 +427,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
       return;
     }
 
-    // Close all active assignments for this contact
     await supabase
       .from("contact_assignments")
       .update({ status: "CLOSED", ended_at: new Date().toISOString() })
@@ -467,7 +465,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
         </CardHeader>
 
         <CardContent>
-          {/* Bulk toolbar (admin only, when selected) */}
           {isAdmin && selectedIds.length > 0 && (
             <DirectoryBulkToolbar
               selectedIds={selectedIds}
@@ -476,7 +473,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
             />
           )}
 
-          {/* Owner filter tabs (admin-only) */}
           {isAdmin && !isLoading && (
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
               <span className="text-xs font-medium text-muted-foreground mr-1">Filter by owner:</span>
@@ -521,7 +517,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
             </div>
           )}
 
-          {/* Header filters */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <Input
               placeholder="Contact name…"
@@ -536,7 +531,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
               className="h-8 w-[150px] text-sm"
             />
 
-            {/* Added By filter */}
             <div className="flex items-center gap-1.5">
               <Filter className="h-3.5 w-3.5 text-muted-foreground" />
               <Select value={addedByFilter} onValueChange={setAddedByFilter}>
@@ -554,28 +548,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
               </Select>
             </div>
 
-            {/* Non-admin owner filter dropdown */}
-            {!isAdmin && (
-              <div className="flex items-center gap-1.5">
-                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-                  <SelectTrigger className="h-8 w-[180px] text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Owners</SelectItem>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {crmUsers.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.full_name} ({contacts.filter((c) => getPrimaryOwnerId(c.id) === u.id).length})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Stage filter buttons with counts */}
             <div className="flex items-center gap-1.5 ml-auto flex-wrap">
               <Button
                 variant={stageFilter === "all" ? "default" : "outline"}
@@ -699,12 +671,10 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                             )}
                           </TableCell>
 
-                          {/* Added By */}
                           <TableCell className="text-xs text-muted-foreground">
-                            {contact.created_by_crm_user_id ? (userNamesMap[contact.created_by_crm_user_id] || "—") : "—"}
+                            {contact.created_by_crm_user_id ? userNamesMap[contact.created_by_crm_user_id] || "—" : "—"}
                           </TableCell>
 
-                          {/* Owner (from contact_assignments) */}
                           <TableCell className="text-sm">
                             {isAdmin ? (
                               <select
@@ -730,18 +700,17 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
                             )}
                           </TableCell>
 
-                          {/* Stage (from contact_assignments) */}
                           <TableCell>
                             {isAdmin ? (
                               <Select
-                                value={contactStage || "COLD_CALLING"}
+                                value={contactStage || "ASPIRATION"}
                                 onValueChange={(val) => handleStageChange(contact.id, val as AssignmentStage)}
                                 disabled={!!savingCells[`${contact.id}-stage`]}
                               >
                                 <SelectTrigger className="h-7 w-[130px] text-xs border-input focus:ring-primary/50">
                                   <SelectValue>
-                                    <Badge className={`${STAGE_COLORS[contactStage || "COLD_CALLING"]} text-xs`}>
-                                      {STAGE_LABELS[contactStage || "COLD_CALLING"] || contactStage}
+                                    <Badge className={`${STAGE_COLORS[contactStage || "ASPIRATION"]} text-xs`}>
+                                      {STAGE_LABELS[contactStage || "ASPIRATION"] || contactStage}
                                     </Badge>
                                   </SelectValue>
                                 </SelectTrigger>
@@ -801,7 +770,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
         </CardContent>
       </Card>
 
-      {/* Edit Contact Sheet (slides from right) */}
       <ContactEditSheet
         contactId={editContactId}
         open={editSheetOpen}
