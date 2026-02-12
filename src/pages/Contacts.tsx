@@ -1,19 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { AddContactModal } from '@/components/contacts/AddContactModal';
-import { DirectoryTab } from '@/components/contacts/DirectoryTab';
-import { MyContactsTab } from '@/components/contacts/MyContactsTab';
-import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
-import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
-import { supabase } from '@/lib/supabaseClient';
-import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, BookOpen, User, Users2, UserPlus, FileUp } from 'lucide-react';
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { AddContactModal } from "@/components/contacts/AddContactModal";
+import { DirectoryTab } from "@/components/contacts/DirectoryTab";
+import { MyContactsTab } from "@/components/contacts/MyContactsTab";
+import { MyAddedContactsTab } from "@/components/contacts/MyAddedContactsTab";
+import { SecondaryContactsTab } from "@/components/contacts/SecondaryContactsTab";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/contexts/AuthContext";
+import { Loader2, BookOpen, User, Users2, UserPlus, FileUp } from "lucide-react";
 
-type TabType = 'directory' | 'my-primary' | 'my-secondary' | 'my-added';
+type TabType = "directory" | "my-primary" | "my-secondary" | "my-added";
 
-const ALL_TABS: TabType[] = ['directory', 'my-primary', 'my-secondary', 'my-added'];
+const ALL_TABS: TabType[] = ["directory", "my-primary", "my-secondary", "my-added"];
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -21,12 +21,12 @@ export default function Contacts() {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>(() => {
-    const tabParam = searchParams.get('tab');
+    const tabParam = searchParams.get("tab");
     // Redirect old tab names
-    if (tabParam === 'unassigned' || tabParam === 'my-contacts') return 'my-primary';
-    if (tabParam === 'secondary') return 'my-secondary';
+    if (tabParam === "unassigned" || tabParam === "my-contacts") return "my-primary";
+    if (tabParam === "secondary") return "my-secondary";
     if (tabParam && ALL_TABS.includes(tabParam as TabType)) return tabParam as TabType;
-    return 'directory';
+    return "directory";
   });
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -37,15 +37,15 @@ export default function Contacts() {
   const [myAddedCount, setMyAddedCount] = useState(0);
 
   useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'unassigned' || tabParam === 'my-contacts') {
-      setActiveTab('my-primary');
-      setSearchParams({ tab: 'my-primary' }, { replace: true });
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "unassigned" || tabParam === "my-contacts") {
+      setActiveTab("my-primary");
+      setSearchParams({ tab: "my-primary" }, { replace: true });
       return;
     }
-    if (tabParam === 'secondary') {
-      setActiveTab('my-secondary');
-      setSearchParams({ tab: 'my-secondary' }, { replace: true });
+    if (tabParam === "secondary") {
+      setActiveTab("my-secondary");
+      setSearchParams({ tab: "my-secondary" }, { replace: true });
       return;
     }
     if (tabParam && ALL_TABS.includes(tabParam as TabType) && tabParam !== activeTab) {
@@ -59,12 +59,8 @@ export default function Contacts() {
         setIsAdmin(false);
         return;
       }
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle();
-      const hasAdminAccess = data?.role === 'ADMIN' || data?.role === 'CEO';
+      const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      const hasAdminAccess = data?.role === "ADMIN" || data?.role === "CEO";
       setIsAdmin(hasAdminAccess);
     };
 
@@ -77,41 +73,40 @@ export default function Contacts() {
 
   // Fetch counts from unified view
   const loadCounts = useCallback(async () => {
-  if (!crmUser?.id) return;
-  const currentCrmUserId = crmUser.id;
+    if (!crmUser?.id) return;
+    const currentCrmUserId = crmUser.id;
 
-  try {
-    // Directory (global safe)
-    const { count: dirCount } = await supabase
-      .from('v_directory_contacts_ro')
-      .select('contact_id', { count: 'exact', head: true });
+    try {
+      // Directory (global safe)
+      const { count: dirCount } = await supabase
+        .from("v_directory_contacts_ro")
+        .select("contact_id", { count: "exact", head: true });
 
-    // My Primary (scoped)
-    const { count: primaryCount } = await supabase
-      .from('v_my_primary_contacts')
-      .select('contact_id', { count: 'exact', head: true });
+      // My Primary (scoped)
+      const { count: primaryCount } = await supabase
+        .from("v_my_primary_contacts")
+        .select("contact_id", { count: "exact", head: true });
 
-    // My Secondary (scoped)
-    const { count: secondaryCount } = await supabase
-      .from('v_my_secondary_contacts')
-      .select('contact_id', { count: 'exact', head: true });
+      // My Secondary (scoped)
+      const { count: secondaryCount } = await supabase
+        .from("v_my_secondary_contacts")
+        .select("contact_id", { count: "exact", head: true });
 
-    // My Added (creator-owned)
-    const { count: addedCount } = await supabase
-      .from('contacts')
-      .select('id', { count: 'exact', head: true })
-      .eq('created_by_crm_user_id', currentCrmUserId)
-      .eq('is_deleted', false);
+      // My Added (creator-owned)
+      const { count: addedCount } = await supabase
+        .from("contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("created_by_crm_user_id", currentCrmUserId)
+        .eq("is_deleted", false);
 
-    setDirectoryCount(dirCount ?? 0);
-    setMyPrimaryCount(primaryCount ?? 0);
-    setMySecondaryCount(secondaryCount ?? 0);
-    setMyAddedCount(addedCount ?? 0);
-  } catch {
-    // silent
-  }
-}, [crmUser]);
-}, [crmUser]);
+      setDirectoryCount(dirCount ?? 0);
+      setMyPrimaryCount(primaryCount ?? 0);
+      setMySecondaryCount(secondaryCount ?? 0);
+      setMyAddedCount(addedCount ?? 0);
+    } catch {
+      // silent
+    }
+  }, [crmUser]);
 
   useEffect(() => {
     if (!authLoading && crmUser) {
@@ -120,7 +115,7 @@ export default function Contacts() {
   }, [authLoading, crmUser, loadCounts]);
 
   const handleContactAdded = () => {
-    setRefreshKey(prev => prev + 1);
+    setRefreshKey((prev) => prev + 1);
     loadCounts();
   };
 
@@ -151,13 +146,11 @@ export default function Contacts() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
           <p className="mt-1 text-muted-foreground">
-            {isAdmin
-              ? 'Manage contact assignments and ownership'
-              : 'View contacts and manage your assigned pipeline'}
+            {isAdmin ? "Manage contact assignments and ownership" : "View contacts and manage your assigned pipeline"}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => navigate('/contacts/bulk-import')}>
+          <Button onClick={() => navigate("/contacts/bulk-import")}>
             <FileUp className="mr-2 h-4 w-4" />
             Bulk Import
           </Button>
