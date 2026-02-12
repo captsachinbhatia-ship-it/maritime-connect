@@ -7,15 +7,13 @@ import { DirectoryTab } from '@/components/contacts/DirectoryTab';
 import { MyContactsTab } from '@/components/contacts/MyContactsTab';
 import { MyAddedContactsTab } from '@/components/contacts/MyAddedContactsTab';
 import { SecondaryContactsTab } from '@/components/contacts/SecondaryContactsTab';
-import { DuplicateRiskTab } from '@/components/contacts/DuplicateRiskTab';
-import { PendingInactiveRequestsTab } from '@/components/contacts/PendingInactiveRequestsTab';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, UserPlus, Users2, AlertTriangle, Clock, BookOpen, FileUp } from 'lucide-react';
+import { Loader2, BookOpen, User, Users2, UserPlus, FileUp } from 'lucide-react';
 
-type TabType = 'directory' | 'my-contacts' | 'my-added' | 'secondary' | 'duplicate-risk' | 'pending-requests';
+type TabType = 'directory' | 'my-primary' | 'my-secondary' | 'my-added';
 
-const ALL_TABS: TabType[] = ['directory', 'my-contacts', 'secondary', 'my-added', 'duplicate-risk', 'pending-requests'];
+const ALL_TABS: TabType[] = ['directory', 'my-primary', 'my-secondary', 'my-added'];
 
 export default function Contacts() {
   const { user, crmUser, loading: authLoading } = useAuth();
@@ -24,27 +22,30 @@ export default function Contacts() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const tabParam = searchParams.get('tab');
-    // Redirect old 'unassigned' tab to directory
-    if (tabParam === 'unassigned') return 'directory';
+    // Redirect old tab names
+    if (tabParam === 'unassigned' || tabParam === 'my-contacts') return 'my-primary';
+    if (tabParam === 'secondary') return 'my-secondary';
     if (tabParam && ALL_TABS.includes(tabParam as TabType)) return tabParam as TabType;
     return 'directory';
   });
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Counts
-  const [secondaryCount, setSecondaryCount] = useState(0);
+  // Counts from unified view
   const [directoryCount, setDirectoryCount] = useState(0);
-  const [duplicateRiskCount, setDuplicateRiskCount] = useState(0);
-  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [myPrimaryCount, setMyPrimaryCount] = useState(0);
+  const [mySecondaryCount, setMySecondaryCount] = useState(0);
   const [myAddedCount, setMyAddedCount] = useState(0);
-  const [myContactsCount, setMyContactsCount] = useState(0);
 
-  // Sync tab from URL param
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam === 'unassigned') {
-      setActiveTab('directory');
-      setSearchParams({ tab: 'directory' }, { replace: true });
+    if (tabParam === 'unassigned' || tabParam === 'my-contacts') {
+      setActiveTab('my-primary');
+      setSearchParams({ tab: 'my-primary' }, { replace: true });
+      return;
+    }
+    if (tabParam === 'secondary') {
+      setActiveTab('my-secondary');
+      setSearchParams({ tab: 'my-secondary' }, { replace: true });
       return;
     }
     if (tabParam && ALL_TABS.includes(tabParam as TabType) && tabParam !== activeTab) {
@@ -58,13 +59,11 @@ export default function Contacts() {
         setIsAdmin(false);
         return;
       }
-
       const { data } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
         .maybeSingle();
-
       const hasAdminAccess = data?.role === 'ADMIN' || data?.role === 'CEO';
       setIsAdmin(hasAdminAccess);
     };
@@ -76,59 +75,26 @@ export default function Contacts() {
     }
   }, [user, crmUser, authLoading]);
 
-  // Fetch all counts
+  // Fetch counts from unified view
   const loadCounts = useCallback(async () => {
     if (!crmUser) return;
-
     const currentCrmUserId = crmUser.id;
     if (!currentCrmUserId) return;
 
-    // Secondary
-    const { count: secCount } = await supabase
-      .from('contact_assignments')
-      .select('contact_id', { count: 'exact', head: true })
-      .eq('status', 'ACTIVE')
-      .eq('assigned_to_crm_user_id', currentCrmUserId)
-      .in('assignment_role', ['secondary']);
-    setSecondaryCount(secCount || 0);
-
-    // Directory (ALL non-archived contacts)
-    const { count: dirCount } = await supabase
-      .from('contacts')
-      .select('id', { count: 'exact', head: true })
-      .eq('is_archived', false);
-    setDirectoryCount(dirCount || 0);
-
-    // My Contacts (primary owned by current user)
-    const { count: myCount } = await supabase
-      .from('contact_assignments')
-      .select('contact_id', { count: 'exact', head: true })
-      .eq('status', 'ACTIVE')
-      .eq('assigned_to_crm_user_id', currentCrmUserId)
-      .in('assignment_role', ['primary']);
-    setMyContactsCount(myCount || 0);
-
-    // My Added
-    const { count: addedCount } = await supabase
-      .from('contacts')
-      .select('id', { count: 'exact', head: true })
-      .eq('created_by_crm_user_id', currentCrmUserId);
-    setMyAddedCount(addedCount || 0);
-
-    // Admin-only counts
     try {
-      const { count: dupCount } = await supabase
-        .from('contact_duplicate_risk')
-        .select('*', { count: 'exact', head: true });
-      setDuplicateRiskCount(dupCount || 0);
-    } catch { setDuplicateRiskCount(0); }
+      const { data, error } = await supabase
+        .from('v_directory_contacts')
+        .select('id, primary_owner_id, secondary_owner_id, created_by_crm_user_id');
 
-    try {
-      const { count: pendCount } = await supabase
-        .from('v_pending_inactive_requests')
-        .select('*', { count: 'exact', head: true });
-      setPendingRequestsCount(pendCount || 0);
-    } catch { setPendingRequestsCount(0); }
+      if (error || !data) return;
+
+      setDirectoryCount(data.length);
+      setMyPrimaryCount(data.filter(r => r.primary_owner_id === currentCrmUserId).length);
+      setMySecondaryCount(data.filter(r => r.secondary_owner_id === currentCrmUserId).length);
+      setMyAddedCount(data.filter(r => r.created_by_crm_user_id === currentCrmUserId).length);
+    } catch {
+      // silent
+    }
   }, [crmUser]);
 
   useEffect(() => {
@@ -184,83 +150,52 @@ export default function Contacts() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <div className="overflow-x-auto">
-          <TabsList className="inline-flex h-10 items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground">
-            <TabsTrigger
-              value="directory"
-              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              Directory ({directoryCount})
-            </TabsTrigger>
-            <TabsTrigger
-              value="my-contacts"
-              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              My Contacts ({myContactsCount})
-            </TabsTrigger>
-            <TabsTrigger
-              value="secondary"
-              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <Users2 className="h-3.5 w-3.5" />
-              Secondary ({secondaryCount})
-            </TabsTrigger>
-            <TabsTrigger
-              value="my-added"
-              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              My Added ({myAddedCount})
-            </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger
-                value="duplicate-risk"
-                className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Duplicate Risk ({duplicateRiskCount})
-              </TabsTrigger>
-            )}
-            {isAdmin && (
-              <TabsTrigger
-                value="pending-requests"
-                className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-              >
-                <Clock className="h-3.5 w-3.5" />
-                Pending ({pendingRequestsCount})
-              </TabsTrigger>
-            )}
-          </TabsList>
-        </div>
+        <TabsList className="inline-flex h-10 items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground">
+          <TabsTrigger
+            value="directory"
+            className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Directory ({directoryCount})
+          </TabsTrigger>
+          <TabsTrigger
+            value="my-primary"
+            className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            <User className="h-3.5 w-3.5" />
+            My Primary ({myPrimaryCount})
+          </TabsTrigger>
+          <TabsTrigger
+            value="my-secondary"
+            className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            <Users2 className="h-3.5 w-3.5" />
+            My Secondary ({mySecondaryCount})
+          </TabsTrigger>
+          <TabsTrigger
+            value="my-added"
+            className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            My Added ({myAddedCount})
+          </TabsTrigger>
+        </TabsList>
 
         <TabsContent value="directory" className="mt-4">
           <DirectoryTab key={`directory-${refreshKey}`} onCountsChanged={loadCounts} />
         </TabsContent>
 
-        <TabsContent value="my-contacts" className="mt-4">
+        <TabsContent value="my-primary" className="mt-4">
           <MyContactsTab key={`mycontacts-${refreshKey}`} />
         </TabsContent>
 
-        <TabsContent value="secondary" className="mt-4">
+        <TabsContent value="my-secondary" className="mt-4">
           <SecondaryContactsTab key={`secondary-${refreshKey}`} />
         </TabsContent>
 
         <TabsContent value="my-added" className="mt-4">
           <MyAddedContactsTab key={`added-${refreshKey}`} onRefresh={loadCounts} />
         </TabsContent>
-
-        {isAdmin && (
-          <TabsContent value="duplicate-risk" className="mt-4">
-            <DuplicateRiskTab key={`duplicate-risk-${refreshKey}`} />
-          </TabsContent>
-        )}
-
-        {isAdmin && (
-          <TabsContent value="pending-requests" className="mt-4">
-            <PendingInactiveRequestsTab key={`pending-requests-${refreshKey}`} />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

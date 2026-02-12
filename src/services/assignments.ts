@@ -116,7 +116,7 @@ export async function upsertOwners(params: {
         .eq('contact_id', contact_id)
         .eq('status', 'ACTIVE')
         .is('ended_at', null)
-        .ilike('assignment_role', 'primary')
+        .eq('assignment_role', 'PRIMARY')
         .maybeSingle();
       if (existing?.stage) stage = existing.stage;
     }
@@ -136,7 +136,7 @@ export async function upsertOwners(params: {
         contact_id,
         assigned_to_crm_user_id: primary_owner_id,
         assigned_by_crm_user_id: assignedByCrmUserId,
-        assignment_role: 'primary',
+        assignment_role: 'PRIMARY',
         stage,
         status: 'ACTIVE',
       });
@@ -151,7 +151,7 @@ export async function upsertOwners(params: {
           contact_id,
           assigned_to_crm_user_id: secondary_owner_id,
           assigned_by_crm_user_id: assignedByCrmUserId,
-          assignment_role: 'secondary',
+          assignment_role: 'SECONDARY',
           stage,
           status: 'ACTIVE',
         });
@@ -206,7 +206,7 @@ export async function addAssignment(params: {
       .eq('contact_id', params.contact_id)
       .eq('status', 'ACTIVE')
       .is('ended_at', null)
-      .ilike('assignment_role', params.assignment_role);
+      .eq('assignment_role', params.assignment_role.toUpperCase());
 
     // Insert new
     const { error } = await supabase
@@ -215,8 +215,8 @@ export async function addAssignment(params: {
         contact_id: params.contact_id,
         assigned_to_crm_user_id: params.assigned_to_crm_user_id,
         assigned_by_crm_user_id: assignedByCrmUserId,
-        assignment_role: params.assignment_role,
-        stage: params.assignment_role === 'primary' ? params.stage : 'COLD_CALLING',
+        assignment_role: params.assignment_role.toUpperCase(),
+        stage: params.assignment_role.toUpperCase() === 'PRIMARY' ? params.stage : 'COLD_CALLING',
         status: 'ACTIVE',
       });
 
@@ -250,7 +250,7 @@ export async function changeContactStage(params: {
         .eq('contact_id', params.contact_id)
         .eq('status', 'ACTIVE')
         .is('ended_at', null)
-        .ilike('assignment_role', 'primary');
+        .eq('assignment_role', 'PRIMARY');
 
       if (updateError) return { data: null, error: updateError.message };
       return { data: { action: 'UPDATED' }, error: null };
