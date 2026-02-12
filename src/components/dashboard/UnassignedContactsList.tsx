@@ -8,14 +8,14 @@ import { Loader2, UserPlus, RefreshCw, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { listCrmUsersForAssignment, CrmUserForAssignment } from '@/services/profiles';
 import { upsertAssignment } from '@/services/assignments';
+import { supabase } from '@/lib/supabaseClient';
+import { DirectoryRow } from '@/types/directory';
 
 interface UnassignedContact {
   id: string;
   full_name: string | null;
   company_name: string | null;
-  designation: string | null;
   email: string | null;
-  phone: string | null;
 }
 
 export function UnassignedContactsList() {
@@ -29,69 +29,28 @@ export function UnassignedContactsList() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const { supabase } = await import('@/lib/supabaseClient');
-      
-      // Query: Get contacts where NO ACTIVE PRIMARY assignment exists
-      // A contact is "unassigned" if it has no ACTIVE PRIMARY owner
-      // Step 1: Get all contact IDs that have an ACTIVE PRIMARY assignment with a non-null assigned_to_crm_user_id
-      const { data: activePrimaryAssignments, error: assignmentsError } = await supabase
-        .from('contact_assignments')
-        .select('contact_id')
-        .eq('status', 'ACTIVE')
-        .eq('assignment_role', 'primary')
-        .not('assigned_to_crm_user_id', 'is', null);
-
-      if (assignmentsError) {
-        console.error('[UnassignedContactsList] Error fetching active PRIMARY assignments:', assignmentsError);
-        setContacts([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Build a Set of assigned contact IDs for efficient lookup
-      const assignedContactIds = new Set((activePrimaryAssignments || []).map(a => a.contact_id));
-      console.log('[UnassignedContactsList] Contacts with ACTIVE PRIMARY:', assignedContactIds.size);
-
-      // Step 2: Get all active contacts
-      const { data: allContacts, error: contactsError } = await supabase
-        .from('contacts')
-        .select(`
-          id,
-          full_name,
-          designation,
-          email,
-          phone,
-          company_id,
-          companies ( company_name )
-        `)
-        .eq('is_active', true)
+      // Use unified view to find unassigned contacts
+      const { data, error } = await supabase
+        .from('v_directory_contacts')
+        .select('id, full_name, company_name, email, is_unassigned')
+        .eq('is_unassigned', true)
         .order('full_name')
         .limit(500);
 
-      if (contactsError) {
-        console.error('[UnassignedContactsList] Error fetching contacts:', contactsError);
+      if (error) {
+        console.error('[UnassignedContactsList] Error:', error);
         setContacts([]);
       } else {
-        // Filter: NOT EXISTS (ACTIVE assignment with assigned_to_crm_user_id IS NOT NULL)
-        const unassignedContacts = (allContacts || []).filter(
-          (c: any) => !assignedContactIds.has(c.id)
-        );
-
-        // Map to expected format
-        const mappedContacts: UnassignedContact[] = unassignedContacts.map((c: any) => ({
+        const mapped: UnassignedContact[] = (data || []).map((c: any) => ({
           id: c.id,
           full_name: c.full_name,
-          company_name: c.companies?.company_name || null,
-          designation: c.designation,
+          company_name: c.company_name || null,
           email: c.email,
-          phone: c.phone,
         }));
-
-        console.log('[UnassignedContactsList] Unassigned contacts (NOT EXISTS pattern):', mappedContacts.length);
-        setContacts(mappedContacts);
+        setContacts(mapped);
       }
 
-      // Fetch CRM users for assignment dropdown (only active users)
+      // Fetch CRM users for assignment dropdown
       const { data: crmUsersData, error: crmError } = await listCrmUsersForAssignment();
       if (crmError) {
         console.error('[UnassignedContactsList] Error fetching CRM users:', crmError);
@@ -122,7 +81,6 @@ export function UnassignedContactsList() {
 
     setAssigningId(contactId);
     try {
-      // Use upsertAssignment which handles CRM user resolution internally
       const result = await upsertAssignment({
         contact_id: contactId,
         assigned_to_crm_user_id: selectedCrmUserId,
@@ -130,31 +88,20 @@ export function UnassignedContactsList() {
       });
 
       if (result.error) {
-        console.error('[UnassignedContactsList] Assignment error:', result.error);
-        toast({
-          title: 'Assignment failed',
-          description: result.error,
-          variant: 'destructive',
-        });
+        toast({ title: 'Assignment failed', description: result.error, variant: 'destructive' });
         return;
       }
 
-      toast({
-        title: 'Assigned successfully',
-        description: 'The contact has been assigned.',
-      });
+      toast({ title: 'Assigned successfully', description: 'The contact has been assigned.' });
 
-      // Clear selection and refresh list from server
       setSelectedUsers(prev => {
         const updated = { ...prev };
         delete updated[contactId];
         return updated;
       });
       
-      // Refresh the full list to ensure data integrity
       await fetchData();
     } catch (error) {
-      console.error('[UnassignedContactsList] Unexpected error:', error);
       toast({
         title: 'Assignment failed',
         description: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -203,7 +150,6 @@ export function UnassignedContactsList() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Company</TableHead>
-                  <TableHead>Designation</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead className="w-[200px]">Assign To</TableHead>
                   <TableHead className="w-[100px] text-right">Action</TableHead>
@@ -221,9 +167,6 @@ export function UnassignedContactsList() {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {contact.designation || '—'}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {contact.email || '—'}
