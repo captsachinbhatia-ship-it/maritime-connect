@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { supabase } from '@/lib/supabaseClient';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import {
   useContactsV2Data,
   STAGE_CHIPS,
@@ -379,6 +380,7 @@ function PaginationBar({
 
 // ── Hook for cumulative bar counts ───────────────────────────────
 function useCumulativeCounts() {
+  const { crmUserId } = useCrmUser();
   const [directoryTotal, setDirectoryTotal] = useState(0);
   const [primaryTotal, setPrimaryTotal] = useState(0);
   const [secondaryTotal, setSecondaryTotal] = useState(0);
@@ -388,10 +390,14 @@ function useCumulativeCounts() {
   const unassignedTotal = Math.max(0, directoryTotal - ownerTotalSum);
 
   const refresh = async () => {
+    const addedQuery = crmUserId
+      ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId)
+      : null;
+
     const [dirRes, ownerRes, addedRes] = await Promise.all([
       supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
       supabase.from('v_owner_summary_ui').select('*'),
-      supabase.from('v_my_added_unassigned').select('*', { count: 'exact', head: true }),
+      addedQuery ?? Promise.resolve({ count: 0 } as any),
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
