@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BookOpen,
@@ -11,6 +11,16 @@ import {
   Loader2,
   AlertCircle,
   FileUp,
+  MoreHorizontal,
+  Eye,
+  Pencil,
+  ArrowRight,
+  UserCheck,
+  UserMinus,
+  Phone as PhoneIcon,
+  CalendarClock,
+  Trash2,
+  Archive,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -26,9 +37,28 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
+import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
+import { AssignContactModal } from '@/components/contacts/AssignContactModal';
+import { LogInteractionDialog } from '@/components/contacts/LogInteractionDialog';
+import { AddFollowupModal } from '@/components/contacts/AddFollowupModal';
+import { StageDropdown } from '@/components/contacts/StageDropdown';
+import { EditContactModal } from '@/components/contacts/EditContactModal';
+import { DeleteContactDialog } from '@/components/contacts/DeleteContactDialog';
+import { DirectoryBulkToolbar } from '@/components/contacts/DirectoryBulkToolbar';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { ContactWithCompany } from '@/types';
+import { type AssignmentStage } from '@/services/assignments';
 import {
   useContactsV2Data,
   STAGE_CHIPS,
@@ -150,6 +180,7 @@ function TableSkeleton() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10" />
             <TableHead>Full Name</TableHead>
             <TableHead>Company</TableHead>
             <TableHead>Designation</TableHead>
@@ -157,12 +188,13 @@ function TableSkeleton() {
             <TableHead>Phone</TableHead>
             <TableHead>Stage</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead className="w-10" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {Array.from({ length: 8 }).map((_, i) => (
             <TableRow key={i}>
-              {Array.from({ length: 7 }).map((_, j) => (
+              {Array.from({ length: 9 }).map((_, j) => (
                 <TableCell key={j}>
                   <Skeleton className="h-4 w-24" />
                 </TableCell>
@@ -219,45 +251,166 @@ function OwnerSummaryBlock({
   if (rows.length === 0 && directoryTotal === 0) return null;
 
   return (
-    <div>
-      {/* Owner Summary Table */}
-      <div className="rounded-md border overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-[140px]">Owner</TableHead>
-              <TableHead className="min-w-[80px] text-right">Primary</TableHead>
-              <TableHead className="min-w-[80px] text-right">Secondary</TableHead>
-              <TableHead className="min-w-[80px] text-right">Total</TableHead>
+    <div className="rounded-md border overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[140px]">Owner</TableHead>
+            <TableHead className="min-w-[80px] text-right">Primary</TableHead>
+            <TableHead className="min-w-[80px] text-right">Secondary</TableHead>
+            <TableHead className="min-w-[80px] text-right">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={r.assigned_to_name}>
+              <TableCell className="font-medium">{r.assigned_to_name}</TableCell>
+              <TableCell className="text-right tabular-nums">{r.primary_count}</TableCell>
+              <TableCell className="text-right tabular-nums">{r.secondary_count}</TableCell>
+              <TableCell className="text-right tabular-nums font-semibold">{r.total_count}</TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.assigned_to_name}>
-                <TableCell className="font-medium">{r.assigned_to_name}</TableCell>
-                <TableCell className="text-right tabular-nums">{r.primary_count}</TableCell>
-                <TableCell className="text-right tabular-nums">{r.secondary_count}</TableCell>
-                <TableCell className="text-right tabular-nums font-semibold">{r.total_count}</TableCell>
-              </TableRow>
-            ))}
-            {/* UNASSIGNED row */}
-            <TableRow className="bg-muted/30">
-              <TableCell className="font-medium text-destructive">⚠ UNASSIGNED</TableCell>
-              <TableCell className="text-right tabular-nums">0</TableCell>
-              <TableCell className="text-right tabular-nums">0</TableCell>
-              <TableCell className="text-right tabular-nums font-semibold text-destructive">
-                {unassignedTotal}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
+          ))}
+          <TableRow className="bg-muted/30">
+            <TableCell className="font-medium text-destructive">⚠ UNASSIGNED</TableCell>
+            <TableCell className="text-right tabular-nums">0</TableCell>
+            <TableCell className="text-right tabular-nums">0</TableCell>
+            <TableCell className="text-right tabular-nums font-semibold text-destructive">
+              {unassignedTotal}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
     </div>
   );
 }
 
-// ── Contacts table ───────────────────────────────────────────────
-function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab: TabKey }) {
+// ── Helper: Convert V2Row to ContactWithCompany for drawer ──────
+function rowToContactWithCompany(row: ContactV2Row): ContactWithCompany {
+  return {
+    id: row.id,
+    full_name: row.full_name,
+    company_id: null,
+    designation: row.designation,
+    country_code: null,
+    phone: row.phone,
+    phone_type: null,
+    email: row.email,
+    ice_handle: null,
+    preferred_channel: null,
+    notes: null,
+    is_active: row.is_active,
+    updated_at: row.updated_at,
+    company_name: row.company_name ?? undefined,
+    last_interaction_at: row.last_interaction_at,
+  };
+}
+
+// ── Row Actions Menu ─────────────────────────────────────────────
+function RowActionsMenu({
+  row,
+  isAdmin,
+  onView,
+  onEdit,
+  onAssignPrimary,
+  onAssignSecondary,
+  onRemoveAssignment,
+  onLogInteraction,
+  onAddFollowup,
+  onArchive,
+  onDelete,
+}: {
+  row: ContactV2Row;
+  isAdmin: boolean;
+  onView: () => void;
+  onEdit: () => void;
+  onAssignPrimary: () => void;
+  onAssignSecondary: () => void;
+  onRemoveAssignment: () => void;
+  onLogInteraction: () => void;
+  onAddFollowup: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem onClick={onView}>
+          <Eye className="mr-2 h-4 w-4" />
+          View Details
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onEdit}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onAssignPrimary}>
+          <UserCheck className="mr-2 h-4 w-4" />
+          Assign Primary
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onAssignSecondary}>
+          <Users2 className="mr-2 h-4 w-4" />
+          Assign Secondary
+        </DropdownMenuItem>
+        {(row.primary_owner || row.secondary_owner) && (
+          <DropdownMenuItem onClick={onRemoveAssignment} className="text-destructive">
+            <UserMinus className="mr-2 h-4 w-4" />
+            Remove Assignment
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onLogInteraction}>
+          <PhoneIcon className="mr-2 h-4 w-4" />
+          Log Interaction
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onAddFollowup}>
+          <CalendarClock className="mr-2 h-4 w-4" />
+          Add Follow-up
+        </DropdownMenuItem>
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onArchive} className="text-destructive">
+              <Archive className="mr-2 h-4 w-4" />
+              Archive
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDelete} className="text-destructive">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ── Contacts table with actions ─────────────────────────────────
+function ContactsV2Table({
+  rows,
+  activeTab,
+  isAdmin,
+  selectedIds,
+  onToggleSelect,
+  onToggleAll,
+  allSelected,
+  onRowClick,
+  onRowAction,
+}: {
+  rows: ContactV2Row[];
+  activeTab: TabKey;
+  isAdmin: boolean;
+  selectedIds: string[];
+  onToggleSelect: (id: string) => void;
+  onToggleAll: () => void;
+  allSelected: boolean;
+  onRowClick: (row: ContactV2Row) => void;
+  onRowAction: (action: string, row: ContactV2Row) => void;
+}) {
   const isDirectory = activeTab === 'directory';
   const showOwners = isDirectory;
 
@@ -269,11 +422,24 @@ function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab:
     );
   }
 
+  const handleRowClick = (e: React.MouseEvent, row: ContactV2Row) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, [role="menuitem"], [role="checkbox"], input, a, [data-no-row-click]')) return;
+    onRowClick(row);
+  };
+
   return (
     <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-10">
+              <Checkbox
+                checked={allSelected}
+                onCheckedChange={onToggleAll}
+                aria-label="Select all"
+              />
+            </TableHead>
             <TableHead className="min-w-[160px]">Full Name</TableHead>
             <TableHead className="min-w-[140px]">Company</TableHead>
             <TableHead className="min-w-[120px]">Designation</TableHead>
@@ -283,11 +449,23 @@ function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab:
             {showOwners && <TableHead className="min-w-[120px]">Secondary Owner</TableHead>}
             <TableHead className="min-w-[100px]">Stage</TableHead>
             <TableHead className="min-w-[80px]">Status</TableHead>
+            <TableHead className="w-10" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow
+              key={row.id}
+              className="cursor-pointer hover:bg-accent/50"
+              onClick={(e) => handleRowClick(e, row)}
+            >
+              <TableCell>
+                <Checkbox
+                  checked={selectedIds.includes(row.id)}
+                  onCheckedChange={() => onToggleSelect(row.id)}
+                  aria-label={`Select ${row.full_name}`}
+                />
+              </TableCell>
               <TableCell className="font-medium">{row.full_name}</TableCell>
               <TableCell>
                 {row.company_name ? (
@@ -324,6 +502,21 @@ function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab:
               </TableCell>
               <TableCell>
                 <StatusBadge active={row.is_active} />
+              </TableCell>
+              <TableCell>
+                <RowActionsMenu
+                  row={row}
+                  isAdmin={isAdmin}
+                  onView={() => onRowAction('view', row)}
+                  onEdit={() => onRowAction('edit', row)}
+                  onAssignPrimary={() => onRowAction('assign-primary', row)}
+                  onAssignSecondary={() => onRowAction('assign-secondary', row)}
+                  onRemoveAssignment={() => onRowAction('remove-assignment', row)}
+                  onLogInteraction={() => onRowAction('log-interaction', row)}
+                  onAddFollowup={() => onRowAction('add-followup', row)}
+                  onArchive={() => onRowAction('archive', row)}
+                  onDelete={() => onRowAction('delete', row)}
+                />
               </TableCell>
             </TableRow>
           ))}
@@ -389,7 +582,7 @@ function useCumulativeCounts() {
 
   const unassignedTotal = Math.max(0, directoryTotal - ownerTotalSum);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     const addedQuery = crmUserId
       ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId)
       : null;
@@ -407,13 +600,17 @@ function useCumulativeCounts() {
     setPrimaryTotal(ownerRows.reduce((a, r) => a + (r.primary_count || 0), 0));
     setSecondaryTotal(ownerRows.reduce((a, r) => a + (r.secondary_count || 0), 0));
     setOwnerTotalSum(ownerRows.reduce((a, r) => a + (r.total_count || 0), 0));
-  };
+  }, [crmUserId]);
 
   return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, refresh };
 }
 
 // ── Main page ────────────────────────────────────────────────────
 export default function ContactsV2() {
+  const { isAdmin } = useAuth();
+  const { crmUserId } = useCrmUser();
+  const { toast } = useToast();
+
   const {
     activeTab,
     stageFilter,
@@ -434,6 +631,157 @@ export default function ContactsV2() {
   } = useContactsV2Data();
 
   const cumulative = useCumulativeCounts();
+
+  // ── Selection state ────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const visibleIds = rows.map((r) => r.id);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds([]);
+    else setSelectedIds(visibleIds);
+  };
+
+  // Clear selection on tab/filter change
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeTab, stageFilter, search, page]);
+
+  // ── Drawer state ───────────────────────────────────────────────
+  const [drawerContact, setDrawerContact] = useState<ContactWithCompany | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerStage, setDrawerStage] = useState<string | null>(null);
+
+  // ── Modal states ───────────────────────────────────────────────
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignRole, setAssignRole] = useState<'primary' | 'secondary'>('primary');
+  const [actionContactId, setActionContactId] = useState<string>('');
+  const [actionContactName, setActionContactName] = useState<string>('');
+
+  const [interactionOpen, setInteractionOpen] = useState(false);
+  const [followupOpen, setFollowupOpen] = useState(false);
+
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editContact, setEditContact] = useState<ContactWithCompany | null>(null);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteContact, setDeleteContact] = useState<ContactWithCompany | null>(null);
+
+  // ── Refetch everything after a write ──────────────────────────
+  const refetchAll = useCallback(async () => {
+    await Promise.all([
+      fetchAll(activeTab, stageFilter, search, page),
+      cumulative.refresh(),
+    ]);
+  }, [activeTab, stageFilter, search, page, fetchAll, cumulative]);
+
+  // ── Archive handler ───────────────────────────────────────────
+  const handleArchive = useCallback(async (contactId: string, contactName: string) => {
+    if (!isAdmin) return;
+    const confirmed = window.confirm(`⚠️ Archive "${contactName}"?\n\nThis will hide the contact from all lists.\n\nContinue?`);
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+    const { error: archErr } = await supabase
+      .from('contacts')
+      .update({ is_archived: true, archived_at: now })
+      .eq('id', contactId);
+
+    if (archErr) {
+      toast({ title: 'Archive failed', description: archErr.message, variant: 'destructive' });
+      return;
+    }
+
+    // Close active assignments
+    await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', contactId)
+      .eq('status', 'ACTIVE');
+
+    toast({ title: 'Contact archived', description: `"${contactName}" has been archived.` });
+    await refetchAll();
+  }, [isAdmin, toast, refetchAll]);
+
+  // ── Remove assignment handler ─────────────────────────────────
+  const handleRemoveAssignment = useCallback(async (contactId: string, contactName: string) => {
+    const confirmed = window.confirm(`Remove all assignments from "${contactName}"?`);
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+    const { error: err } = await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', contactId)
+      .eq('status', 'ACTIVE');
+
+    if (err) {
+      toast({ title: 'Remove failed', description: err.message, variant: 'destructive' });
+      return;
+    }
+
+    toast({ title: 'Assignments removed' });
+    await refetchAll();
+  }, [toast, refetchAll]);
+
+  // ── Row action dispatcher ─────────────────────────────────────
+  const handleRowAction = useCallback((action: string, row: ContactV2Row) => {
+    const contact = rowToContactWithCompany(row);
+
+    switch (action) {
+      case 'view':
+        setDrawerContact(contact);
+        setDrawerStage(row.stage);
+        setDrawerOpen(true);
+        break;
+      case 'edit':
+        setEditContact(contact);
+        setEditModalOpen(true);
+        break;
+      case 'assign-primary':
+        setActionContactId(row.id);
+        setActionContactName(row.full_name);
+        setAssignRole('primary');
+        setAssignModalOpen(true);
+        break;
+      case 'assign-secondary':
+        setActionContactId(row.id);
+        setActionContactName(row.full_name);
+        setAssignRole('secondary');
+        setAssignModalOpen(true);
+        break;
+      case 'remove-assignment':
+        handleRemoveAssignment(row.id, row.full_name);
+        break;
+      case 'log-interaction':
+        setActionContactId(row.id);
+        setActionContactName(row.full_name);
+        setInteractionOpen(true);
+        break;
+      case 'add-followup':
+        setActionContactId(row.id);
+        setActionContactName(row.full_name);
+        setFollowupOpen(true);
+        break;
+      case 'archive':
+        handleArchive(row.id, row.full_name);
+        break;
+      case 'delete':
+        setDeleteContact(contact);
+        setDeleteDialogOpen(true);
+        break;
+    }
+  }, [handleArchive, handleRemoveAssignment]);
+
+  // ── Row click → open drawer ───────────────────────────────────
+  const handleRowClick = useCallback((row: ContactV2Row) => {
+    setDrawerContact(rowToContactWithCompany(row));
+    setDrawerStage(row.stage);
+    setDrawerOpen(true);
+  }, []);
 
   // Debounce search
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -461,6 +809,12 @@ export default function ContactsV2() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, stageFilter, search]);
 
+  // ── Bulk action complete ──────────────────────────────────────
+  const handleBulkComplete = useCallback(() => {
+    setSelectedIds([]);
+    refetchAll();
+  }, [refetchAll]);
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -477,7 +831,9 @@ export default function ContactsV2() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
-          <p className="mt-1 text-muted-foreground">Browse and manage your contacts</p>
+          <p className="mt-1 text-muted-foreground">
+            {isAdmin ? 'Manage contact assignments and ownership' : 'Browse and manage your contacts'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline">
@@ -486,7 +842,7 @@ export default function ContactsV2() {
               Bulk Import
             </Link>
           </Button>
-          <AddContactModal onSuccess={() => fetchAll(activeTab, stageFilter, search, page)} />
+          <AddContactModal onSuccess={refetchAll} />
         </div>
       </div>
 
@@ -520,6 +876,15 @@ export default function ContactsV2() {
         <OwnerSummaryBlock visible directoryTotal={totalRows} />
       )}
 
+      {/* Bulk toolbar */}
+      {selectedIds.length > 0 && (
+        <DirectoryBulkToolbar
+          selectedIds={selectedIds}
+          onClearSelection={() => setSelectedIds([])}
+          onComplete={handleBulkComplete}
+        />
+      )}
+
       {/* Stage chips + search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <StageChipBar counts={stageCounts} active={stageFilter} onChange={setStageFilter} />
@@ -545,12 +910,110 @@ export default function ContactsV2() {
       )}
 
       {/* Table */}
-      {isLoading ? <TableSkeleton /> : <ContactsV2Table rows={rows} activeTab={activeTab} />}
+      {isLoading ? (
+        <TableSkeleton />
+      ) : (
+        <ContactsV2Table
+          rows={rows}
+          activeTab={activeTab}
+          isAdmin={isAdmin}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleAll={toggleAll}
+          allSelected={allSelected}
+          onRowClick={handleRowClick}
+          onRowAction={handleRowAction}
+        />
+      )}
 
       {/* Pagination */}
       {!isLoading && (
         <PaginationBar page={page} totalPages={totalPages} totalRows={totalRows} onPageChange={changePage} />
       )}
+
+      {/* ── Modals ─────────────────────────────────────────────── */}
+
+      {/* Contact Details Drawer */}
+      <ContactDetailsDrawer
+        contact={drawerContact}
+        companyName={drawerContact?.company_name ?? null}
+        currentStage={drawerStage}
+        isOpen={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDrawerContact(null);
+        }}
+        onOwnersChange={refetchAll}
+      />
+
+      {/* Assign Contact Modal */}
+      <AssignContactModal
+        open={assignModalOpen}
+        onOpenChange={setAssignModalOpen}
+        contactId={actionContactId}
+        contactName={actionContactName}
+        defaultRole={assignRole}
+        onSuccess={() => {
+          setAssignModalOpen(false);
+          refetchAll();
+        }}
+      />
+
+      {/* Log Interaction Dialog */}
+      <LogInteractionDialog
+        open={interactionOpen}
+        onOpenChange={setInteractionOpen}
+        contactId={actionContactId}
+        contactName={actionContactName}
+        onSuccess={() => {
+          setInteractionOpen(false);
+          refetchAll();
+        }}
+      />
+
+      {/* Add Follow-up Modal */}
+      <AddFollowupModal
+        isOpen={followupOpen}
+        onClose={() => setFollowupOpen(false)}
+        contactId={actionContactId}
+        contactName={actionContactName}
+        onSuccess={() => {
+          setFollowupOpen(false);
+          refetchAll();
+        }}
+      />
+
+      {/* Edit Contact Modal */}
+      {editContact && (
+        <EditContactModal
+          contact={editContact}
+          open={editModalOpen}
+          onOpenChange={(open) => {
+            setEditModalOpen(open);
+            if (!open) setEditContact(null);
+          }}
+          onSuccess={() => {
+            setEditModalOpen(false);
+            setEditContact(null);
+            refetchAll();
+          }}
+        />
+      )}
+
+      {/* Delete Contact Dialog */}
+      <DeleteContactDialog
+        contact={deleteContact}
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setDeleteContact(null);
+        }}
+        onSuccess={() => {
+          setDeleteDialogOpen(false);
+          setDeleteContact(null);
+          refetchAll();
+        }}
+      />
     </div>
   );
 }
