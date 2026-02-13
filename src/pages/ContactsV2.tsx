@@ -56,17 +56,20 @@ function CumulativeBar({
   directoryTotal,
   primaryTotal,
   secondaryTotal,
+  unassignedTotal,
   myAddedTotal,
 }: {
   directoryTotal: number;
   primaryTotal: number;
   secondaryTotal: number;
+  unassignedTotal: number;
   myAddedTotal: number;
 }) {
   const items = [
     { label: 'Directory (Clean)', value: directoryTotal },
     { label: 'Primary (Global)', value: primaryTotal },
     { label: 'Secondary (Global)', value: secondaryTotal },
+    { label: 'Unassigned (Global)', value: unassignedTotal },
     { label: 'My Added (Me)', value: myAddedTotal },
   ];
   return (
@@ -79,46 +82,6 @@ function CumulativeBar({
         >
           {item.label}: <span className="font-semibold">{item.value}</span>
         </Badge>
-      ))}
-    </div>
-  );
-}
-
-// ── Per-tab totals strip ─────────────────────────────────────────
-function TabTotalStrip({ label, total }: { label: string; total: number }) {
-  return (
-    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-      <span className="font-medium text-foreground">{label}:</span>
-      <span className="tabular-nums font-semibold">{total}</span>
-    </div>
-  );
-}
-
-// ── Global Totals Strip (Directory only) ─────────────────────────
-function GlobalTotalsStrip({
-  directoryTotal,
-  primaryTotal,
-  secondaryTotal,
-  unassignedTotal,
-}: {
-  directoryTotal: number;
-  primaryTotal: number;
-  secondaryTotal: number;
-  unassignedTotal: number;
-}) {
-  const items = [
-    { label: 'Total Clean (Directory)', value: directoryTotal },
-    { label: 'Primary Total (Global)', value: primaryTotal },
-    { label: 'Secondary Total (Global)', value: secondaryTotal },
-    { label: 'Unassigned (Global)', value: unassignedTotal },
-  ];
-  return (
-    <div className="flex flex-wrap gap-3 rounded-md border bg-muted/30 px-4 py-2.5">
-      {items.map((item) => (
-        <div key={item.label} className="flex items-center gap-1.5 text-sm">
-          <span className="text-muted-foreground">{item.label}:</span>
-          <span className="font-semibold tabular-nums text-foreground">{item.value}</span>
-        </div>
       ))}
     </div>
   );
@@ -255,14 +218,7 @@ function OwnerSummaryBlock({
   if (rows.length === 0 && directoryTotal === 0) return null;
 
   return (
-    <div className="space-y-3">
-      {/* Global Totals Strip */}
-      <GlobalTotalsStrip
-        directoryTotal={directoryTotal}
-        primaryTotal={sumPrimary}
-        secondaryTotal={sumSecondary}
-        unassignedTotal={unassignedTotal}
-      />
+    <div>
       {/* Owner Summary Table */}
       <div className="rounded-md border overflow-x-auto">
         <Table>
@@ -426,7 +382,10 @@ function useCumulativeCounts() {
   const [directoryTotal, setDirectoryTotal] = useState(0);
   const [primaryTotal, setPrimaryTotal] = useState(0);
   const [secondaryTotal, setSecondaryTotal] = useState(0);
+  const [ownerTotalSum, setOwnerTotalSum] = useState(0);
   const [myAddedTotal, setMyAddedTotal] = useState(0);
+
+  const unassignedTotal = Math.max(0, directoryTotal - ownerTotalSum);
 
   const refresh = async () => {
     const [dirRes, ownerRes, addedRes] = await Promise.all([
@@ -441,9 +400,10 @@ function useCumulativeCounts() {
     const ownerRows = (ownerRes.data || []) as OwnerSummaryRow[];
     setPrimaryTotal(ownerRows.reduce((a, r) => a + (r.primary_count || 0), 0));
     setSecondaryTotal(ownerRows.reduce((a, r) => a + (r.secondary_count || 0), 0));
+    setOwnerTotalSum(ownerRows.reduce((a, r) => a + (r.total_count || 0), 0));
   };
 
-  return { directoryTotal, primaryTotal, secondaryTotal, myAddedTotal, refresh };
+  return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, refresh };
 }
 
 // ── Main page ────────────────────────────────────────────────────
@@ -524,11 +484,12 @@ export default function ContactsV2() {
         </div>
       </div>
 
-      {/* Cumulative Bar (always visible) */}
+      {/* Unified Summary Strip */}
       <CumulativeBar
         directoryTotal={cumulative.directoryTotal}
         primaryTotal={cumulative.primaryTotal}
         secondaryTotal={cumulative.secondaryTotal}
+        unassignedTotal={cumulative.unassignedTotal}
         myAddedTotal={cumulative.myAddedTotal}
       />
 
@@ -548,17 +509,9 @@ export default function ContactsV2() {
         </TabsList>
       </Tabs>
 
-      {/* Owner Summary + Global Totals (Directory only) */}
+      {/* Owner Summary Table (Directory only) */}
       {isDirectory && (
         <OwnerSummaryBlock visible directoryTotal={totalRows} />
-      )}
-
-      {/* Per-tab total strip (non-directory) */}
-      {!isDirectory && (
-        <TabTotalStrip
-          label={TAB_META.find((t) => t.value === activeTab)?.label || 'Total'}
-          total={totalRows}
-        />
       )}
 
       {/* Stage chips + search */}
