@@ -34,7 +34,7 @@ export const STAGE_CHIPS: { value: StageFilter; label: string }[] = [
 
 // ── View maps ────────────────────────────────────────────────────
 const VIEW_MAP: Record<TabKey, string> = {
-  directory: 'v_directory_contacts',
+  directory: 'v_directory_contacts_ro',
   'my-primary': 'v_my_primary_contacts',
   'my-secondary': 'v_my_secondary_contacts',
   'my-added': 'v_my_added_unassigned',
@@ -65,7 +65,7 @@ function normalize(row: any): ContactV2Row {
     designation: row.designation ?? null,
     email: row.email ?? null,
     phone: row.primary_phone ?? row.phone ?? null,
-    primary_owner: row.primary_owner_name ?? null,
+    primary_owner: row.primary_owner_name ?? row.assigned_to_name ?? null,
     secondary_owner: row.secondary_owner_name ?? null,
     stage: normalizeStage(row.stage ?? row.primary_stage),
     is_active: typeof row.is_active === 'boolean' ? row.is_active : null,
@@ -115,7 +115,7 @@ export function useContactsV2Data() {
         INACTIVE: 0,
       };
       (data || []).forEach((r: any) => {
-        const stage = normalizeStage(r.stage);
+        const stage = normalizeStage(r.stage ?? r.primary_stage);
         const cnt = Number(r.cnt ?? r.count ?? 0);
         if (stage && stage in counts) {
           counts[stage] += cnt;
@@ -139,6 +139,9 @@ export function useContactsV2Data() {
       const from = p * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
+      // Use primary_stage for directory RO view, stage for others
+      const stageColumn = tab === 'directory' ? 'primary_stage' : 'stage';
+
       try {
         let query = supabase
           .from(view)
@@ -147,14 +150,20 @@ export function useContactsV2Data() {
           .range(from, to);
 
         if (sf !== 'ALL') {
-          query = query.eq('stage', sf);
+          query = query.eq(stageColumn, sf);
         }
 
-        if (q.trim()) {
+      if (q.trim()) {
           const term = q.trim();
-          query = query.or(
-            `full_name.ilike.%${term}%,company_name.ilike.%${term}%,email.ilike.%${term}%,primary_phone.ilike.%${term}%`
-          );
+          if (tab === 'directory') {
+            query = query.or(
+              `full_name.ilike.%${term}%,company_name.ilike.%${term}%`
+            );
+          } else {
+            query = query.or(
+              `full_name.ilike.%${term}%,company_name.ilike.%${term}%,email.ilike.%${term}%,primary_phone.ilike.%${term}%`
+            );
+          }
         }
 
         const { data, count, error: fetchErr } = await query;

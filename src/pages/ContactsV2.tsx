@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BookOpen,
@@ -11,6 +11,7 @@ import {
   Loader2,
   AlertCircle,
   FileUp,
+  Plus,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { AddContactModal } from '@/components/contacts/AddContactModal';
+import { supabase } from '@/lib/supabaseClient';
 import {
   useContactsV2Data,
   STAGE_CHIPS,
@@ -136,9 +139,67 @@ function TableSkeleton() {
   );
 }
 
+// ── Owner Summary (Directory only) ──────────────────────────────
+interface OwnerSummaryRow {
+  assigned_to_name: string;
+  primary_count: number;
+  secondary_count: number;
+  total_count: number;
+}
+
+function OwnerSummaryBlock({ visible }: { visible: boolean }) {
+  const [rows, setRows] = useState<OwnerSummaryRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    setLoading(true);
+    supabase
+      .from('v_owner_summary_ui')
+      .select('*')
+      .order('total_count', { ascending: false })
+      .then(({ data }) => {
+        setRows((data as OwnerSummaryRow[]) || []);
+        setLoading(false);
+      });
+  }, [visible]);
+
+  if (!visible) return null;
+
+  if (loading) return <Skeleton className="h-24 w-full" />;
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="rounded-md border overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[140px]">Owner</TableHead>
+            <TableHead className="min-w-[80px] text-right">Primary</TableHead>
+            <TableHead className="min-w-[80px] text-right">Secondary</TableHead>
+            <TableHead className="min-w-[80px] text-right">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={r.assigned_to_name}>
+              <TableCell className="font-medium">{r.assigned_to_name}</TableCell>
+              <TableCell className="text-right tabular-nums">{r.primary_count}</TableCell>
+              <TableCell className="text-right tabular-nums">{r.secondary_count}</TableCell>
+              <TableCell className="text-right tabular-nums font-semibold">{r.total_count}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 // ── Contacts table ───────────────────────────────────────────────
 function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab: TabKey }) {
-  const showOwners = activeTab === 'directory';
+  const isDirectory = activeTab === 'directory';
+  const showOwners = isDirectory;
 
   if (rows.length === 0) {
     return (
@@ -156,8 +217,8 @@ function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab:
             <TableHead className="min-w-[160px]">Full Name</TableHead>
             <TableHead className="min-w-[140px]">Company</TableHead>
             <TableHead className="min-w-[120px]">Designation</TableHead>
-            <TableHead className="min-w-[160px]">Email</TableHead>
-            <TableHead className="min-w-[120px]">Phone</TableHead>
+            {!isDirectory && <TableHead className="min-w-[160px]">Email</TableHead>}
+            {!isDirectory && <TableHead className="min-w-[120px]">Phone</TableHead>}
             {showOwners && <TableHead className="min-w-[120px]">Primary Owner</TableHead>}
             {showOwners && <TableHead className="min-w-[120px]">Secondary Owner</TableHead>}
             <TableHead className="min-w-[100px]">Stage</TableHead>
@@ -178,10 +239,14 @@ function ContactsV2Table({ rows, activeTab }: { rows: ContactV2Row[]; activeTab:
                 )}
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">{row.designation ?? '—'}</TableCell>
-              <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate">
-                {row.email ?? '—'}
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">{row.phone ?? '—'}</TableCell>
+              {!isDirectory && (
+                <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate">
+                  {row.email ?? '—'}
+                </TableCell>
+              )}
+              {!isDirectory && (
+                <TableCell className="text-sm text-muted-foreground">{row.phone ?? '—'}</TableCell>
+              )}
               {showOwners && (
                 <TableCell className="text-sm text-muted-foreground">{row.primary_owner ?? '—'}</TableCell>
               )}
@@ -308,12 +373,15 @@ export default function ContactsV2() {
           <h1 className="text-3xl font-bold text-foreground">Contacts</h1>
           <p className="mt-1 text-muted-foreground">Browse and manage your contacts</p>
         </div>
-        <Button asChild>
-          <Link to="/contacts/bulk-import">
-            <FileUp className="mr-2 h-4 w-4" />
-            Bulk Import
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link to="/contacts/bulk-import">
+              <FileUp className="mr-2 h-4 w-4" />
+              Bulk Import
+            </Link>
+          </Button>
+          <AddContactModal onSuccess={() => fetchAll(activeTab, stageFilter, search, page)} />
+        </div>
       </div>
 
       {/* Tabs */}
@@ -332,6 +400,9 @@ export default function ContactsV2() {
         </TabsList>
       </Tabs>
 
+      {/* Owner Summary (Directory only) */}
+      <OwnerSummaryBlock visible={activeTab === 'directory'} />
+
       {/* Stage chips + search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <StageChipBar counts={stageCounts} active={stageFilter} onChange={setStageFilter} />
@@ -340,7 +411,7 @@ export default function ContactsV2() {
           <Input
             key={activeTab}
             type="text"
-            placeholder="Search name, company, email, phone…"
+            placeholder={activeTab === 'directory' ? 'Search name, company…' : 'Search name, company, email, phone…'}
             defaultValue={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
