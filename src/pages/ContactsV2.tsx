@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   BookOpen,
@@ -11,7 +11,6 @@ import {
   Loader2,
   AlertCircle,
   FileUp,
-  Plus,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +50,79 @@ const STAGE_COLORS: Record<string, string> = {
   ACHIEVEMENT: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
   INACTIVE: 'bg-muted text-muted-foreground',
 };
+
+// ── Cumulative Bar (always visible) ──────────────────────────────
+function CumulativeBar({
+  directoryTotal,
+  primaryTotal,
+  secondaryTotal,
+  myAddedTotal,
+}: {
+  directoryTotal: number;
+  primaryTotal: number;
+  secondaryTotal: number;
+  myAddedTotal: number;
+}) {
+  const items = [
+    { label: 'Directory (Clean)', value: directoryTotal },
+    { label: 'Primary (Global)', value: primaryTotal },
+    { label: 'Secondary (Global)', value: secondaryTotal },
+    { label: 'My Added (Me)', value: myAddedTotal },
+  ];
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => (
+        <Badge
+          key={item.label}
+          variant="outline"
+          className="text-xs font-medium px-3 py-1.5 tabular-nums gap-1.5"
+        >
+          {item.label}: <span className="font-semibold">{item.value}</span>
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+// ── Per-tab totals strip ─────────────────────────────────────────
+function TabTotalStrip({ label, total }: { label: string; total: number }) {
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <span className="font-medium text-foreground">{label}:</span>
+      <span className="tabular-nums font-semibold">{total}</span>
+    </div>
+  );
+}
+
+// ── Global Totals Strip (Directory only) ─────────────────────────
+function GlobalTotalsStrip({
+  directoryTotal,
+  primaryTotal,
+  secondaryTotal,
+  unassignedTotal,
+}: {
+  directoryTotal: number;
+  primaryTotal: number;
+  secondaryTotal: number;
+  unassignedTotal: number;
+}) {
+  const items = [
+    { label: 'Total Clean (Directory)', value: directoryTotal },
+    { label: 'Primary Total (Global)', value: primaryTotal },
+    { label: 'Secondary Total (Global)', value: secondaryTotal },
+    { label: 'Unassigned (Global)', value: unassignedTotal },
+  ];
+  return (
+    <div className="flex flex-wrap gap-3 rounded-md border bg-muted/30 px-4 py-2.5">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-1.5 text-sm">
+          <span className="text-muted-foreground">{item.label}:</span>
+          <span className="font-semibold tabular-nums text-foreground">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── Stage chip bar ───────────────────────────────────────────────
 function StageChipBar({
@@ -139,7 +211,7 @@ function TableSkeleton() {
   );
 }
 
-// ── Owner Summary (Directory only) ──────────────────────────────
+// ── Owner Summary (Directory only) with UNASSIGNED row ──────────
 interface OwnerSummaryRow {
   assigned_to_name: string;
   primary_count: number;
@@ -147,7 +219,13 @@ interface OwnerSummaryRow {
   total_count: number;
 }
 
-function OwnerSummaryBlock({ visible }: { visible: boolean }) {
+function OwnerSummaryBlock({
+  visible,
+  directoryTotal,
+}: {
+  visible: boolean;
+  directoryTotal: number;
+}) {
   const [rows, setRows] = useState<OwnerSummaryRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -164,34 +242,59 @@ function OwnerSummaryBlock({ visible }: { visible: boolean }) {
       });
   }, [visible]);
 
+  const { sumPrimary, sumSecondary, sumTotal, unassignedTotal } = useMemo(() => {
+    const sp = rows.reduce((a, r) => a + (r.primary_count || 0), 0);
+    const ss = rows.reduce((a, r) => a + (r.secondary_count || 0), 0);
+    const st = rows.reduce((a, r) => a + (r.total_count || 0), 0);
+    const ua = Math.max(0, directoryTotal - st);
+    return { sumPrimary: sp, sumSecondary: ss, sumTotal: st, unassignedTotal: ua };
+  }, [rows, directoryTotal]);
+
   if (!visible) return null;
-
   if (loading) return <Skeleton className="h-24 w-full" />;
-
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && directoryTotal === 0) return null;
 
   return (
-    <div className="rounded-md border overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="min-w-[140px]">Owner</TableHead>
-            <TableHead className="min-w-[80px] text-right">Primary</TableHead>
-            <TableHead className="min-w-[80px] text-right">Secondary</TableHead>
-            <TableHead className="min-w-[80px] text-right">Total</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.assigned_to_name}>
-              <TableCell className="font-medium">{r.assigned_to_name}</TableCell>
-              <TableCell className="text-right tabular-nums">{r.primary_count}</TableCell>
-              <TableCell className="text-right tabular-nums">{r.secondary_count}</TableCell>
-              <TableCell className="text-right tabular-nums font-semibold">{r.total_count}</TableCell>
+    <div className="space-y-3">
+      {/* Global Totals Strip */}
+      <GlobalTotalsStrip
+        directoryTotal={directoryTotal}
+        primaryTotal={sumPrimary}
+        secondaryTotal={sumSecondary}
+        unassignedTotal={unassignedTotal}
+      />
+      {/* Owner Summary Table */}
+      <div className="rounded-md border overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-[140px]">Owner</TableHead>
+              <TableHead className="min-w-[80px] text-right">Primary</TableHead>
+              <TableHead className="min-w-[80px] text-right">Secondary</TableHead>
+              <TableHead className="min-w-[80px] text-right">Total</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r) => (
+              <TableRow key={r.assigned_to_name}>
+                <TableCell className="font-medium">{r.assigned_to_name}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.primary_count}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.secondary_count}</TableCell>
+                <TableCell className="text-right tabular-nums font-semibold">{r.total_count}</TableCell>
+              </TableRow>
+            ))}
+            {/* UNASSIGNED row */}
+            <TableRow className="bg-muted/30">
+              <TableCell className="font-medium text-destructive">⚠ UNASSIGNED</TableCell>
+              <TableCell className="text-right tabular-nums">0</TableCell>
+              <TableCell className="text-right tabular-nums">0</TableCell>
+              <TableCell className="text-right tabular-nums font-semibold text-destructive">
+                {unassignedTotal}
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -318,6 +421,31 @@ function PaginationBar({
   );
 }
 
+// ── Hook for cumulative bar counts ───────────────────────────────
+function useCumulativeCounts() {
+  const [directoryTotal, setDirectoryTotal] = useState(0);
+  const [primaryTotal, setPrimaryTotal] = useState(0);
+  const [secondaryTotal, setSecondaryTotal] = useState(0);
+  const [myAddedTotal, setMyAddedTotal] = useState(0);
+
+  const refresh = async () => {
+    const [dirRes, ownerRes, addedRes] = await Promise.all([
+      supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
+      supabase.from('v_owner_summary_ui').select('*'),
+      supabase.from('v_my_added_unassigned').select('*', { count: 'exact', head: true }),
+    ]);
+
+    setDirectoryTotal(dirRes.count ?? 0);
+    setMyAddedTotal(addedRes.count ?? 0);
+
+    const ownerRows = (ownerRes.data || []) as OwnerSummaryRow[];
+    setPrimaryTotal(ownerRows.reduce((a, r) => a + (r.primary_count || 0), 0));
+    setSecondaryTotal(ownerRows.reduce((a, r) => a + (r.secondary_count || 0), 0));
+  };
+
+  return { directoryTotal, primaryTotal, secondaryTotal, myAddedTotal, refresh };
+}
+
 // ── Main page ────────────────────────────────────────────────────
 export default function ContactsV2() {
   const {
@@ -339,10 +467,11 @@ export default function ContactsV2() {
     fetchAll,
   } = useContactsV2Data();
 
+  const cumulative = useCumulativeCounts();
+
   // Debounce search
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearchChange = (val: string) => {
-    // Optimistic UI update for input
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setSearch(val);
@@ -353,9 +482,18 @@ export default function ContactsV2() {
   useEffect(() => {
     if (!authLoading) {
       fetchAll(activeTab, 'ALL', '', 0);
+      cumulative.refresh();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
+
+  // Refresh cumulative on tab/filter changes
+  useEffect(() => {
+    if (!authLoading) {
+      cumulative.refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, stageFilter, search]);
 
   if (authLoading) {
     return (
@@ -364,6 +502,8 @@ export default function ContactsV2() {
       </div>
     );
   }
+
+  const isDirectory = activeTab === 'directory';
 
   return (
     <div className="space-y-5">
@@ -384,6 +524,14 @@ export default function ContactsV2() {
         </div>
       </div>
 
+      {/* Cumulative Bar (always visible) */}
+      <CumulativeBar
+        directoryTotal={cumulative.directoryTotal}
+        primaryTotal={cumulative.primaryTotal}
+        secondaryTotal={cumulative.secondaryTotal}
+        myAddedTotal={cumulative.myAddedTotal}
+      />
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => changeTab(v as TabKey)}>
         <TabsList className="inline-flex h-10 items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground">
@@ -400,8 +548,18 @@ export default function ContactsV2() {
         </TabsList>
       </Tabs>
 
-      {/* Owner Summary (Directory only) */}
-      <OwnerSummaryBlock visible={activeTab === 'directory'} />
+      {/* Owner Summary + Global Totals (Directory only) */}
+      {isDirectory && (
+        <OwnerSummaryBlock visible directoryTotal={totalRows} />
+      )}
+
+      {/* Per-tab total strip (non-directory) */}
+      {!isDirectory && (
+        <TabTotalStrip
+          label={TAB_META.find((t) => t.value === activeTab)?.label || 'Total'}
+          total={totalRows}
+        />
+      )}
 
       {/* Stage chips + search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -411,7 +569,7 @@ export default function ContactsV2() {
           <Input
             key={activeTab}
             type="text"
-            placeholder={activeTab === 'directory' ? 'Search name, company…' : 'Search name, company, email, phone…'}
+            placeholder={isDirectory ? 'Search name, company…' : 'Search name, company, email, phone…'}
             defaultValue={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
