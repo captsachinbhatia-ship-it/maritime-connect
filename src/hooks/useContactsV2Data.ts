@@ -11,11 +11,14 @@ export interface ContactV2Row {
   email: string | null;
   phone: string | null;
   primary_owner: string | null;
+  primary_owner_id: string | null;
   secondary_owner: string | null;
+  secondary_owner_id: string | null;
   stage: StageFilter | null;
   is_active: boolean | null;
   updated_at: string | null;
   last_interaction_at: string | null;
+  created_by_crm_user_id: string | null;
 }
 
 export type TabKey = 'directory' | 'my-primary' | 'my-secondary' | 'my-added';
@@ -66,11 +69,14 @@ function normalize(row: any): ContactV2Row {
     email: row.email ?? null,
     phone: row.primary_phone ?? row.phone ?? null,
     primary_owner: row.primary_owner_name ?? row.assigned_to_name ?? null,
+    primary_owner_id: row.primary_owner_id ?? row.assigned_to_crm_user_id ?? null,
     secondary_owner: row.secondary_owner_name ?? null,
+    secondary_owner_id: row.secondary_owner_id ?? null,
     stage: normalizeStage(row.stage ?? row.primary_stage),
     is_active: typeof row.is_active === 'boolean' ? row.is_active : null,
     updated_at: row.updated_at ?? null,
     last_interaction_at: row.last_interaction_at ?? null,
+    created_by_crm_user_id: row.created_by_crm_user_id ?? null,
   };
 }
 
