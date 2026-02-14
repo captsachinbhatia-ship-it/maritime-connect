@@ -303,10 +303,22 @@ function rowToContactWithCompany(row: ContactV2Row): ContactWithCompany {
   };
 }
 
+// ── Permission helper ─────────────────────────────────────────────
+function canAccessContact(
+  row: ContactV2Row,
+  crmUserId: string | null,
+  isAdmin: boolean
+): boolean {
+  if (isAdmin) return true;
+  if (!crmUserId) return false;
+  return row.primary_owner_id === crmUserId || row.secondary_owner_id === crmUserId;
+}
+
 // ── Row Actions Menu ─────────────────────────────────────────────
 function RowActionsMenu({
   row,
   isAdmin,
+  hasAccess,
   onView,
   onEdit,
   onLogInteraction,
@@ -316,6 +328,7 @@ function RowActionsMenu({
 }: {
   row: ContactV2Row;
   isAdmin: boolean;
+  hasAccess: boolean;
   onView: () => void;
   onEdit: () => void;
   onLogInteraction: () => void;
@@ -335,19 +348,23 @@ function RowActionsMenu({
           <Eye className="mr-2 h-4 w-4" />
           View Details
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onEdit}>
-          <Pencil className="mr-2 h-4 w-4" />
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onLogInteraction}>
-          <PhoneIcon className="mr-2 h-4 w-4" />
-          Log Interaction
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onAddFollowup}>
-          <CalendarClock className="mr-2 h-4 w-4" />
-          Add Follow-up
-        </DropdownMenuItem>
+        {hasAccess && (
+          <>
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onLogInteraction}>
+              <PhoneIcon className="mr-2 h-4 w-4" />
+              Log Interaction
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onAddFollowup}>
+              <CalendarClock className="mr-2 h-4 w-4" />
+              Add Follow-up
+            </DropdownMenuItem>
+          </>
+        )}
         {isAdmin && (
           <>
             <DropdownMenuSeparator />
@@ -371,6 +388,7 @@ function ContactsV2Table({
   rows,
   activeTab,
   isAdmin,
+  crmUserId,
   selectedIds,
   onToggleSelect,
   onToggleAll,
@@ -383,6 +401,7 @@ function ContactsV2Table({
   rows: ContactV2Row[];
   activeTab: TabKey;
   isAdmin: boolean;
+  crmUserId: string | null;
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
   onToggleAll: () => void;
@@ -483,6 +502,7 @@ function ContactsV2Table({
                     contactId={row.id}
                     currentOwnerName={row.secondary_owner ?? null}
                     role="SECONDARY"
+                    excludeUserId={row.primary_owner_id}
                     onAssign={onInlineAssign}
                     onRemove={onInlineRemove}
                   />
@@ -504,6 +524,7 @@ function ContactsV2Table({
                 <RowActionsMenu
                   row={row}
                   isAdmin={isAdmin}
+                  hasAccess={canAccessContact(row, crmUserId, isAdmin)}
                   onView={() => onRowAction('view', row)}
                   onEdit={() => onRowAction('edit', row)}
                   onLogInteraction={() => onRowAction('log-interaction', row)}
@@ -648,6 +669,7 @@ export default function ContactsV2() {
   const [drawerContact, setDrawerContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerStage, setDrawerStage] = useState<string | null>(null);
+  const [drawerRestricted, setDrawerRestricted] = useState(false);
 
   // ── Modal states ───────────────────────────────────────────────
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -724,23 +746,28 @@ export default function ContactsV2() {
   // ── Row action dispatcher ─────────────────────────────────────
   const handleRowAction = useCallback((action: string, row: ContactV2Row) => {
     const contact = rowToContactWithCompany(row);
+    const hasAccess = canAccessContact(row, crmUserId, isAdmin);
 
     switch (action) {
       case 'view':
         setDrawerContact(contact);
         setDrawerStage(row.stage);
+        setDrawerRestricted(!hasAccess);
         setDrawerOpen(true);
         break;
       case 'edit':
+        if (!hasAccess) return;
         setEditContact(contact);
         setEditModalOpen(true);
         break;
       case 'log-interaction':
+        if (!hasAccess) return;
         setActionContactId(row.id);
         setActionContactName(row.full_name);
         setInteractionOpen(true);
         break;
       case 'add-followup':
+        if (!hasAccess) return;
         setActionContactId(row.id);
         setActionContactName(row.full_name);
         setFollowupOpen(true);
@@ -753,7 +780,7 @@ export default function ContactsV2() {
         setDeleteDialogOpen(true);
         break;
     }
-  }, [handleArchive]);
+  }, [handleArchive, crmUserId, isAdmin]);
 
   // ── Inline assignment handlers ────────────────────────────────
   const handleInlineAssign = useCallback(async (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => {
@@ -818,10 +845,12 @@ export default function ContactsV2() {
 
   // ── Row click → open drawer ───────────────────────────────────
   const handleRowClick = useCallback((row: ContactV2Row) => {
+    const hasAccess = canAccessContact(row, crmUserId, isAdmin);
     setDrawerContact(rowToContactWithCompany(row));
     setDrawerStage(row.stage);
+    setDrawerRestricted(!hasAccess);
     setDrawerOpen(true);
-  }, []);
+  }, [crmUserId, isAdmin]);
 
   // Debounce search
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -957,6 +986,7 @@ export default function ContactsV2() {
           rows={rows}
           activeTab={activeTab}
           isAdmin={isAdmin}
+          crmUserId={crmUserId}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onToggleAll={toggleAll}
@@ -976,17 +1006,32 @@ export default function ContactsV2() {
       {/* ── Modals ─────────────────────────────────────────────── */}
 
       {/* Contact Details Drawer */}
-      <ContactDetailsDrawer
-        contact={drawerContact}
-        companyName={drawerContact?.company_name ?? null}
-        currentStage={drawerStage}
-        isOpen={drawerOpen}
-        onClose={() => {
-          setDrawerOpen(false);
-          setDrawerContact(null);
-        }}
-        onOwnersChange={refetchAll}
-      />
+      {drawerRestricted ? (
+        <ContactDetailsDrawer
+          contact={drawerContact ? { ...drawerContact, email: null, phone: null, country_code: null } : null}
+          companyName={drawerContact?.company_name ?? null}
+          currentStage={drawerStage}
+          isOpen={drawerOpen}
+          onClose={() => {
+            setDrawerOpen(false);
+            setDrawerContact(null);
+            setDrawerRestricted(false);
+          }}
+        />
+      ) : (
+        <ContactDetailsDrawer
+          contact={drawerContact}
+          companyName={drawerContact?.company_name ?? null}
+          currentStage={drawerStage}
+          isOpen={drawerOpen}
+          onClose={() => {
+            setDrawerOpen(false);
+            setDrawerContact(null);
+            setDrawerRestricted(false);
+          }}
+          onOwnersChange={refetchAll}
+        />
+      )}
 
       {/* Assign Contact Modal */}
       <AssignContactModal

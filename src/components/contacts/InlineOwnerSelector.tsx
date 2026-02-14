@@ -20,6 +20,7 @@ interface InlineOwnerSelectorProps {
   contactId: string;
   currentOwnerName: string | null;
   role: 'PRIMARY' | 'SECONDARY';
+  excludeUserId?: string | null;
   onAssign: (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => Promise<void>;
   onRemove?: (contactId: string, role: 'PRIMARY' | 'SECONDARY') => Promise<void>;
 }
@@ -28,6 +29,7 @@ export function InlineOwnerSelector({
   contactId,
   currentOwnerName,
   role,
+  excludeUserId,
   onAssign,
   onRemove,
 }: InlineOwnerSelectorProps) {
@@ -58,9 +60,9 @@ export function InlineOwnerSelector({
       });
   }, [open]);
 
-  const filtered = filter
-    ? users.filter((u) => u.full_name.toLowerCase().includes(filter.toLowerCase()))
-    : users;
+  const filtered = users
+    .filter((u) => !excludeUserId || u.id !== excludeUserId)
+    .filter((u) => !filter || u.full_name.toLowerCase().includes(filter.toLowerCase()));
 
   const handleSelect = async (userId: string) => {
     setSaving(true);
