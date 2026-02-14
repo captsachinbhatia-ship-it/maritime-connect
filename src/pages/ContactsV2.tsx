@@ -14,9 +14,6 @@ import {
   MoreHorizontal,
   Eye,
   Pencil,
-  ArrowRight,
-  UserCheck,
-  UserMinus,
   Phone as PhoneIcon,
   CalendarClock,
   Trash2,
@@ -53,6 +50,7 @@ import { StageDropdown } from '@/components/contacts/StageDropdown';
 import { EditContactModal } from '@/components/contacts/EditContactModal';
 import { DeleteContactDialog } from '@/components/contacts/DeleteContactDialog';
 import { DirectoryBulkToolbar } from '@/components/contacts/DirectoryBulkToolbar';
+import { InlineOwnerSelector } from '@/components/contacts/InlineOwnerSelector';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
@@ -311,9 +309,6 @@ function RowActionsMenu({
   isAdmin,
   onView,
   onEdit,
-  onAssignPrimary,
-  onAssignSecondary,
-  onRemoveAssignment,
   onLogInteraction,
   onAddFollowup,
   onArchive,
@@ -323,9 +318,6 @@ function RowActionsMenu({
   isAdmin: boolean;
   onView: () => void;
   onEdit: () => void;
-  onAssignPrimary: () => void;
-  onAssignSecondary: () => void;
-  onRemoveAssignment: () => void;
   onLogInteraction: () => void;
   onAddFollowup: () => void;
   onArchive: () => void;
@@ -347,21 +339,6 @@ function RowActionsMenu({
           <Pencil className="mr-2 h-4 w-4" />
           Edit
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onAssignPrimary}>
-          <UserCheck className="mr-2 h-4 w-4" />
-          Assign Primary
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onAssignSecondary}>
-          <Users2 className="mr-2 h-4 w-4" />
-          Assign Secondary
-        </DropdownMenuItem>
-        {(row.primary_owner || row.secondary_owner) && (
-          <DropdownMenuItem onClick={onRemoveAssignment} className="text-destructive">
-            <UserMinus className="mr-2 h-4 w-4" />
-            Remove Assignment
-          </DropdownMenuItem>
-        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onLogInteraction}>
           <PhoneIcon className="mr-2 h-4 w-4" />
@@ -400,6 +377,8 @@ function ContactsV2Table({
   allSelected,
   onRowClick,
   onRowAction,
+  onInlineAssign,
+  onInlineRemove,
 }: {
   rows: ContactV2Row[];
   activeTab: TabKey;
@@ -410,6 +389,8 @@ function ContactsV2Table({
   allSelected: boolean;
   onRowClick: (row: ContactV2Row) => void;
   onRowAction: (action: string, row: ContactV2Row) => void;
+  onInlineAssign: (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => Promise<void>;
+  onInlineRemove: (contactId: string, role: 'PRIMARY' | 'SECONDARY') => Promise<void>;
 }) {
   const isDirectory = activeTab === 'directory';
   const showOwners = isDirectory;
@@ -486,10 +467,26 @@ function ContactsV2Table({
                 <TableCell className="text-sm text-muted-foreground">{row.phone ?? '—'}</TableCell>
               )}
               {showOwners && (
-                <TableCell className="text-sm text-muted-foreground">{row.primary_owner ?? '—'}</TableCell>
+                <TableCell>
+                  <InlineOwnerSelector
+                    contactId={row.id}
+                    currentOwnerName={row.primary_owner ?? null}
+                    role="PRIMARY"
+                    onAssign={onInlineAssign}
+                    onRemove={onInlineRemove}
+                  />
+                </TableCell>
               )}
               {showOwners && (
-                <TableCell className="text-sm text-muted-foreground">{row.secondary_owner ?? '—'}</TableCell>
+                <TableCell>
+                  <InlineOwnerSelector
+                    contactId={row.id}
+                    currentOwnerName={row.secondary_owner ?? null}
+                    role="SECONDARY"
+                    onAssign={onInlineAssign}
+                    onRemove={onInlineRemove}
+                  />
+                </TableCell>
               )}
               <TableCell>
                 {row.stage ? (
@@ -509,9 +506,6 @@ function ContactsV2Table({
                   isAdmin={isAdmin}
                   onView={() => onRowAction('view', row)}
                   onEdit={() => onRowAction('edit', row)}
-                  onAssignPrimary={() => onRowAction('assign-primary', row)}
-                  onAssignSecondary={() => onRowAction('assign-secondary', row)}
-                  onRemoveAssignment={() => onRowAction('remove-assignment', row)}
                   onLogInteraction={() => onRowAction('log-interaction', row)}
                   onAddFollowup={() => onRowAction('add-followup', row)}
                   onArchive={() => onRowAction('archive', row)}
@@ -741,21 +735,6 @@ export default function ContactsV2() {
         setEditContact(contact);
         setEditModalOpen(true);
         break;
-      case 'assign-primary':
-        setActionContactId(row.id);
-        setActionContactName(row.full_name);
-        setAssignRole('primary');
-        setAssignModalOpen(true);
-        break;
-      case 'assign-secondary':
-        setActionContactId(row.id);
-        setActionContactName(row.full_name);
-        setAssignRole('secondary');
-        setAssignModalOpen(true);
-        break;
-      case 'remove-assignment':
-        handleRemoveAssignment(row.id, row.full_name);
-        break;
       case 'log-interaction':
         setActionContactId(row.id);
         setActionContactName(row.full_name);
@@ -774,7 +753,68 @@ export default function ContactsV2() {
         setDeleteDialogOpen(true);
         break;
     }
-  }, [handleArchive, handleRemoveAssignment]);
+  }, [handleArchive]);
+
+  // ── Inline assignment handlers ────────────────────────────────
+  const handleInlineAssign = useCallback(async (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => {
+    const now = new Date().toISOString();
+    const { data: { user } } = await supabase.auth.getUser();
+    let assignedByCrmUserId: string | null = null;
+    if (user) {
+      const { data: profile } = await supabase
+        .from('crm_users')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle();
+      assignedByCrmUserId = profile?.id || null;
+    }
+
+    // Close existing active assignment of same role
+    await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', contactId)
+      .eq('status', 'ACTIVE')
+      .is('ended_at', null)
+      .eq('assignment_role', role);
+
+    // Insert new
+    const { error: err } = await supabase
+      .from('contact_assignments')
+      .insert({
+        contact_id: contactId,
+        assigned_to_crm_user_id: userId,
+        assigned_by_crm_user_id: assignedByCrmUserId,
+        assignment_role: role,
+        stage: 'COLD_CALLING',
+        status: 'ACTIVE',
+      });
+
+    if (err) {
+      toast({ title: 'Assignment failed', description: err.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: `${role === 'PRIMARY' ? 'Primary' : 'Secondary'} owner assigned` });
+    await refetchAll();
+  }, [toast, refetchAll]);
+
+  const handleInlineRemove = useCallback(async (contactId: string, role: 'PRIMARY' | 'SECONDARY') => {
+    const now = new Date().toISOString();
+    const { error: err } = await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', contactId)
+      .eq('status', 'ACTIVE')
+      .is('ended_at', null)
+      .eq('assignment_role', role);
+
+    if (err) {
+      toast({ title: 'Remove failed', description: err.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: `${role === 'PRIMARY' ? 'Primary' : 'Secondary'} owner removed` });
+    await refetchAll();
+  }, [toast, refetchAll]);
 
   // ── Row click → open drawer ───────────────────────────────────
   const handleRowClick = useCallback((row: ContactV2Row) => {
@@ -923,6 +963,8 @@ export default function ContactsV2() {
           allSelected={allSelected}
           onRowClick={handleRowClick}
           onRowAction={handleRowAction}
+          onInlineAssign={handleInlineAssign}
+          onInlineRemove={handleInlineRemove}
         />
       )}
 
