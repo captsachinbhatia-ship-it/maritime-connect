@@ -128,7 +128,9 @@ function CumulativeBar({
   );
 }
 
-// ── Stage chip bar ───────────────────────────────────────────────
+// ── Stage chip bar (My Primary only, no "All" chip) ─────────────
+const MY_PRIMARY_CHIPS = STAGE_CHIPS.filter((c) => c.value !== 'ALL');
+
 function StageChipBar({
   counts,
   active,
@@ -140,7 +142,7 @@ function StageChipBar({
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {STAGE_CHIPS.map((chip) => {
+      {MY_PRIMARY_CHIPS.map((chip) => {
         const isActive = active === chip.value;
         return (
           <button
@@ -1193,10 +1195,12 @@ export default function ContactsV2() {
         </button>
       </div>
 
-      {/* Stage chips + search (between tabs and owner summary) */}
+      {/* Stage chips (My Primary only) + search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <StageChipBar counts={stageCounts} active={stageFilter} onChange={setStageFilter} />
-        <div className="relative w-full max-w-sm">
+        {activeTab === 'my-primary' && (
+          <StageChipBar counts={stageCounts} active={stageFilter} onChange={setStageFilter} />
+        )}
+        <div className={`relative w-full max-w-sm ${activeTab !== 'my-primary' ? '' : ''}`}>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             key={activeTab}

@@ -281,12 +281,13 @@ export function useContactsV2Data() {
   const changeTab = useCallback(
     (tab: TabKey) => {
       setActiveTab(tab);
-      setStageFilterState('ALL');
+      const defaultStage: StageFilter = tab === 'my-primary' ? 'COLD_CALLING' : 'ALL';
+      setStageFilterState(defaultStage);
       setSearchState('');
       setPage(0);
       setAlphaFilterState(null);
       setOwnerFilterState(EMPTY_OWNER_FILTER);
-      fetchAll(tab, 'ALL', '', 0, null, EMPTY_OWNER_FILTER);
+      fetchAll(tab, defaultStage, '', 0, null, EMPTY_OWNER_FILTER);
     },
     [fetchAll]
   );
