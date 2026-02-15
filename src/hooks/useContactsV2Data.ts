@@ -215,7 +215,7 @@ export function useContactsV2Data() {
           }
         }
 
-        const { data, count, error: fetchErr } = await query;
+      const { data, count, error: fetchErr } = await query;
 
         if (fetchErr) {
           setError(fetchErr.message);
@@ -232,6 +232,29 @@ export function useContactsV2Data() {
             console.warn('Skipping row:', e instanceof Error ? e.message : e);
           }
         });
+
+        // For Directory tab, merge owner names from v_directory_owner_snapshot
+        if (tab === 'directory' && normalized.length > 0) {
+          const contactIds = normalized.map((r) => r.id);
+          const { data: snapshotData } = await supabase
+            .from('v_directory_owner_snapshot')
+            .select('contact_id, primary_owner_id, primary_owner_name, secondary_owner_id, secondary_owner_name')
+            .in('contact_id', contactIds);
+
+          if (snapshotData && snapshotData.length > 0) {
+            const snapshotMap = new Map<string, any>();
+            snapshotData.forEach((s: any) => snapshotMap.set(s.contact_id, s));
+            normalized.forEach((row) => {
+              const snap = snapshotMap.get(row.id);
+              if (snap) {
+                row.primary_owner_id = snap.primary_owner_id ?? row.primary_owner_id;
+                row.primary_owner = snap.primary_owner_name ?? row.primary_owner;
+                row.secondary_owner_id = snap.secondary_owner_id ?? row.secondary_owner_id;
+                row.secondary_owner = snap.secondary_owner_name ?? row.secondary_owner;
+              }
+            });
+          }
+        }
 
         setRows(normalized);
         setTotalRows(count ?? normalized.length);
