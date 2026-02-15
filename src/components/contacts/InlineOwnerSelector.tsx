@@ -101,11 +101,11 @@ export function InlineOwnerSelector({
         <button
           data-no-row-click
           className={cn(
-            'group flex items-center gap-1 rounded px-1.5 py-0.5 text-sm transition-colors',
-            'hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+            'group flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             currentOwnerName
-              ? 'text-foreground'
-              : 'text-muted-foreground/60 italic'
+              ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/60'
+              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60'
           )}
         >
           {currentOwnerName ? (
@@ -116,7 +116,7 @@ export function InlineOwnerSelector({
           ) : (
             <>
               <UserPlus className="h-3 w-3 shrink-0" />
-              <span className="text-xs">Assign</span>
+              <span>Assign</span>
             </>
           )}
         </button>

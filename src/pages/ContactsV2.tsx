@@ -65,6 +65,9 @@ import {
   type ContactV2Row,
 } from '@/hooks/useContactsV2Data';
 
+// ── Alphabet letters ─────────────────────────────────────────────
+const ALPHA_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
 // ── Tab metadata ─────────────────────────────────────────────────
 const TAB_META: { value: TabKey; label: string; icon: React.ElementType }[] = [
   { value: 'directory', label: 'Directory', icon: BookOpen },
@@ -148,6 +151,53 @@ function StageChipBar({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ── A-Z Filter Bar ──────────────────────────────────────────────
+function AlphaFilterBar({
+  active,
+  onChange,
+}: {
+  active: string | null;
+  onChange: (letter: string | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-0.5">
+      <button
+        onClick={() => onChange(null)}
+        className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+          active === null
+            ? 'bg-primary text-primary-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+        }`}
+      >
+        All
+      </button>
+      {ALPHA_LETTERS.map((l) => (
+        <button
+          key={l}
+          onClick={() => onChange(active === l ? null : l)}
+          className={`px-1.5 py-1 text-xs font-medium rounded transition-colors ${
+            active === l
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+          }`}
+        >
+          {l}
+        </button>
+      ))}
+      <button
+        onClick={() => onChange(active === '#' ? null : '#')}
+        className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+          active === '#'
+            ? 'bg-primary text-primary-foreground shadow-sm'
+            : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+        }`}
+      >
+        #
+      </button>
     </div>
   );
 }
@@ -453,10 +503,12 @@ function ContactsV2Table({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row) => {
+            const isUnassigned = isDirectory && !row.primary_owner;
+            return (
             <TableRow
               key={row.id}
-              className="cursor-pointer hover:bg-accent/50"
+              className={`cursor-pointer hover:bg-accent/50 ${isUnassigned ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}
               onClick={(e) => handleRowClick(e, row)}
             >
               <TableCell>
@@ -486,7 +538,7 @@ function ContactsV2Table({
                 <TableCell className="text-sm text-muted-foreground">{row.phone ?? '—'}</TableCell>
               )}
               {showOwners && (
-                <TableCell>
+                <TableCell className={!row.primary_owner ? 'bg-amber-100/60 dark:bg-amber-950/30' : ''}>
                   <InlineOwnerSelector
                     contactId={row.id}
                     currentOwnerName={row.primary_owner ?? null}
@@ -534,7 +586,8 @@ function ContactsV2Table({
                 />
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
     </div>
@@ -547,18 +600,22 @@ function PaginationBar({
   totalPages,
   totalRows,
   onPageChange,
+  compact,
 }: {
   page: number;
   totalPages: number;
   totalRows: number;
   onPageChange: (p: number) => void;
+  compact?: boolean;
 }) {
   if (totalPages <= 1) return null;
   return (
-    <div className="flex items-center justify-between pt-2">
-      <p className="text-xs text-muted-foreground">
-        {totalRows} result{totalRows !== 1 ? 's' : ''}
-      </p>
+    <div className={`flex items-center ${compact ? 'gap-2' : 'justify-between pt-2'}`}>
+      {!compact && (
+        <p className="text-xs text-muted-foreground">
+          {totalRows} result{totalRows !== 1 ? 's' : ''}
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -585,6 +642,9 @@ function PaginationBar({
     </div>
   );
 }
+
+
+
 
 // ── Hook for cumulative bar counts ───────────────────────────────
 function useCumulativeCounts() {
@@ -630,6 +690,7 @@ export default function ContactsV2() {
     activeTab,
     stageFilter,
     search,
+    alphaFilter,
     page,
     isLoading,
     error,
@@ -641,6 +702,7 @@ export default function ContactsV2() {
     changeTab,
     setStageFilter,
     setSearch,
+    setAlphaFilter,
     changePage,
     fetchAll,
   } = useContactsV2Data();
@@ -689,10 +751,10 @@ export default function ContactsV2() {
   // ── Refetch everything after a write ──────────────────────────
   const refetchAll = useCallback(async () => {
     await Promise.all([
-      fetchAll(activeTab, stageFilter, search, page),
+      fetchAll(activeTab, stageFilter, search, page, alphaFilter),
       cumulative.refresh(),
     ]);
-  }, [activeTab, stageFilter, search, page, fetchAll, cumulative]);
+  }, [activeTab, stageFilter, search, page, alphaFilter, fetchAll, cumulative]);
 
   // ── Archive handler ───────────────────────────────────────────
   const handleArchive = useCallback(async (contactId: string, contactName: string) => {
@@ -785,6 +847,30 @@ export default function ContactsV2() {
   // ── Inline assignment handlers ────────────────────────────────
   const handleInlineAssign = useCallback(async (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => {
     const now = new Date().toISOString();
+
+    // Safe duplicate check: see if this user already has an active assignment for this contact
+    const { data: existing } = await supabase
+      .from('contact_assignments')
+      .select('id, assignment_role')
+      .eq('contact_id', contactId)
+      .eq('assigned_to_crm_user_id', userId)
+      .eq('status', 'ACTIVE')
+      .is('ended_at', null)
+      .maybeSingle();
+
+    if (existing && existing.assignment_role === role) {
+      toast({ title: `Already ${role === 'PRIMARY' ? 'Primary' : 'Secondary'} owner` });
+      return;
+    }
+
+    // If user has a different active role, close it first to avoid unique constraint
+    if (existing) {
+      await supabase
+        .from('contact_assignments')
+        .update({ status: 'CLOSED', ended_at: now })
+        .eq('id', existing.id);
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     let assignedByCrmUserId: string | null = null;
     if (user) {
@@ -796,7 +882,7 @@ export default function ContactsV2() {
       assignedByCrmUserId = profile?.id || null;
     }
 
-    // Close existing active assignment of same role
+    // Close existing active assignment of same role for this contact
     await supabase
       .from('contact_assignments')
       .update({ status: 'CLOSED', ended_at: now })
@@ -978,6 +1064,16 @@ export default function ContactsV2() {
         </Alert>
       )}
 
+      {/* A-Z Filter + Top Pagination (Directory only) */}
+      {isDirectory && (
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <AlphaFilterBar active={alphaFilter} onChange={setAlphaFilter} />
+          {!isLoading && totalPages > 1 && (
+            <PaginationBar page={page} totalPages={totalPages} totalRows={totalRows} onPageChange={changePage} compact />
+          )}
+        </div>
+      )}
+
       {/* Table */}
       {isLoading ? (
         <TableSkeleton />
@@ -998,7 +1094,7 @@ export default function ContactsV2() {
         />
       )}
 
-      {/* Pagination */}
+      {/* Bottom Pagination */}
       {!isLoading && (
         <PaginationBar page={page} totalPages={totalPages} totalRows={totalRows} onPageChange={changePage} />
       )}
