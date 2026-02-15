@@ -419,6 +419,7 @@ function RowActionsMenu({
   row,
   isAdmin,
   hasAccess,
+  isDirectory,
   onView,
   onEdit,
   onLogInteraction,
@@ -429,6 +430,7 @@ function RowActionsMenu({
   row: ContactV2Row;
   isAdmin: boolean;
   hasAccess: boolean;
+  isDirectory: boolean;
   onView: () => void;
   onEdit: () => void;
   onLogInteraction: () => void;
@@ -436,6 +438,9 @@ function RowActionsMenu({
   onArchive: () => void;
   onDelete: () => void;
 }) {
+  // Non-admin on Directory: only show View Details if they have access
+  const directoryNonAdmin = isDirectory && !isAdmin;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -444,38 +449,54 @@ function RowActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={onView}>
-          <Eye className="mr-2 h-4 w-4" />
-          View Details
-        </DropdownMenuItem>
-        {hasAccess && (
+        {directoryNonAdmin ? (
+          hasAccess ? (
+            <DropdownMenuItem onClick={onView}>
+              <Eye className="mr-2 h-4 w-4" />
+              View Details
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem disabled>
+              <Eye className="mr-2 h-4 w-4" />
+              Access restricted
+            </DropdownMenuItem>
+          )
+        ) : (
           <>
-            <DropdownMenuItem onClick={onEdit}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
+            <DropdownMenuItem onClick={onView}>
+              <Eye className="mr-2 h-4 w-4" />
+              View Details
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onLogInteraction}>
-              <PhoneIcon className="mr-2 h-4 w-4" />
-              Log Interaction
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onAddFollowup}>
-              <CalendarClock className="mr-2 h-4 w-4" />
-              Add Follow-up
-            </DropdownMenuItem>
-          </>
-        )}
-        {isAdmin && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onArchive} className="text-destructive">
-              <Archive className="mr-2 h-4 w-4" />
-              Archive
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onDelete} className="text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
+            {hasAccess && (
+              <>
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onLogInteraction}>
+                  <PhoneIcon className="mr-2 h-4 w-4" />
+                  Log Interaction
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onAddFollowup}>
+                  <CalendarClock className="mr-2 h-4 w-4" />
+                  Add Follow-up
+                </DropdownMenuItem>
+              </>
+            )}
+            {isAdmin && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onArchive} className="text-destructive">
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
           </>
         )}
       </DropdownMenuContent>
@@ -559,10 +580,11 @@ function ContactsV2Table({
         <TableBody>
           {rows.map((row) => {
             const isUnassigned = isDirectory && !row.primary_owner;
+            const clickable = !(isDirectory && !isAdmin);
             return (
             <TableRow
               key={row.id}
-              className={`cursor-pointer hover:bg-accent/50 ${isUnassigned ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}
+              className={`${clickable ? 'cursor-pointer' : ''} hover:bg-accent/50 ${isUnassigned ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}
               onClick={(e) => handleRowClick(e, row)}
             >
               <TableCell>
@@ -653,6 +675,7 @@ function ContactsV2Table({
                   row={row}
                   isAdmin={isAdmin}
                   hasAccess={canAccessContact(row, crmUserId, isAdmin)}
+                  isDirectory={isDirectory}
                   onView={() => onRowAction('view', row)}
                   onEdit={() => onRowAction('edit', row)}
                   onLogInteraction={() => onRowAction('log-interaction', row)}
@@ -988,17 +1011,45 @@ export default function ContactsV2() {
       .is('ended_at', null)
       .eq('assignment_role', role);
 
-    // Insert new
-    const { error: err } = await supabase
+    // Check if a CLOSED row exists for this contact+user pair (reactivate instead of inserting)
+    const { data: closedRow } = await supabase
       .from('contact_assignments')
-      .insert({
-        contact_id: contactId,
-        assigned_to_crm_user_id: userId,
-        assigned_by_crm_user_id: assignedByCrmUserId,
-        assignment_role: role,
-        stage: 'COLD_CALLING',
-        status: 'ACTIVE',
-      });
+      .select('id')
+      .eq('contact_id', contactId)
+      .eq('assigned_to_crm_user_id', userId)
+      .eq('status', 'CLOSED')
+      .limit(1)
+      .maybeSingle();
+
+    let err: any = null;
+    if (closedRow) {
+      // Reactivate existing closed row
+      const { error: updateErr } = await supabase
+        .from('contact_assignments')
+        .update({
+          assignment_role: role,
+          status: 'ACTIVE',
+          ended_at: null,
+          ended_by_crm_user_id: null,
+          assigned_at: now,
+          assigned_by_crm_user_id: assignedByCrmUserId,
+        })
+        .eq('id', closedRow.id);
+      err = updateErr;
+    } else {
+      // Insert new
+      const { error: insertErr } = await supabase
+        .from('contact_assignments')
+        .insert({
+          contact_id: contactId,
+          assigned_to_crm_user_id: userId,
+          assigned_by_crm_user_id: assignedByCrmUserId,
+          assignment_role: role,
+          stage: 'COLD_CALLING',
+          status: 'ACTIVE',
+        });
+      err = insertErr;
+    }
 
     if (err) {
       toast({ title: 'Assignment failed', description: err.message, variant: 'destructive' });
@@ -1026,14 +1077,16 @@ export default function ContactsV2() {
     await refetchAll();
   }, [toast, refetchAll]);
 
-  // ── Row click → open drawer ───────────────────────────────────
+  // ── Row click handler (Directory: admin only) ──────────────────
   const handleRowClick = useCallback((row: ContactV2Row) => {
+    // Non-admin cannot open side panel from Directory
+    if (activeTab === 'directory' && !isAdmin) return;
     const hasAccess = canAccessContact(row, crmUserId, isAdmin);
     setDrawerContact(rowToContactWithCompany(row));
     setDrawerStage(row.stage);
     setDrawerRestricted(!hasAccess);
     setDrawerOpen(true);
-  }, [crmUserId, isAdmin]);
+  }, [crmUserId, isAdmin, activeTab]);
 
   // Debounce search
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1140,6 +1193,22 @@ export default function ContactsV2() {
         </button>
       </div>
 
+      {/* Stage chips + search (between tabs and owner summary) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <StageChipBar counts={stageCounts} active={stageFilter} onChange={setStageFilter} />
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            key={activeTab}
+            type="text"
+            placeholder={isDirectory ? 'Search name, company…' : 'Search name, company, email, phone…'}
+            defaultValue={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      </div>
+
       {/* Owner Summary Table (Directory only) */}
       {isDirectory && (
         <OwnerSummaryBlock
@@ -1158,22 +1227,6 @@ export default function ContactsV2() {
           onComplete={handleBulkComplete}
         />
       )}
-
-      {/* Stage chips + search */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <StageChipBar counts={stageCounts} active={stageFilter} onChange={setStageFilter} />
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            key={activeTab}
-            type="text"
-            placeholder={isDirectory ? 'Search name, company…' : 'Search name, company, email, phone…'}
-            defaultValue={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-      </div>
 
       {/* Error */}
       {error && (
