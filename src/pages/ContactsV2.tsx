@@ -1098,45 +1098,47 @@ export default function ContactsV2() {
         </div>
       </div>
 
-      {/* Unified Summary Strip */}
-      <CumulativeBar
-        directoryTotal={cumulative.directoryTotal}
-        primaryTotal={cumulative.primaryTotal}
-        secondaryTotal={cumulative.secondaryTotal}
-        unassignedTotal={cumulative.unassignedTotal}
-        myAddedTotal={cumulative.myAddedTotal}
-        activeTab={activeTab}
-        onNavigate={(action) => {
-          if (action === 'directory') {
-            changeTab('directory');
-          } else if (action === 'my-primary') {
-            changeTab('my-primary');
-          } else if (action === 'my-secondary') {
-            changeTab('my-secondary');
-          } else if (action === 'my-added') {
-            changeTab('my-added');
-          } else if (action === 'unassigned') {
+      {/* Tabs with counts + Unassigned pill */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <Tabs value={activeTab} onValueChange={(v) => changeTab(v as TabKey)} className="flex-shrink-0">
+          <TabsList className="inline-flex h-10 items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground">
+            {TAB_META.map((t) => {
+              const countMap: Record<TabKey, number> = {
+                directory: cumulative.directoryTotal,
+                'my-primary': cumulative.primaryTotal,
+                'my-secondary': cumulative.secondaryTotal,
+                'my-added': cumulative.myAddedTotal,
+              };
+              return (
+                <TabsTrigger
+                  key={t.value}
+                  value={t.value}
+                  className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+                >
+                  <t.icon className="h-3.5 w-3.5" />
+                  {t.label}
+                  <span className="ml-1 tabular-nums text-xs opacity-70">({countMap[t.value]})</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
+
+        {/* Unassigned pill */}
+        <button
+          onClick={() => {
             if (activeTab !== 'directory') changeTab('directory');
             setOwnerFilter({ userId: null, role: null, unassigned: true });
-          }
-        }}
-      />
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => changeTab(v as TabKey)}>
-        <TabsList className="inline-flex h-10 items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground">
-          {TAB_META.map((t) => (
-            <TabsTrigger
-              key={t.value}
-              value={t.value}
-              className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-            >
-              <t.icon className="h-3.5 w-3.5" />
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+          }}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer
+            ${ownerFilter.unassigned
+              ? 'border-destructive bg-destructive/10 text-destructive'
+              : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            }`}
+        >
+          Unassigned <span className="font-semibold tabular-nums">{cumulative.unassignedTotal}</span>
+        </button>
+      </div>
 
       {/* Owner Summary Table (Directory only) */}
       {isDirectory && (
