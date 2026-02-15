@@ -105,6 +105,7 @@ export function useContactsV2Data() {
   const [page, setPage] = useState(0);
   const [alphaFilter, setAlphaFilterState] = useState<string | null>(null);
   const [ownerFilter, setOwnerFilterState] = useState<OwnerFilterState>(EMPTY_OWNER_FILTER);
+  const [showInactive, setShowInactiveState] = useState(false);
 
   const [stageCounts, setStageCounts] = useState<Record<StageFilter, number>>({
     ALL: 0,
@@ -146,7 +147,7 @@ export function useContactsV2Data() {
 
   // ── Fetch paginated contacts ───────────────────────────────────
   const fetchContacts = useCallback(
-    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null, of: OwnerFilterState = EMPTY_OWNER_FILTER) => {
+    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null, of: OwnerFilterState = EMPTY_OWNER_FILTER, inactive: boolean = false) => {
       if (!session) return;
       setIsLoading(true);
       setError(null);
@@ -164,6 +165,15 @@ export function useContactsV2Data() {
           .order('full_name', { ascending: true })
           .range(from, to);
 
+        // Directory: filter active/inactive
+        if (tab === 'directory') {
+          if (inactive) {
+            query = query.eq('is_active', false);
+          } else {
+            query = query.eq('is_active', true);
+          }
+        }
+
         if (sf !== 'ALL') {
           query = query.eq(stageColumn, sf);
         }
@@ -172,7 +182,7 @@ export function useContactsV2Data() {
           const term = q.trim();
           if (tab === 'directory') {
             query = query.or(
-              `full_name.ilike.%${term}%,company_name.ilike.%${term}%`
+              `full_name.ilike.%${term}%,company_name.ilike.%${term}%,email.ilike.%${term}%`
             );
           } else {
             query = query.or(
@@ -271,8 +281,8 @@ export function useContactsV2Data() {
 
   // ── Combined fetch ─────────────────────────────────────────────
   const fetchAll = useCallback(
-    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null, of: OwnerFilterState = EMPTY_OWNER_FILTER) => {
-      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha, of)]);
+    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null, of: OwnerFilterState = EMPTY_OWNER_FILTER, inactive: boolean = false) => {
+      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha, of, inactive)]);
     },
     [fetchStageCounts, fetchContacts]
   );
@@ -287,7 +297,8 @@ export function useContactsV2Data() {
       setPage(0);
       setAlphaFilterState(null);
       setOwnerFilterState(EMPTY_OWNER_FILTER);
-      fetchAll(tab, defaultStage, '', 0, null, EMPTY_OWNER_FILTER);
+      setShowInactiveState(false);
+      fetchAll(tab, defaultStage, '', 0, null, EMPTY_OWNER_FILTER, false);
     },
     [fetchAll]
   );
@@ -297,9 +308,9 @@ export function useContactsV2Data() {
     (sf: StageFilter) => {
       setStageFilterState(sf);
       setPage(0);
-      fetchContacts(activeTab, sf, search, 0, alphaFilter, ownerFilter);
+      fetchContacts(activeTab, sf, search, 0, alphaFilter, ownerFilter, showInactive);
     },
-    [activeTab, search, alphaFilter, ownerFilter, fetchContacts]
+    [activeTab, search, alphaFilter, ownerFilter, showInactive, fetchContacts]
   );
 
   // ── Search change ──────────────────────────────────────────────
@@ -307,9 +318,9 @@ export function useContactsV2Data() {
     (q: string) => {
       setSearchState(q);
       setPage(0);
-      fetchContacts(activeTab, stageFilter, q, 0, alphaFilter, ownerFilter);
+      fetchContacts(activeTab, stageFilter, q, 0, alphaFilter, ownerFilter, showInactive);
     },
-    [activeTab, stageFilter, alphaFilter, ownerFilter, fetchContacts]
+    [activeTab, stageFilter, alphaFilter, ownerFilter, showInactive, fetchContacts]
   );
 
   // ── Alpha filter change ────────────────────────────────────────
@@ -317,9 +328,9 @@ export function useContactsV2Data() {
     (alpha: string | null) => {
       setAlphaFilterState(alpha);
       setPage(0);
-      fetchContacts(activeTab, stageFilter, search, 0, alpha, ownerFilter);
+      fetchContacts(activeTab, stageFilter, search, 0, alpha, ownerFilter, showInactive);
     },
-    [activeTab, stageFilter, search, ownerFilter, fetchContacts]
+    [activeTab, stageFilter, search, ownerFilter, showInactive, fetchContacts]
   );
 
   // ── Owner filter change ────────────────────────────────────────
@@ -327,7 +338,18 @@ export function useContactsV2Data() {
     (of: OwnerFilterState) => {
       setOwnerFilterState(of);
       setPage(0);
-      fetchContacts(activeTab, stageFilter, search, 0, alphaFilter, of);
+      fetchContacts(activeTab, stageFilter, search, 0, alphaFilter, of, showInactive);
+    },
+    [activeTab, stageFilter, search, alphaFilter, showInactive, fetchContacts]
+  );
+
+  // ── Inactive mode toggle ───────────────────────────────────────
+  const setShowInactive = useCallback(
+    (inactive: boolean) => {
+      setShowInactiveState(inactive);
+      setPage(0);
+      setOwnerFilterState(EMPTY_OWNER_FILTER);
+      fetchContacts(activeTab, stageFilter, search, 0, alphaFilter, EMPTY_OWNER_FILTER, inactive);
     },
     [activeTab, stageFilter, search, alphaFilter, fetchContacts]
   );
@@ -336,9 +358,9 @@ export function useContactsV2Data() {
   const changePage = useCallback(
     (p: number) => {
       setPage(p);
-      fetchContacts(activeTab, stageFilter, search, p, alphaFilter, ownerFilter);
+      fetchContacts(activeTab, stageFilter, search, p, alphaFilter, ownerFilter, showInactive);
     },
-    [activeTab, stageFilter, search, alphaFilter, ownerFilter, fetchContacts]
+    [activeTab, stageFilter, search, alphaFilter, ownerFilter, showInactive, fetchContacts]
   );
 
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
@@ -349,6 +371,7 @@ export function useContactsV2Data() {
     search,
     alphaFilter,
     ownerFilter,
+    showInactive,
     page,
     isLoading,
     error,
@@ -362,8 +385,9 @@ export function useContactsV2Data() {
     setSearch,
     setAlphaFilter,
     setOwnerFilter,
+    setShowInactive,
     changePage,
-    refresh: () => fetchAll(activeTab, stageFilter, search, page, alphaFilter, ownerFilter),
+    refresh: () => fetchAll(activeTab, stageFilter, search, page, alphaFilter, ownerFilter, showInactive),
     fetchAll,
   };
 }
