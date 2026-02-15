@@ -95,6 +95,7 @@ export function useContactsV2Data() {
   const [stageFilter, setStageFilterState] = useState<StageFilter>('ALL');
   const [search, setSearchState] = useState('');
   const [page, setPage] = useState(0);
+  const [alphaFilter, setAlphaFilterState] = useState<string | null>(null);
 
   const [stageCounts, setStageCounts] = useState<Record<StageFilter, number>>({
     ALL: 0,
@@ -136,7 +137,7 @@ export function useContactsV2Data() {
 
   // ── Fetch paginated contacts ───────────────────────────────────
   const fetchContacts = useCallback(
-    async (tab: TabKey, sf: StageFilter, q: string, p: number) => {
+    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null) => {
       if (!session) return;
       setIsLoading(true);
       setError(null);
@@ -145,7 +146,6 @@ export function useContactsV2Data() {
       const from = p * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      // Use primary_stage for directory RO view, stage for others
       const stageColumn = tab === 'directory' ? 'primary_stage' : 'stage';
 
       try {
@@ -159,7 +159,7 @@ export function useContactsV2Data() {
           query = query.eq(stageColumn, sf);
         }
 
-      if (q.trim()) {
+        if (q.trim()) {
           const term = q.trim();
           if (tab === 'directory') {
             query = query.or(
@@ -170,6 +170,27 @@ export function useContactsV2Data() {
               `full_name.ilike.%${term}%,company_name.ilike.%${term}%,email.ilike.%${term}%,primary_phone.ilike.%${term}%`
             );
           }
+        }
+
+        // A-Z alpha filter
+        if (alpha && alpha !== '#') {
+          query = query.ilike('full_name', `${alpha}%`);
+        } else if (alpha === '#') {
+          // Non-alphabetic starting character
+          query = query.not('full_name', 'ilike', 'a%')
+            .not('full_name', 'ilike', 'b%').not('full_name', 'ilike', 'c%')
+            .not('full_name', 'ilike', 'd%').not('full_name', 'ilike', 'e%')
+            .not('full_name', 'ilike', 'f%').not('full_name', 'ilike', 'g%')
+            .not('full_name', 'ilike', 'h%').not('full_name', 'ilike', 'i%')
+            .not('full_name', 'ilike', 'j%').not('full_name', 'ilike', 'k%')
+            .not('full_name', 'ilike', 'l%').not('full_name', 'ilike', 'm%')
+            .not('full_name', 'ilike', 'n%').not('full_name', 'ilike', 'o%')
+            .not('full_name', 'ilike', 'p%').not('full_name', 'ilike', 'q%')
+            .not('full_name', 'ilike', 'r%').not('full_name', 'ilike', 's%')
+            .not('full_name', 'ilike', 't%').not('full_name', 'ilike', 'u%')
+            .not('full_name', 'ilike', 'v%').not('full_name', 'ilike', 'w%')
+            .not('full_name', 'ilike', 'x%').not('full_name', 'ilike', 'y%')
+            .not('full_name', 'ilike', 'z%');
         }
 
         const { data, count, error: fetchErr } = await query;
@@ -205,8 +226,8 @@ export function useContactsV2Data() {
 
   // ── Combined fetch ─────────────────────────────────────────────
   const fetchAll = useCallback(
-    async (tab: TabKey, sf: StageFilter, q: string, p: number) => {
-      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p)]);
+    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null) => {
+      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha)]);
     },
     [fetchStageCounts, fetchContacts]
   );
@@ -218,7 +239,8 @@ export function useContactsV2Data() {
       setStageFilterState('ALL');
       setSearchState('');
       setPage(0);
-      fetchAll(tab, 'ALL', '', 0);
+      setAlphaFilterState(null);
+      fetchAll(tab, 'ALL', '', 0, null);
     },
     [fetchAll]
   );
@@ -228,9 +250,9 @@ export function useContactsV2Data() {
     (sf: StageFilter) => {
       setStageFilterState(sf);
       setPage(0);
-      fetchContacts(activeTab, sf, search, 0);
+      fetchContacts(activeTab, sf, search, 0, alphaFilter);
     },
-    [activeTab, search, fetchContacts]
+    [activeTab, search, alphaFilter, fetchContacts]
   );
 
   // ── Search change ──────────────────────────────────────────────
@@ -238,18 +260,28 @@ export function useContactsV2Data() {
     (q: string) => {
       setSearchState(q);
       setPage(0);
-      fetchContacts(activeTab, stageFilter, q, 0);
+      fetchContacts(activeTab, stageFilter, q, 0, alphaFilter);
     },
-    [activeTab, stageFilter, fetchContacts]
+    [activeTab, stageFilter, alphaFilter, fetchContacts]
+  );
+
+  // ── Alpha filter change ────────────────────────────────────────
+  const setAlphaFilter = useCallback(
+    (alpha: string | null) => {
+      setAlphaFilterState(alpha);
+      setPage(0);
+      fetchContacts(activeTab, stageFilter, search, 0, alpha);
+    },
+    [activeTab, stageFilter, search, fetchContacts]
   );
 
   // ── Page change ────────────────────────────────────────────────
   const changePage = useCallback(
     (p: number) => {
       setPage(p);
-      fetchContacts(activeTab, stageFilter, search, p);
+      fetchContacts(activeTab, stageFilter, search, p, alphaFilter);
     },
-    [activeTab, stageFilter, search, fetchContacts]
+    [activeTab, stageFilter, search, alphaFilter, fetchContacts]
   );
 
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
@@ -258,6 +290,7 @@ export function useContactsV2Data() {
     activeTab,
     stageFilter,
     search,
+    alphaFilter,
     page,
     isLoading,
     error,
@@ -269,8 +302,9 @@ export function useContactsV2Data() {
     changeTab,
     setStageFilter,
     setSearch,
+    setAlphaFilter,
     changePage,
-    refresh: () => fetchAll(activeTab, stageFilter, search, page),
+    refresh: () => fetchAll(activeTab, stageFilter, search, page, alphaFilter),
     fetchAll,
   };
 }
