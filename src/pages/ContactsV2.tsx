@@ -63,6 +63,7 @@ import {
   type TabKey,
   type StageFilter,
   type ContactV2Row,
+  type OwnerFilterState,
 } from '@/hooks/useContactsV2Data';
 
 // ── Alphabet letters ─────────────────────────────────────────────
@@ -83,37 +84,45 @@ const STAGE_COLORS: Record<string, string> = {
   INACTIVE: 'bg-muted text-muted-foreground',
 };
 
-// ── Cumulative Bar (always visible) ──────────────────────────────
+// ── Cumulative Bar (clickable chips) ─────────────────────────────
 function CumulativeBar({
   directoryTotal,
   primaryTotal,
   secondaryTotal,
   unassignedTotal,
   myAddedTotal,
+  activeTab,
+  onNavigate,
 }: {
   directoryTotal: number;
   primaryTotal: number;
   secondaryTotal: number;
   unassignedTotal: number;
   myAddedTotal: number;
+  activeTab: TabKey;
+  onNavigate: (action: string) => void;
 }) {
-  const items = [
-    { label: 'Directory (Clean)', value: directoryTotal },
-    { label: 'Primary (Global)', value: primaryTotal },
-    { label: 'Secondary (Global)', value: secondaryTotal },
-    { label: 'Unassigned (Global)', value: unassignedTotal },
-    { label: 'My Added (Me)', value: myAddedTotal },
+  const items: { label: string; value: number; action: string; active?: boolean }[] = [
+    { label: 'All Contacts', value: directoryTotal, action: 'directory', active: activeTab === 'directory' },
+    { label: 'Primary', value: primaryTotal, action: 'my-primary', active: activeTab === 'my-primary' },
+    { label: 'Secondary', value: secondaryTotal, action: 'my-secondary', active: activeTab === 'my-secondary' },
+    { label: 'Unassigned', value: unassignedTotal, action: 'unassigned' },
+    { label: 'My Added', value: myAddedTotal, action: 'my-added', active: activeTab === 'my-added' },
   ];
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) => (
-        <Badge
+        <button
           key={item.label}
-          variant="outline"
-          className="text-xs font-medium px-3 py-1.5 tabular-nums gap-1.5"
+          onClick={() => onNavigate(item.action)}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer
+            ${item.active
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            }`}
         >
-          {item.label}: <span className="font-semibold">{item.value}</span>
-        </Badge>
+          {item.label}: <span className="font-semibold tabular-nums">{item.value}</span>
+        </button>
       ))}
     </div>
   );
@@ -255,9 +264,10 @@ function TableSkeleton() {
   );
 }
 
-// ── Owner Summary (Directory only) with UNASSIGNED row ──────────
+// ── Owner Summary (Directory only) with clickable counts ────────
 interface OwnerSummaryRow {
   assigned_to_name: string;
+  assigned_to_crm_user_id: string;
   primary_count: number;
   secondary_count: number;
   total_count: number;
@@ -266,9 +276,13 @@ interface OwnerSummaryRow {
 function OwnerSummaryBlock({
   visible,
   directoryTotal,
+  activeOwnerFilter,
+  onOwnerFilter,
 }: {
   visible: boolean;
   directoryTotal: number;
+  activeOwnerFilter: OwnerFilterState;
+  onOwnerFilter: (of: OwnerFilterState) => void;
 }) {
   const [rows, setRows] = useState<OwnerSummaryRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -286,17 +300,35 @@ function OwnerSummaryBlock({
       });
   }, [visible]);
 
-  const { sumPrimary, sumSecondary, sumTotal, unassignedTotal } = useMemo(() => {
-    const sp = rows.reduce((a, r) => a + (r.primary_count || 0), 0);
-    const ss = rows.reduce((a, r) => a + (r.secondary_count || 0), 0);
+  const { sumTotal, unassignedTotal } = useMemo(() => {
     const st = rows.reduce((a, r) => a + (r.total_count || 0), 0);
     const ua = Math.max(0, directoryTotal - st);
-    return { sumPrimary: sp, sumSecondary: ss, sumTotal: st, unassignedTotal: ua };
+    return { sumTotal: st, unassignedTotal: ua };
   }, [rows, directoryTotal]);
 
   if (!visible) return null;
   if (loading) return <Skeleton className="h-24 w-full" />;
   if (rows.length === 0 && directoryTotal === 0) return null;
+
+  const isFilterActive = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) => {
+    return activeOwnerFilter.userId === userId && activeOwnerFilter.role === role && activeOwnerFilter.unassigned === unassigned;
+  };
+
+  const handleClick = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) => {
+    // Toggle: if already active, clear filter
+    if (isFilterActive(userId, role, unassigned)) {
+      onOwnerFilter({ userId: null, role: null, unassigned: false });
+    } else {
+      onOwnerFilter({ userId, role, unassigned });
+    }
+  };
+
+  const countCellClass = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) =>
+    `text-right tabular-nums cursor-pointer transition-colors rounded px-1 ${
+      isFilterActive(userId, role, unassigned)
+        ? 'bg-primary/15 text-primary font-bold'
+        : 'hover:bg-accent hover:text-accent-foreground'
+    }`;
 
   return (
     <div className="rounded-md border overflow-x-auto">
@@ -311,19 +343,37 @@ function OwnerSummaryBlock({
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
-            <TableRow key={r.assigned_to_name}>
+            <TableRow key={r.assigned_to_crm_user_id || r.assigned_to_name}>
               <TableCell className="font-medium">{r.assigned_to_name}</TableCell>
-              <TableCell className="text-right tabular-nums">{r.primary_count}</TableCell>
-              <TableCell className="text-right tabular-nums">{r.secondary_count}</TableCell>
-              <TableCell className="text-right tabular-nums font-semibold">{r.total_count}</TableCell>
+              <TableCell
+                className={countCellClass(r.assigned_to_crm_user_id, 'PRIMARY', false)}
+                onClick={() => handleClick(r.assigned_to_crm_user_id, 'PRIMARY', false)}
+              >
+                {r.primary_count}
+              </TableCell>
+              <TableCell
+                className={countCellClass(r.assigned_to_crm_user_id, 'SECONDARY', false)}
+                onClick={() => handleClick(r.assigned_to_crm_user_id, 'SECONDARY', false)}
+              >
+                {r.secondary_count}
+              </TableCell>
+              <TableCell
+                className={countCellClass(r.assigned_to_crm_user_id, 'ANY', false)}
+                onClick={() => handleClick(r.assigned_to_crm_user_id, 'ANY', false)}
+              >
+                <span className="font-semibold">{r.total_count}</span>
+              </TableCell>
             </TableRow>
           ))}
           <TableRow className="bg-muted/30">
             <TableCell className="font-medium text-destructive">⚠ UNASSIGNED</TableCell>
             <TableCell className="text-right tabular-nums">0</TableCell>
             <TableCell className="text-right tabular-nums">0</TableCell>
-            <TableCell className="text-right tabular-nums font-semibold text-destructive">
-              {unassignedTotal}
+            <TableCell
+              className={countCellClass(null, null, true)}
+              onClick={() => handleClick(null, null, true)}
+            >
+              <span className="font-semibold text-destructive">{unassignedTotal}</span>
             </TableCell>
           </TableRow>
         </TableBody>
@@ -463,6 +513,8 @@ function ContactsV2Table({
 }) {
   const isDirectory = activeTab === 'directory';
   const showOwners = isDirectory;
+  const showSecondaryCol = activeTab === 'my-primary';
+  const showPrimaryCol = activeTab === 'my-secondary';
 
   if (rows.length === 0) {
     return (
@@ -497,6 +549,8 @@ function ContactsV2Table({
             {!isDirectory && <TableHead className="min-w-[120px]">Phone</TableHead>}
             {showOwners && <TableHead className="min-w-[120px]">Primary Owner</TableHead>}
             {showOwners && <TableHead className="min-w-[120px]">Secondary Owner</TableHead>}
+            {showSecondaryCol && <TableHead className="min-w-[120px]">Secondary Owner</TableHead>}
+            {showPrimaryCol && <TableHead className="min-w-[120px]">Primary Owner</TableHead>}
             <TableHead className="min-w-[100px]">Stage</TableHead>
             <TableHead className="min-w-[80px]">Status</TableHead>
             <TableHead className="w-10" />
@@ -539,25 +593,47 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell className={!row.primary_owner ? 'bg-amber-100/60 dark:bg-amber-950/30' : ''}>
-                  <InlineOwnerSelector
-                    contactId={row.id}
-                    currentOwnerName={row.primary_owner ?? null}
-                    role="PRIMARY"
-                    onAssign={onInlineAssign}
-                    onRemove={onInlineRemove}
-                  />
+                  {isAdmin ? (
+                    <InlineOwnerSelector
+                      contactId={row.id}
+                      currentOwnerName={row.primary_owner ?? null}
+                      role="PRIMARY"
+                      onAssign={onInlineAssign}
+                      onRemove={onInlineRemove}
+                    />
+                  ) : (
+                    <span className={`text-xs font-medium ${row.primary_owner ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'}`}>
+                      {row.primary_owner ?? 'Unassigned'}
+                    </span>
+                  )}
                 </TableCell>
               )}
               {showOwners && (
                 <TableCell>
-                  <InlineOwnerSelector
-                    contactId={row.id}
-                    currentOwnerName={row.secondary_owner ?? null}
-                    role="SECONDARY"
-                    excludeUserId={row.primary_owner_id}
-                    onAssign={onInlineAssign}
-                    onRemove={onInlineRemove}
-                  />
+                  {isAdmin ? (
+                    <InlineOwnerSelector
+                      contactId={row.id}
+                      currentOwnerName={row.secondary_owner ?? null}
+                      role="SECONDARY"
+                      excludeUserId={row.primary_owner_id}
+                      onAssign={onInlineAssign}
+                      onRemove={onInlineRemove}
+                    />
+                  ) : (
+                    <span className={`text-xs font-medium ${row.secondary_owner ? '' : 'text-muted-foreground'}`}>
+                      {row.secondary_owner ?? '—'}
+                    </span>
+                  )}
+                </TableCell>
+              )}
+              {showSecondaryCol && (
+                <TableCell className="text-sm text-muted-foreground">
+                  {row.secondary_owner ?? '—'}
+                </TableCell>
+              )}
+              {showPrimaryCol && (
+                <TableCell className="text-sm text-muted-foreground">
+                  {row.primary_owner ?? '—'}
                 </TableCell>
               )}
               <TableCell>
@@ -647,7 +723,7 @@ function PaginationBar({
 
 
 // ── Hook for cumulative bar counts ───────────────────────────────
-function useCumulativeCounts() {
+function useCumulativeCounts(isAdmin: boolean) {
   const { crmUserId } = useCrmUser();
   const [directoryTotal, setDirectoryTotal] = useState(0);
   const [primaryTotal, setPrimaryTotal] = useState(0);
@@ -658,24 +734,43 @@ function useCumulativeCounts() {
   const unassignedTotal = Math.max(0, directoryTotal - ownerTotalSum);
 
   const refresh = useCallback(async () => {
+    // My Added query
     const addedQuery = crmUserId
-      ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId)
+      ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId).is('primary_owner_id', null)
       : null;
 
-    const [dirRes, ownerRes, addedRes] = await Promise.all([
+    // User-scoped primary/secondary counts (for non-admin)
+    const userPrimaryQuery = (!isAdmin && crmUserId)
+      ? supabase.from('v_my_primary_contacts').select('*', { count: 'exact', head: true })
+      : null;
+    const userSecondaryQuery = (!isAdmin && crmUserId)
+      ? supabase.from('v_my_secondary_contacts').select('*', { count: 'exact', head: true })
+      : null;
+
+    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes] = await Promise.all([
       supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
       supabase.from('v_owner_summary_ui').select('*'),
       addedQuery ?? Promise.resolve({ count: 0 } as any),
+      userPrimaryQuery ?? Promise.resolve({ count: null } as any),
+      userSecondaryQuery ?? Promise.resolve({ count: null } as any),
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
     setMyAddedTotal(addedRes.count ?? 0);
 
     const ownerRows = (ownerRes.data || []) as OwnerSummaryRow[];
-    setPrimaryTotal(ownerRows.reduce((a, r) => a + (r.primary_count || 0), 0));
-    setSecondaryTotal(ownerRows.reduce((a, r) => a + (r.secondary_count || 0), 0));
+    const globalPrimary = ownerRows.reduce((a, r) => a + (r.primary_count || 0), 0);
+    const globalSecondary = ownerRows.reduce((a, r) => a + (r.secondary_count || 0), 0);
     setOwnerTotalSum(ownerRows.reduce((a, r) => a + (r.total_count || 0), 0));
-  }, [crmUserId]);
+
+    if (isAdmin) {
+      setPrimaryTotal(globalPrimary);
+      setSecondaryTotal(globalSecondary);
+    } else {
+      setPrimaryTotal(userPrimRes.count ?? 0);
+      setSecondaryTotal(userSecRes.count ?? 0);
+    }
+  }, [crmUserId, isAdmin]);
 
   return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, refresh };
 }
@@ -691,6 +786,7 @@ export default function ContactsV2() {
     stageFilter,
     search,
     alphaFilter,
+    ownerFilter,
     page,
     isLoading,
     error,
@@ -703,11 +799,12 @@ export default function ContactsV2() {
     setStageFilter,
     setSearch,
     setAlphaFilter,
+    setOwnerFilter,
     changePage,
     fetchAll,
   } = useContactsV2Data();
 
-  const cumulative = useCumulativeCounts();
+  const cumulative = useCumulativeCounts(isAdmin);
 
   // ── Selection state ────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -751,10 +848,10 @@ export default function ContactsV2() {
   // ── Refetch everything after a write ──────────────────────────
   const refetchAll = useCallback(async () => {
     await Promise.all([
-      fetchAll(activeTab, stageFilter, search, page, alphaFilter),
+      fetchAll(activeTab, stageFilter, search, page, alphaFilter, ownerFilter),
       cumulative.refresh(),
     ]);
-  }, [activeTab, stageFilter, search, page, alphaFilter, fetchAll, cumulative]);
+  }, [activeTab, stageFilter, search, page, alphaFilter, ownerFilter, fetchAll, cumulative]);
 
   // ── Archive handler ───────────────────────────────────────────
   const handleArchive = useCallback(async (contactId: string, contactName: string) => {
@@ -1008,6 +1105,21 @@ export default function ContactsV2() {
         secondaryTotal={cumulative.secondaryTotal}
         unassignedTotal={cumulative.unassignedTotal}
         myAddedTotal={cumulative.myAddedTotal}
+        activeTab={activeTab}
+        onNavigate={(action) => {
+          if (action === 'directory') {
+            changeTab('directory');
+          } else if (action === 'my-primary') {
+            changeTab('my-primary');
+          } else if (action === 'my-secondary') {
+            changeTab('my-secondary');
+          } else if (action === 'my-added') {
+            changeTab('my-added');
+          } else if (action === 'unassigned') {
+            if (activeTab !== 'directory') changeTab('directory');
+            setOwnerFilter({ userId: null, role: null, unassigned: true });
+          }
+        }}
       />
 
       {/* Tabs */}
@@ -1028,7 +1140,12 @@ export default function ContactsV2() {
 
       {/* Owner Summary Table (Directory only) */}
       {isDirectory && (
-        <OwnerSummaryBlock visible directoryTotal={totalRows} />
+        <OwnerSummaryBlock
+          visible
+          directoryTotal={cumulative.directoryTotal}
+          activeOwnerFilter={ownerFilter}
+          onOwnerFilter={setOwnerFilter}
+        />
       )}
 
       {/* Bulk toolbar */}
