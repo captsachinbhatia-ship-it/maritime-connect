@@ -80,6 +80,14 @@ function normalize(row: any): ContactV2Row {
   };
 }
 
+export interface OwnerFilterState {
+  userId: string | null;   // filter by specific owner
+  role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null; // which role to match
+  unassigned: boolean;     // show only unassigned (no active PRIMARY)
+}
+
+const EMPTY_OWNER_FILTER: OwnerFilterState = { userId: null, role: null, unassigned: false };
+
 const PAGE_SIZE = 50;
 
 // ── Hook ─────────────────────────────────────────────────────────
@@ -96,6 +104,7 @@ export function useContactsV2Data() {
   const [search, setSearchState] = useState('');
   const [page, setPage] = useState(0);
   const [alphaFilter, setAlphaFilterState] = useState<string | null>(null);
+  const [ownerFilter, setOwnerFilterState] = useState<OwnerFilterState>(EMPTY_OWNER_FILTER);
 
   const [stageCounts, setStageCounts] = useState<Record<StageFilter, number>>({
     ALL: 0,
@@ -137,7 +146,7 @@ export function useContactsV2Data() {
 
   // ── Fetch paginated contacts ───────────────────────────────────
   const fetchContacts = useCallback(
-    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null) => {
+    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null, of: OwnerFilterState = EMPTY_OWNER_FILTER) => {
       if (!session) return;
       setIsLoading(true);
       setError(null);
@@ -176,7 +185,6 @@ export function useContactsV2Data() {
         if (alpha && alpha !== '#') {
           query = query.ilike('full_name', `${alpha}%`);
         } else if (alpha === '#') {
-          // Non-alphabetic starting character
           query = query.not('full_name', 'ilike', 'a%')
             .not('full_name', 'ilike', 'b%').not('full_name', 'ilike', 'c%')
             .not('full_name', 'ilike', 'd%').not('full_name', 'ilike', 'e%')
@@ -191,6 +199,20 @@ export function useContactsV2Data() {
             .not('full_name', 'ilike', 'v%').not('full_name', 'ilike', 'w%')
             .not('full_name', 'ilike', 'x%').not('full_name', 'ilike', 'y%')
             .not('full_name', 'ilike', 'z%');
+        }
+
+        // Owner filter (Directory only)
+        if (tab === 'directory' && of.unassigned) {
+          query = query.is('primary_owner_id', null);
+        } else if (tab === 'directory' && of.userId) {
+          if (of.role === 'PRIMARY') {
+            query = query.eq('primary_owner_id', of.userId);
+          } else if (of.role === 'SECONDARY') {
+            query = query.eq('secondary_owner_id', of.userId);
+          } else {
+            // ANY: primary OR secondary
+            query = query.or(`primary_owner_id.eq.${of.userId},secondary_owner_id.eq.${of.userId}`);
+          }
         }
 
         const { data, count, error: fetchErr } = await query;
@@ -226,8 +248,8 @@ export function useContactsV2Data() {
 
   // ── Combined fetch ─────────────────────────────────────────────
   const fetchAll = useCallback(
-    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null) => {
-      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha)]);
+    async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null, of: OwnerFilterState = EMPTY_OWNER_FILTER) => {
+      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha, of)]);
     },
     [fetchStageCounts, fetchContacts]
   );
@@ -240,7 +262,8 @@ export function useContactsV2Data() {
       setSearchState('');
       setPage(0);
       setAlphaFilterState(null);
-      fetchAll(tab, 'ALL', '', 0, null);
+      setOwnerFilterState(EMPTY_OWNER_FILTER);
+      fetchAll(tab, 'ALL', '', 0, null, EMPTY_OWNER_FILTER);
     },
     [fetchAll]
   );
@@ -250,9 +273,9 @@ export function useContactsV2Data() {
     (sf: StageFilter) => {
       setStageFilterState(sf);
       setPage(0);
-      fetchContacts(activeTab, sf, search, 0, alphaFilter);
+      fetchContacts(activeTab, sf, search, 0, alphaFilter, ownerFilter);
     },
-    [activeTab, search, alphaFilter, fetchContacts]
+    [activeTab, search, alphaFilter, ownerFilter, fetchContacts]
   );
 
   // ── Search change ──────────────────────────────────────────────
@@ -260,9 +283,9 @@ export function useContactsV2Data() {
     (q: string) => {
       setSearchState(q);
       setPage(0);
-      fetchContacts(activeTab, stageFilter, q, 0, alphaFilter);
+      fetchContacts(activeTab, stageFilter, q, 0, alphaFilter, ownerFilter);
     },
-    [activeTab, stageFilter, alphaFilter, fetchContacts]
+    [activeTab, stageFilter, alphaFilter, ownerFilter, fetchContacts]
   );
 
   // ── Alpha filter change ────────────────────────────────────────
@@ -270,18 +293,28 @@ export function useContactsV2Data() {
     (alpha: string | null) => {
       setAlphaFilterState(alpha);
       setPage(0);
-      fetchContacts(activeTab, stageFilter, search, 0, alpha);
+      fetchContacts(activeTab, stageFilter, search, 0, alpha, ownerFilter);
     },
-    [activeTab, stageFilter, search, fetchContacts]
+    [activeTab, stageFilter, search, ownerFilter, fetchContacts]
+  );
+
+  // ── Owner filter change ────────────────────────────────────────
+  const setOwnerFilter = useCallback(
+    (of: OwnerFilterState) => {
+      setOwnerFilterState(of);
+      setPage(0);
+      fetchContacts(activeTab, stageFilter, search, 0, alphaFilter, of);
+    },
+    [activeTab, stageFilter, search, alphaFilter, fetchContacts]
   );
 
   // ── Page change ────────────────────────────────────────────────
   const changePage = useCallback(
     (p: number) => {
       setPage(p);
-      fetchContacts(activeTab, stageFilter, search, p, alphaFilter);
+      fetchContacts(activeTab, stageFilter, search, p, alphaFilter, ownerFilter);
     },
-    [activeTab, stageFilter, search, alphaFilter, fetchContacts]
+    [activeTab, stageFilter, search, alphaFilter, ownerFilter, fetchContacts]
   );
 
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
@@ -291,6 +324,7 @@ export function useContactsV2Data() {
     stageFilter,
     search,
     alphaFilter,
+    ownerFilter,
     page,
     isLoading,
     error,
@@ -303,8 +337,9 @@ export function useContactsV2Data() {
     setStageFilter,
     setSearch,
     setAlphaFilter,
+    setOwnerFilter,
     changePage,
-    refresh: () => fetchAll(activeTab, stageFilter, search, page, alphaFilter),
+    refresh: () => fetchAll(activeTab, stageFilter, search, page, alphaFilter, ownerFilter),
     fetchAll,
   };
 }
