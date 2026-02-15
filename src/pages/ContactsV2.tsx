@@ -1158,12 +1158,9 @@ export default function ContactsV2() {
         </div>
       </div>
 
-      {/* Tabs with counts + Unassigned + Inactive pills */}
+      {/* Tabs with counts + Unassigned pill */}
       <div className="flex items-center gap-3 flex-wrap">
-        <Tabs value={activeTab} onValueChange={(v) => {
-          if (showInactive) setShowInactive(false);
-          changeTab(v as TabKey);
-        }} className="flex-shrink-0">
+        <Tabs value={activeTab} onValueChange={(v) => changeTab(v as TabKey)} className="flex-shrink-0">
           <TabsList className="inline-flex h-10 items-center justify-start rounded-lg bg-muted p-1 text-muted-foreground">
             {TAB_META.map((t) => {
               const countMap: Record<TabKey, number> = {
@@ -1176,7 +1173,7 @@ export default function ContactsV2() {
                 <TabsTrigger
                   key={t.value}
                   value={t.value}
-                  className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm ${showInactive && t.value === 'directory' ? 'opacity-60' : ''}`}
+                  className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
                 >
                   <t.icon className="h-3.5 w-3.5" />
                   {t.label}
@@ -1184,23 +1181,6 @@ export default function ContactsV2() {
                 </TabsTrigger>
               );
             })}
-
-            {/* Inactive tab — same style as other tabs */}
-            <button
-              onClick={() => {
-                if (activeTab !== 'directory') changeTab('directory');
-                setShowInactive(!showInactive);
-              }}
-              className={`inline-flex items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm gap-1.5 font-medium transition-all
-                ${showInactive
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <Archive className="h-3.5 w-3.5" />
-              Inactive
-              <span className="ml-1 tabular-nums text-xs opacity-70">({cumulative.inactiveTotal})</span>
-            </button>
           </TabsList>
         </Tabs>
 
@@ -1218,6 +1198,21 @@ export default function ContactsV2() {
             }`}
         >
           Unassigned <span className="font-semibold tabular-nums">{cumulative.unassignedTotal}</span>
+        </button>
+
+        {/* Inactive pill */}
+        <button
+          onClick={() => {
+            if (activeTab !== 'directory') changeTab('directory');
+            setShowInactive(!showInactive);
+          }}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer
+            ${showInactive
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            }`}
+        >
+          Inactive <span className="font-semibold tabular-nums">{cumulative.inactiveTotal}</span>
         </button>
       </div>
 
