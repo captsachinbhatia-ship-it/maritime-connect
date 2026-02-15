@@ -751,7 +751,6 @@ function PaginationBar({
 function useCumulativeCounts(isAdmin: boolean) {
   const { crmUserId } = useCrmUser();
   const [directoryTotal, setDirectoryTotal] = useState(0);
-  const [inactiveTotal, setInactiveTotal] = useState(0);
   const [primaryTotal, setPrimaryTotal] = useState(0);
   const [secondaryTotal, setSecondaryTotal] = useState(0);
   const [ownerTotalSum, setOwnerTotalSum] = useState(0);
@@ -762,7 +761,7 @@ function useCumulativeCounts(isAdmin: boolean) {
   const refresh = useCallback(async () => {
     // My Added query
     const addedQuery = crmUserId
-      ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId).is('primary_owner_id', null).eq('is_active', true)
+      ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId).is('primary_owner_id', null)
       : null;
 
     // User-scoped primary/secondary counts (for non-admin)
@@ -773,9 +772,8 @@ function useCumulativeCounts(isAdmin: boolean) {
       ? supabase.from('v_my_secondary_contacts').select('*', { count: 'exact', head: true })
       : null;
 
-    const [dirRes, inactiveRes, ownerRes, addedRes, userPrimRes, userSecRes] = await Promise.all([
-      supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('is_active', false),
+    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes] = await Promise.all([
+      supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
       supabase.from('v_owner_summary_ui').select('*'),
       addedQuery ?? Promise.resolve({ count: 0 } as any),
       userPrimaryQuery ?? Promise.resolve({ count: null } as any),
@@ -783,7 +781,6 @@ function useCumulativeCounts(isAdmin: boolean) {
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
-    setInactiveTotal(inactiveRes.count ?? 0);
     setMyAddedTotal(addedRes.count ?? 0);
 
     const ownerRows = (ownerRes.data || []) as OwnerSummaryRow[];
@@ -800,7 +797,7 @@ function useCumulativeCounts(isAdmin: boolean) {
     }
   }, [crmUserId, isAdmin]);
 
-  return { directoryTotal, inactiveTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, refresh };
+  return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, refresh };
 }
 
 // ── Main page ────────────────────────────────────────────────────
@@ -815,7 +812,6 @@ export default function ContactsV2() {
     search,
     alphaFilter,
     ownerFilter,
-    showInactive,
     page,
     isLoading,
     error,
@@ -829,7 +825,6 @@ export default function ContactsV2() {
     setSearch,
     setAlphaFilter,
     setOwnerFilter,
-    setShowInactive,
     changePage,
     fetchAll,
   } = useContactsV2Data();
@@ -878,10 +873,10 @@ export default function ContactsV2() {
   // ── Refetch everything after a write ──────────────────────────
   const refetchAll = useCallback(async () => {
     await Promise.all([
-      fetchAll(activeTab, stageFilter, search, page, alphaFilter, ownerFilter, showInactive),
+      fetchAll(activeTab, stageFilter, search, page, alphaFilter, ownerFilter),
       cumulative.refresh(),
     ]);
-  }, [activeTab, stageFilter, search, page, alphaFilter, ownerFilter, showInactive, fetchAll, cumulative]);
+  }, [activeTab, stageFilter, search, page, alphaFilter, ownerFilter, fetchAll, cumulative]);
 
   // ── Archive handler ───────────────────────────────────────────
   const handleArchive = useCallback(async (contactId: string, contactName: string) => {
@@ -1107,7 +1102,7 @@ export default function ContactsV2() {
   // Initial fetch
   useEffect(() => {
     if (!authLoading) {
-      fetchAll(activeTab, stageFilter, '', 0, null, ownerFilter, false);
+      fetchAll(activeTab, 'ALL', '', 0);
       cumulative.refresh();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1187,32 +1182,16 @@ export default function ContactsV2() {
         {/* Unassigned pill */}
         <button
           onClick={() => {
-            if (showInactive) setShowInactive(false);
             if (activeTab !== 'directory') changeTab('directory');
             setOwnerFilter({ userId: null, role: null, unassigned: true });
           }}
           className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer
-            ${ownerFilter.unassigned && !showInactive
+            ${ownerFilter.unassigned
               ? 'border-destructive bg-destructive/10 text-destructive'
               : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             }`}
         >
           Unassigned <span className="font-semibold tabular-nums">{cumulative.unassignedTotal}</span>
-        </button>
-
-        {/* Inactive pill */}
-        <button
-          onClick={() => {
-            if (activeTab !== 'directory') changeTab('directory');
-            setShowInactive(!showInactive);
-          }}
-          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer
-            ${showInactive
-              ? 'border-primary bg-primary/10 text-primary'
-              : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            }`}
-        >
-          Inactive <span className="font-semibold tabular-nums">{cumulative.inactiveTotal}</span>
         </button>
       </div>
 
@@ -1224,9 +1203,9 @@ export default function ContactsV2() {
         <div className={`relative w-full max-w-sm ${activeTab !== 'my-primary' ? '' : ''}`}>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            key={`${activeTab}-${showInactive ? 'inactive' : 'active'}`}
+            key={activeTab}
             type="text"
-            placeholder={isDirectory ? 'Search name, company, email…' : 'Search name, company, email, phone…'}
+            placeholder={isDirectory ? 'Search name, company…' : 'Search name, company, email, phone…'}
             defaultValue={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
@@ -1234,8 +1213,8 @@ export default function ContactsV2() {
         </div>
       </div>
 
-      {/* Owner Summary Table (Directory only, hide in inactive mode) */}
-      {isDirectory && !showInactive && (
+      {/* Owner Summary Table (Directory only) */}
+      {isDirectory && (
         <OwnerSummaryBlock
           visible
           directoryTotal={cumulative.directoryTotal}
