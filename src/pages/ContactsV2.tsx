@@ -447,7 +447,9 @@ function RowActionsMenu({
 }) {
   // Non-admin on Directory: only show View Details if they have access
   const directoryNonAdmin = isDirectory && !isAdmin;
-  const isInactive = row.is_active === false;
+  const isInactiveRow =
+    row?.is_active === false ||
+    String(row?.stage || '').toUpperCase() === 'INACTIVE';
   const hasActiveAssignment = !!(row.primary_owner_id || row.secondary_owner_id);
 
   return (
@@ -476,7 +478,7 @@ function RowActionsMenu({
               <Eye className="mr-2 h-4 w-4" />
               View Details
             </DropdownMenuItem>
-            {hasAccess && !isInactive && (
+            {hasAccess && !isInactiveRow && (
               <>
                 <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="mr-2 h-4 w-4" />
@@ -496,13 +498,13 @@ function RowActionsMenu({
             {isAdmin && (
               <>
                 <DropdownMenuSeparator />
-                {!isInactive && hasActiveAssignment && (
+                {!isInactiveRow && hasActiveAssignment && (
                   <DropdownMenuItem onClick={onCloseAssignment}>
                     <UserX className="mr-2 h-4 w-4" />
                     Close Assignment
                   </DropdownMenuItem>
                 )}
-                {isInactive ? (
+                {isInactiveRow ? (
                   <DropdownMenuItem onClick={onReactivate}>
                     <UserPlus className="mr-2 h-4 w-4" />
                     Reactivate Contact
@@ -917,6 +919,7 @@ export default function ContactsV2() {
     const confirmed = window.confirm(`Reactivate "${contactName}"?\n\nThis will make the contact active again and visible in all lists.\n\nContinue?`);
     if (!confirmed) return;
 
+    // 1. Reactivate the contact record
     const { error: reactErr } = await supabase
       .from('contacts')
       .update({ is_active: true })
@@ -927,7 +930,28 @@ export default function ContactsV2() {
       return;
     }
 
-    toast({ title: 'Contact reactivated', description: `"${contactName}" is now active.` });
+    // 2. If the active primary assignment has stage INACTIVE, reset to COLD_CALLING
+    const { data: activeAssignments } = await supabase
+      .from('contact_assignments')
+      .select('id, stage, role')
+      .eq('contact_id', contactId)
+      .in('status', ['ACTIVE', 'active'])
+      .is('ended_at', null);
+
+    if (activeAssignments && activeAssignments.length > 0) {
+      const inactiveAssignments = activeAssignments.filter(
+        (a: any) => String(a.stage || '').toUpperCase() === 'INACTIVE'
+      );
+      if (inactiveAssignments.length > 0) {
+        const ids = inactiveAssignments.map((a: any) => a.id);
+        await supabase
+          .from('contact_assignments')
+          .update({ stage: 'COLD_CALLING', stage_changed_at: new Date().toISOString() })
+          .in('id', ids);
+      }
+    }
+
+    toast({ title: 'Contact reactivated', description: `"${contactName}" is now active with stage reset to Cold Calling.` });
     await refetchAll();
   }, [isAdmin, toast, refetchAll]);
 
