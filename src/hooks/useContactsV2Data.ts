@@ -19,9 +19,11 @@ export interface ContactV2Row {
   updated_at: string | null;
   last_interaction_at: string | null;
   created_by_crm_user_id: string | null;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
 }
 
-export type TabKey = 'directory' | 'my-primary' | 'my-secondary' | 'my-added';
+export type TabKey = 'directory' | 'my-primary' | 'my-secondary' | 'my-added' | 'deleted';
 
 export type StageFilter = 'ALL' | 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
@@ -41,6 +43,7 @@ const VIEW_MAP: Record<TabKey, string> = {
   'my-primary': 'v_my_primary_contacts',
   'my-secondary': 'v_my_secondary_contacts',
   'my-added': 'v_my_added_unassigned',
+  deleted: 'contacts',
 };
 
 const STAGE_COUNT_VIEW_MAP: Record<TabKey, string> = {
@@ -48,6 +51,7 @@ const STAGE_COUNT_VIEW_MAP: Record<TabKey, string> = {
   'my-primary': 'v_my_primary_stage_counts',
   'my-secondary': 'v_my_secondary_stage_counts',
   'my-added': 'v_my_added_stage_counts',
+  deleted: '',
 };
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -77,6 +81,8 @@ function normalize(row: any): ContactV2Row {
     updated_at: row.updated_at ?? null,
     last_interaction_at: row.last_interaction_at ?? null,
     created_by_crm_user_id: row.created_by_crm_user_id ?? null,
+    is_deleted: row.is_deleted ?? false,
+    deleted_at: row.deleted_at ?? null,
   };
 }
 
@@ -117,6 +123,11 @@ export function useContactsV2Data() {
 
   // ── Fetch stage counts ─────────────────────────────────────────
   const fetchStageCounts = useCallback(async (tab: TabKey) => {
+    // No stage counts for deleted tab
+    if (tab === 'deleted') {
+      setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 });
+      return;
+    }
     try {
       // For my-primary and my-secondary, compute counts from the list view
       // to guarantee chip totals match the tab total exactly.
@@ -175,10 +186,45 @@ export function useContactsV2Data() {
       setIsLoading(true);
       setError(null);
 
-      const view = VIEW_MAP[tab];
       const from = p * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
+      // Handle Deleted tab separately (query contacts table directly)
+      if (tab === 'deleted') {
+        try {
+          let dQuery = supabase
+            .from('contacts')
+            .select('*, companies(company_name)', { count: 'exact' })
+            .eq('is_deleted', true)
+            .order('full_name', { ascending: true })
+            .range(from, to);
+
+          if (q.trim()) {
+            dQuery = dQuery.ilike('full_name', `%${q.trim()}%`);
+          }
+          if (alpha && alpha !== '#') {
+            dQuery = dQuery.ilike('full_name', `${alpha}%`);
+          }
+
+          const { data, count, error: fetchErr } = await dQuery;
+          if (fetchErr) { setError(fetchErr.message); setRows([]); setTotalRows(0); return; }
+
+          const normalized: ContactV2Row[] = (data || []).map((row: any) => normalize({
+            ...row,
+            company_name: row.companies?.company_name ?? row.company_name ?? null,
+          }));
+          setRows(normalized);
+          setTotalRows(count ?? normalized.length);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Fetch failed');
+          setRows([]); setTotalRows(0);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const view = VIEW_MAP[tab];
       const stageColumn = tab === 'directory' ? 'primary_stage' : 'stage';
 
       try {

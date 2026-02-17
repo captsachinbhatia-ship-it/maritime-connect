@@ -19,6 +19,7 @@ import {
   Trash2,
   Archive,
   UserX,
+  RotateCcw,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -76,6 +77,7 @@ const TAB_META: { value: TabKey; label: string; icon: React.ElementType }[] = [
   { value: 'my-primary', label: 'My Primary', icon: User },
   { value: 'my-secondary', label: 'My Secondary', icon: Users2 },
   { value: 'my-added', label: 'My Added', icon: UserPlus },
+  { value: 'deleted', label: 'Deleted', icon: Trash2 },
 ];
 
 const STAGE_COLORS: Record<string, string> = {
@@ -214,23 +216,28 @@ function AlphaFilterBar({
   );
 }
 
-// ── Status badge ─────────────────────────────────────────────────
-function StatusBadge({ active }: { active: boolean | null }) {
-  if (active === true) {
+// ── Status badge (3 states: Deleted, Inactive, Active) ──────────
+function StatusBadge({ row }: { row: ContactV2Row }) {
+  if (row.is_deleted) {
     return (
-      <Badge variant="outline" className="text-xs border-green-300 text-green-700 dark:border-green-700 dark:text-green-400">
-        Active
+      <Badge variant="outline" className="text-xs border-destructive text-destructive">
+        Deleted
       </Badge>
     );
   }
-  if (active === false) {
+  const stageInactive = String(row.stage || '').toUpperCase() === 'INACTIVE';
+  if (row.is_active === false || stageInactive) {
     return (
       <Badge variant="outline" className="text-xs border-muted text-muted-foreground">
         Inactive
       </Badge>
     );
   }
-  return <span className="text-muted-foreground/50">—</span>;
+  return (
+    <Badge variant="outline" className="text-xs border-green-300 text-green-700 dark:border-green-700 dark:text-green-400">
+      Active
+    </Badge>
+  );
 }
 
 // ── Table skeleton ───────────────────────────────────────────────
@@ -431,6 +438,7 @@ function RowActionsMenu({
   onReactivate,
   onCloseAssignment,
   onDelete,
+  onRestore,
 }: {
   row: ContactV2Row;
   isAdmin: boolean;
@@ -444,12 +452,15 @@ function RowActionsMenu({
   onReactivate: () => void;
   onCloseAssignment: () => void;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
-  // Non-admin on Directory: only show View Details if they have access
   const directoryNonAdmin = isDirectory && !isAdmin;
-  const isInactiveRow =
+  const isDeletedRow = !!(row.is_deleted);
+  const isInactiveRow = !isDeletedRow && (
     row?.is_active === false ||
-    String(row?.stage || '').toUpperCase() === 'INACTIVE';
+    String(row?.stage || '').toUpperCase() === 'INACTIVE'
+  );
+  const isActiveRow = !isDeletedRow && !isInactiveRow;
   const hasActiveAssignment = !!(row.primary_owner_id || row.secondary_owner_id);
 
   return (
@@ -478,7 +489,7 @@ function RowActionsMenu({
               <Eye className="mr-2 h-4 w-4" />
               View Details
             </DropdownMenuItem>
-            {hasAccess && !isInactiveRow && (
+            {hasAccess && isActiveRow && (
               <>
                 <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="mr-2 h-4 w-4" />
@@ -498,27 +509,34 @@ function RowActionsMenu({
             {isAdmin && (
               <>
                 <DropdownMenuSeparator />
-                {!isInactiveRow && hasActiveAssignment && (
-                  <DropdownMenuItem onClick={onCloseAssignment}>
-                    <UserX className="mr-2 h-4 w-4" />
-                    Close Assignment
+                {isDeletedRow ? (
+                  <DropdownMenuItem onClick={onRestore}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Restore Contact
                   </DropdownMenuItem>
-                )}
-                {isInactiveRow ? (
+                ) : isInactiveRow ? (
                   <DropdownMenuItem onClick={onReactivate}>
                     <UserPlus className="mr-2 h-4 w-4" />
                     Reactivate Contact
                   </DropdownMenuItem>
                 ) : (
-                  <DropdownMenuItem onClick={onArchive} className="text-destructive">
-                    <Archive className="mr-2 h-4 w-4" />
-                    Archive
-                  </DropdownMenuItem>
+                  <>
+                    {hasActiveAssignment && (
+                      <DropdownMenuItem onClick={onCloseAssignment}>
+                        <UserX className="mr-2 h-4 w-4" />
+                        Close Assignment
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={onArchive} className="text-destructive">
+                      <Archive className="mr-2 h-4 w-4" />
+                      Archive
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
                 )}
-                <DropdownMenuItem onClick={onDelete} className="text-destructive">
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
               </>
             )}
           </>
@@ -641,7 +659,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell className={!row.primary_owner ? 'bg-amber-100/60 dark:bg-amber-950/30' : ''}>
-                  {isAdmin && row.is_active !== false ? (
+                  {isAdmin && row.is_active !== false && !row.is_deleted ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.primary_owner ?? null}
@@ -658,7 +676,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell>
-                  {isAdmin && row.is_active !== false ? (
+                  {isAdmin && row.is_active !== false && !row.is_deleted ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.secondary_owner ?? null}
@@ -702,7 +720,7 @@ function ContactsV2Table({
                 )}
               </TableCell>
               <TableCell>
-                <StatusBadge active={row.is_active} />
+                <StatusBadge row={row} />
               </TableCell>
               <TableCell>
                 <RowActionsMenu
@@ -718,6 +736,7 @@ function ContactsV2Table({
                   onReactivate={() => onRowAction('reactivate', row)}
                   onCloseAssignment={() => onRowAction('close-assignment', row)}
                   onDelete={() => onRowAction('delete', row)}
+                  onRestore={() => onRowAction('restore', row)}
                 />
               </TableCell>
             </TableRow>
@@ -780,7 +799,6 @@ function PaginationBar({
 
 
 
-
 // ── Hook for cumulative bar counts ───────────────────────────────
 function useCumulativeCounts() {
   const { crmUserId } = useCrmUser();
@@ -789,6 +807,7 @@ function useCumulativeCounts() {
   const [secondaryTotal, setSecondaryTotal] = useState(0);
   const [ownerTotalSum, setOwnerTotalSum] = useState(0);
   const [myAddedTotal, setMyAddedTotal] = useState(0);
+  const [deletedTotal, setDeletedTotal] = useState(0);
 
   const unassignedTotal = Math.max(0, directoryTotal - ownerTotalSum);
 
@@ -814,16 +833,21 @@ function useCumulativeCounts() {
           .is('ended_at', null)
       : null;
 
-    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes] = await Promise.all([
+    // Deleted contacts count
+    const deletedQuery = supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('is_deleted', true);
+
+    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes, deletedRes] = await Promise.all([
       supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
       supabase.from('v_owner_summary_ui').select('*'),
       addedQuery ?? Promise.resolve({ count: 0 } as any),
       userPrimaryQuery ?? Promise.resolve({ count: 0 } as any),
       userSecondaryQuery ?? Promise.resolve({ count: 0 } as any),
+      deletedQuery,
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
     setMyAddedTotal(addedRes.count ?? 0);
+    setDeletedTotal(deletedRes.count ?? 0);
 
     const ownerRows = (ownerRes.data || []) as OwnerSummaryRow[];
     setOwnerTotalSum(ownerRows.reduce((a, r) => a + (r.total_count || 0), 0));
@@ -832,7 +856,7 @@ function useCumulativeCounts() {
     setSecondaryTotal(userSecRes.count ?? 0);
   }, [crmUserId]);
 
-  return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, refresh };
+  return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, deletedTotal, refresh };
 }
 
 // ── Main page ────────────────────────────────────────────────────
@@ -983,7 +1007,73 @@ export default function ContactsV2() {
     await refetchAll();
   }, [isAdmin, toast, refetchAll]);
 
-  // ── Close assignment handler ───────────────────────────────────
+  // ── Soft delete handler ────────────────────────────────────────
+  const handleSoftDelete = useCallback(async (contactId: string, contactName: string) => {
+    if (!isAdmin) return;
+    const confirmed = window.confirm(`Delete "${contactName}"?\n\nThis will soft-delete the contact and close all active assignments.\n\nContinue?`);
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+    const { error: delErr } = await supabase
+      .from('contacts')
+      .update({ is_deleted: true, deleted_at: now, deleted_by_crm_user_id: crmUserId })
+      .eq('id', contactId);
+
+    if (delErr) {
+      toast({ title: 'Delete failed', description: delErr.message, variant: 'destructive' });
+      return;
+    }
+
+    // Close active assignments
+    await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', contactId)
+      .in('status', ['ACTIVE', 'active'])
+      .is('ended_at', null);
+
+    toast({ title: 'Contact deleted', description: `"${contactName}" has been soft-deleted.` });
+    await refetchAll();
+  }, [isAdmin, crmUserId, toast, refetchAll]);
+
+  // ── Restore handler ────────────────────────────────────────────
+  const handleRestore = useCallback(async (contactId: string, contactName: string) => {
+    if (!isAdmin) return;
+    const confirmed = window.confirm(`Restore "${contactName}"?\n\nThis will restore the contact and make it visible in all lists.\n\nContinue?`);
+    if (!confirmed) return;
+
+    const { error: restErr } = await supabase
+      .from('contacts')
+      .update({ is_deleted: false, deleted_at: null, deleted_by_crm_user_id: null })
+      .eq('id', contactId);
+
+    if (restErr) {
+      toast({ title: 'Restore failed', description: restErr.message, variant: 'destructive' });
+      return;
+    }
+
+    // If active assignments have stage INACTIVE, reset to COLD_CALLING
+    const { data: activeAssignments } = await supabase
+      .from('contact_assignments')
+      .select('id, stage')
+      .eq('contact_id', contactId)
+      .in('status', ['ACTIVE', 'active'])
+      .is('ended_at', null);
+
+    if (activeAssignments && activeAssignments.length > 0) {
+      const inactiveOnes = activeAssignments.filter((a: any) => String(a.stage || '').toUpperCase() === 'INACTIVE');
+      if (inactiveOnes.length > 0) {
+        await supabase
+          .from('contact_assignments')
+          .update({ stage: 'COLD_CALLING', stage_changed_at: new Date().toISOString() })
+          .in('id', inactiveOnes.map((a: any) => a.id));
+      }
+    }
+
+    toast({ title: 'Contact restored', description: `"${contactName}" has been restored.` });
+    await refetchAll();
+  }, [isAdmin, toast, refetchAll]);
+
   const handleCloseAssignment = useCallback(async (contactId: string, contactName: string) => {
     if (!isAdmin) return;
     const confirmed = window.confirm(
@@ -1068,11 +1158,13 @@ export default function ContactsV2() {
         handleCloseAssignment(row.id, row.full_name);
         break;
       case 'delete':
-        setDeleteContact(contact);
-        setDeleteDialogOpen(true);
+        handleSoftDelete(row.id, row.full_name);
+        break;
+      case 'restore':
+        handleRestore(row.id, row.full_name);
         break;
     }
-  }, [handleArchive, handleReactivate, handleCloseAssignment, crmUserId, isAdmin]);
+  }, [handleArchive, handleReactivate, handleCloseAssignment, handleSoftDelete, handleRestore, crmUserId, isAdmin]);
 
   // ── Inline assignment handlers ────────────────────────────────
   const handleInlineAssign = useCallback(async (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => {
@@ -1271,6 +1363,7 @@ export default function ContactsV2() {
                 'my-primary': cumulative.primaryTotal,
                 'my-secondary': cumulative.secondaryTotal,
                 'my-added': cumulative.myAddedTotal,
+                deleted: cumulative.deletedTotal,
               };
               return (
                 <TabsTrigger
