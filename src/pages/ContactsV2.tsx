@@ -659,7 +659,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell className={!row.primary_owner ? 'bg-amber-100/60 dark:bg-amber-950/30' : ''}>
-                  {isAdmin && row.is_active !== false && !row.is_deleted ? (
+                  {isAdmin && row.is_active !== false && !row.is_deleted && String(row.stage || '').toUpperCase() !== 'INACTIVE' ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.primary_owner ?? null}
@@ -676,7 +676,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell>
-                  {isAdmin && row.is_active !== false && !row.is_deleted ? (
+                  {isAdmin && row.is_active !== false && !row.is_deleted && String(row.stage || '').toUpperCase() !== 'INACTIVE' ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.secondary_owner ?? null}
@@ -940,13 +940,13 @@ export default function ContactsV2() {
   // ── Reactivate handler ─────────────────────────────────────────
   const handleReactivate = useCallback(async (contactId: string, contactName: string) => {
     if (!isAdmin) return;
-    const confirmed = window.confirm(`Reactivate "${contactName}"?\n\nThis will make the contact active again and visible in all lists.\n\nContinue?`);
+    const confirmed = window.confirm(`Reactivate "${contactName}"?\n\nThis will make the contact active again and reset stage to Cold Calling.\n\nContinue?`);
     if (!confirmed) return;
 
-    // 1. Reactivate the contact record
+    // 1. Reactivate the contact record + reset stage on the contact row itself
     const { error: reactErr } = await supabase
       .from('contacts')
-      .update({ is_active: true })
+      .update({ is_active: true, primary_stage: 'COLD_CALLING' })
       .eq('id', contactId);
 
     if (reactErr) {
@@ -954,10 +954,10 @@ export default function ContactsV2() {
       return;
     }
 
-    // 2. If the active primary assignment has stage INACTIVE, reset to COLD_CALLING
+    // 2. Reset stage on active assignments that have INACTIVE stage
     const { data: activeAssignments } = await supabase
       .from('contact_assignments')
-      .select('id, stage, role')
+      .select('id, stage')
       .eq('contact_id', contactId)
       .in('status', ['ACTIVE', 'active'])
       .is('ended_at', null);
@@ -975,7 +975,7 @@ export default function ContactsV2() {
       }
     }
 
-    toast({ title: 'Contact reactivated', description: `"${contactName}" is now active with stage reset to Cold Calling.` });
+    toast({ title: 'Contact reactivated (stage reset to Cold Calling)' });
     await refetchAll();
   }, [isAdmin, toast, refetchAll]);
 
@@ -1044,7 +1044,7 @@ export default function ContactsV2() {
 
     const { error: restErr } = await supabase
       .from('contacts')
-      .update({ is_deleted: false, deleted_at: null, deleted_by_crm_user_id: null })
+      .update({ is_deleted: false, deleted_at: null, deleted_by_crm_user_id: null, is_active: true, primary_stage: 'COLD_CALLING' })
       .eq('id', contactId);
 
     if (restErr) {
@@ -1052,7 +1052,7 @@ export default function ContactsV2() {
       return;
     }
 
-    // If active assignments have stage INACTIVE, reset to COLD_CALLING
+    // Reset stage on active assignments that have INACTIVE stage
     const { data: activeAssignments } = await supabase
       .from('contact_assignments')
       .select('id, stage')
@@ -1070,7 +1070,7 @@ export default function ContactsV2() {
       }
     }
 
-    toast({ title: 'Contact restored', description: `"${contactName}" has been restored.` });
+    toast({ title: 'Contact restored (stage reset to Cold Calling)' });
     await refetchAll();
   }, [isAdmin, toast, refetchAll]);
 
