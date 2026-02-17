@@ -92,7 +92,8 @@ const PAGE_SIZE = 50;
 
 // ── Hook ─────────────────────────────────────────────────────────
 export function useContactsV2Data() {
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, crmUser } = useAuth();
+  const crmUserId = crmUser?.id ?? null;
 
   const [rows, setRows] = useState<ContactV2Row[]>([]);
   const [totalRows, setTotalRows] = useState(0);
@@ -121,9 +122,14 @@ export function useContactsV2Data() {
       // to guarantee chip totals match the tab total exactly.
       if (tab === 'my-primary' || tab === 'my-secondary') {
         const listView = VIEW_MAP[tab];
-        const { data, error: err } = await supabase
+        let stageQuery = supabase
           .from(listView)
           .select('stage');
+        // Explicit user scoping – prevent admin from seeing global data
+        if (crmUserId) {
+          stageQuery = stageQuery.eq('assigned_to_crm_user_id', crmUserId);
+        }
+        const { data, error: err } = await stageQuery;
         if (err) {
           console.error('Stage count fetch failed:', err.message);
           return;
@@ -160,7 +166,7 @@ export function useContactsV2Data() {
     } catch {
       console.error('Stage count fetch exception');
     }
-  }, []);
+  }, [crmUserId]);
 
   // ── Fetch paginated contacts ───────────────────────────────────
   const fetchContacts = useCallback(
@@ -181,6 +187,11 @@ export function useContactsV2Data() {
           .select('*', { count: 'exact' })
           .order('full_name', { ascending: true })
           .range(from, to);
+
+        // Explicit user scoping for my-primary / my-secondary
+        if ((tab === 'my-primary' || tab === 'my-secondary') && crmUserId) {
+          query = query.eq('assigned_to_crm_user_id', crmUserId);
+        }
 
         if (sf !== 'ALL') {
           query = query.eq(stageColumn, sf);
@@ -284,7 +295,7 @@ export function useContactsV2Data() {
         setIsLoading(false);
       }
     },
-    [session]
+    [session, crmUserId]
   );
 
   // ── Combined fetch ─────────────────────────────────────────────
