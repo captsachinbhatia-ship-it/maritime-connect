@@ -768,15 +768,15 @@ function useCumulativeCounts() {
     const userPrimaryQuery = crmUserId
       ? supabase.from('contact_assignments').select('*', { count: 'exact', head: true })
           .eq('assigned_to_crm_user_id', crmUserId)
-          .eq('assignment_role', 'primary')
-          .eq('status', 'ACTIVE')
+          .in('assignment_role', ['primary', 'PRIMARY'])
+          .in('status', ['ACTIVE', 'active'])
           .is('ended_at', null)
       : null;
     const userSecondaryQuery = crmUserId
       ? supabase.from('contact_assignments').select('*', { count: 'exact', head: true })
           .eq('assigned_to_crm_user_id', crmUserId)
-          .eq('assignment_role', 'secondary')
-          .eq('status', 'ACTIVE')
+          .in('assignment_role', ['secondary', 'SECONDARY'])
+          .in('status', ['ACTIVE', 'active'])
           .is('ended_at', null)
       : null;
 
