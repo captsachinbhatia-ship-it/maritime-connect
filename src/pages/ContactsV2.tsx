@@ -18,6 +18,7 @@ import {
   CalendarClock,
   Trash2,
   Archive,
+  UserX,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -428,6 +429,7 @@ function RowActionsMenu({
   onAddFollowup,
   onArchive,
   onReactivate,
+  onCloseAssignment,
   onDelete,
 }: {
   row: ContactV2Row;
@@ -440,11 +442,13 @@ function RowActionsMenu({
   onAddFollowup: () => void;
   onArchive: () => void;
   onReactivate: () => void;
+  onCloseAssignment: () => void;
   onDelete: () => void;
 }) {
   // Non-admin on Directory: only show View Details if they have access
   const directoryNonAdmin = isDirectory && !isAdmin;
   const isInactive = row.is_active === false;
+  const hasActiveAssignment = !!(row.primary_owner_id || row.secondary_owner_id);
 
   return (
     <DropdownMenu>
@@ -492,6 +496,12 @@ function RowActionsMenu({
             {isAdmin && (
               <>
                 <DropdownMenuSeparator />
+                {!isInactive && hasActiveAssignment && (
+                  <DropdownMenuItem onClick={onCloseAssignment}>
+                    <UserX className="mr-2 h-4 w-4" />
+                    Close Assignment
+                  </DropdownMenuItem>
+                )}
                 {isInactive ? (
                   <DropdownMenuItem onClick={onReactivate}>
                     <UserPlus className="mr-2 h-4 w-4" />
@@ -704,6 +714,7 @@ function ContactsV2Table({
                   onAddFollowup={() => onRowAction('add-followup', row)}
                   onArchive={() => onRowAction('archive', row)}
                   onReactivate={() => onRowAction('reactivate', row)}
+                  onCloseAssignment={() => onRowAction('close-assignment', row)}
                   onDelete={() => onRowAction('delete', row)}
                 />
               </TableCell>
@@ -948,6 +959,31 @@ export default function ContactsV2() {
     await refetchAll();
   }, [isAdmin, toast, refetchAll]);
 
+  // ── Close assignment handler ───────────────────────────────────
+  const handleCloseAssignment = useCallback(async (contactId: string, contactName: string) => {
+    if (!isAdmin) return;
+    const confirmed = window.confirm(
+      `Close Assignment\n\nThis will close all active assignments for "${contactName}" (primary and secondary). Continue?`
+    );
+    if (!confirmed) return;
+
+    const now = new Date().toISOString();
+    const { error: err } = await supabase
+      .from('contact_assignments')
+      .update({ status: 'CLOSED', ended_at: now })
+      .eq('contact_id', contactId)
+      .in('status', ['ACTIVE', 'active'])
+      .is('ended_at', null);
+
+    if (err) {
+      toast({ title: 'Close failed', description: err.message, variant: 'destructive' });
+      return;
+    }
+
+    toast({ title: 'Assignments closed', description: `All assignments for "${contactName}" have been closed.` });
+    await refetchAll();
+  }, [isAdmin, toast, refetchAll]);
+
   // ── Remove assignment handler ─────────────────────────────────
   const handleRemoveAssignment = useCallback(async (contactId: string, contactName: string) => {
     const confirmed = window.confirm(`Remove all assignments from "${contactName}"?`);
@@ -1004,12 +1040,15 @@ export default function ContactsV2() {
       case 'reactivate':
         handleReactivate(row.id, row.full_name);
         break;
+      case 'close-assignment':
+        handleCloseAssignment(row.id, row.full_name);
+        break;
       case 'delete':
         setDeleteContact(contact);
         setDeleteDialogOpen(true);
         break;
     }
-  }, [handleArchive, handleReactivate, crmUserId, isAdmin]);
+  }, [handleArchive, handleReactivate, handleCloseAssignment, crmUserId, isAdmin]);
 
   // ── Inline assignment handlers ────────────────────────────────
   const handleInlineAssign = useCallback(async (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => {
