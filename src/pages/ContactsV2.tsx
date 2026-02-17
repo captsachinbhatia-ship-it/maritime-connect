@@ -520,6 +520,7 @@ function ContactsV2Table({
   onRowAction,
   onInlineAssign,
   onInlineRemove,
+  onStageChange,
 }: {
   rows: ContactV2Row[];
   activeTab: TabKey;
@@ -533,6 +534,7 @@ function ContactsV2Table({
   onRowAction: (action: string, row: ContactV2Row) => void;
   onInlineAssign: (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => Promise<void>;
   onInlineRemove: (contactId: string, role: 'PRIMARY' | 'SECONDARY') => Promise<void>;
+  onStageChange: () => void;
 }) {
   const isDirectory = activeTab === 'directory';
   const showOwners = isDirectory;
@@ -661,11 +663,19 @@ function ContactsV2Table({
                 </TableCell>
               )}
               <TableCell>
-                {row.stage ? (
-                  <Badge className={`text-xs ${STAGE_COLORS[row.stage] || ''}`}>
-                    {STAGE_CHIPS.find((c) => c.value === row.stage)?.label ?? row.stage}
-                  </Badge>
-                ) : (
+                {row.stage ? (() => {
+                  const canEditStage =
+                    isAdmin ||
+                    (activeTab === 'my-primary' && row.primary_owner_id === crmUserId);
+                  return (
+                    <StageDropdown
+                      contactId={row.id}
+                      currentStage={row.stage as AssignmentStage}
+                      onStageChange={onStageChange}
+                      readOnly={!canEditStage}
+                    />
+                  );
+                })() : (
                   <span className="text-muted-foreground/50">—</span>
                 )}
               </TableCell>
@@ -1268,6 +1278,7 @@ export default function ContactsV2() {
           onRowAction={handleRowAction}
           onInlineAssign={handleInlineAssign}
           onInlineRemove={handleInlineRemove}
+          onStageChange={refetchAll}
         />
       )}
 

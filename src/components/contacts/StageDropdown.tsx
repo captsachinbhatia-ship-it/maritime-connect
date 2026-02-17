@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Loader2, ChevronDown } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,6 +16,7 @@ interface StageDropdownProps {
   currentStage: AssignmentStage;
   onStageChange: () => void;
   disabled?: boolean;
+  readOnly?: boolean;
 }
 
 const STAGES: { value: AssignmentStage; label: string }[] = [
@@ -35,7 +37,8 @@ export function StageDropdown({
   contactId, 
   currentStage, 
   onStageChange,
-  disabled = false 
+  disabled = false,
+  readOnly = false,
 }: StageDropdownProps) {
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -78,6 +81,16 @@ export function StageDropdown({
   };
 
   const currentStageInfo = STAGES.find(s => s.value === currentStage);
+
+  if (readOnly) {
+    return (
+      <Badge
+        className={`h-7 px-2 font-medium text-xs ${STAGE_COLORS[currentStage]}`}
+      >
+        {currentStageInfo?.label ?? currentStage}
+      </Badge>
+    );
+  }
 
   return (
     <DropdownMenu>
