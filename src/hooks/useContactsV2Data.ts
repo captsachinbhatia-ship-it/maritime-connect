@@ -116,26 +116,44 @@ export function useContactsV2Data() {
 
   // ── Fetch stage counts ─────────────────────────────────────────
   const fetchStageCounts = useCallback(async (tab: TabKey) => {
-    const view = STAGE_COUNT_VIEW_MAP[tab];
     try {
+      // For my-primary and my-secondary, compute counts from the list view
+      // to guarantee chip totals match the tab total exactly.
+      if (tab === 'my-primary' || tab === 'my-secondary') {
+        const listView = VIEW_MAP[tab];
+        const { data, error: err } = await supabase
+          .from(listView)
+          .select('stage');
+        if (err) {
+          console.error('Stage count fetch failed:', err.message);
+          return;
+        }
+        const counts: Record<StageFilter, number> = {
+          ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0,
+        };
+        (data || []).forEach((r: any) => {
+          const stage = normalizeStage(r.stage);
+          if (stage && stage in counts) counts[stage]++;
+          counts.ALL++;
+        });
+        setStageCounts(counts);
+        return;
+      }
+
+      // For directory and other tabs, use the dedicated stage count views
+      const view = STAGE_COUNT_VIEW_MAP[tab];
       const { data, error: err } = await supabase.from(view).select('*');
       if (err) {
         console.error('Stage count fetch failed:', err.message);
         return;
       }
       const counts: Record<StageFilter, number> = {
-        ALL: 0,
-        COLD_CALLING: 0,
-        ASPIRATION: 0,
-        ACHIEVEMENT: 0,
-        INACTIVE: 0,
+        ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0,
       };
       (data || []).forEach((r: any) => {
         const stage = normalizeStage(r.stage ?? r.primary_stage);
         const cnt = Number(r.cnt ?? r.count ?? 0);
-        if (stage && stage in counts) {
-          counts[stage] += cnt;
-        }
+        if (stage && stage in counts) counts[stage] += cnt;
         counts.ALL += cnt;
       });
       setStageCounts(counts);
