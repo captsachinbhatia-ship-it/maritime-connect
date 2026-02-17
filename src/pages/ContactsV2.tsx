@@ -427,6 +427,7 @@ function RowActionsMenu({
   onLogInteraction,
   onAddFollowup,
   onArchive,
+  onReactivate,
   onDelete,
 }: {
   row: ContactV2Row;
@@ -438,10 +439,12 @@ function RowActionsMenu({
   onLogInteraction: () => void;
   onAddFollowup: () => void;
   onArchive: () => void;
+  onReactivate: () => void;
   onDelete: () => void;
 }) {
   // Non-admin on Directory: only show View Details if they have access
   const directoryNonAdmin = isDirectory && !isAdmin;
+  const isInactive = row.is_active === false;
 
   return (
     <DropdownMenu>
@@ -469,7 +472,7 @@ function RowActionsMenu({
               <Eye className="mr-2 h-4 w-4" />
               View Details
             </DropdownMenuItem>
-            {hasAccess && (
+            {hasAccess && !isInactive && (
               <>
                 <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="mr-2 h-4 w-4" />
@@ -489,10 +492,17 @@ function RowActionsMenu({
             {isAdmin && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onArchive} className="text-destructive">
-                  <Archive className="mr-2 h-4 w-4" />
-                  Archive
-                </DropdownMenuItem>
+                {isInactive ? (
+                  <DropdownMenuItem onClick={onReactivate}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Reactivate Contact
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={onArchive} className="text-destructive">
+                    <Archive className="mr-2 h-4 w-4" />
+                    Archive
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={onDelete} className="text-destructive">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
@@ -619,7 +629,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell className={!row.primary_owner ? 'bg-amber-100/60 dark:bg-amber-950/30' : ''}>
-                  {isAdmin ? (
+                  {isAdmin && row.is_active !== false ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.primary_owner ?? null}
@@ -636,7 +646,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell>
-                  {isAdmin ? (
+                  {isAdmin && row.is_active !== false ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.secondary_owner ?? null}
@@ -693,6 +703,7 @@ function ContactsV2Table({
                   onLogInteraction={() => onRowAction('log-interaction', row)}
                   onAddFollowup={() => onRowAction('add-followup', row)}
                   onArchive={() => onRowAction('archive', row)}
+                  onReactivate={() => onRowAction('reactivate', row)}
                   onDelete={() => onRowAction('delete', row)}
                 />
               </TableCell>
@@ -889,6 +900,26 @@ export default function ContactsV2() {
     ]);
   }, [activeTab, stageFilter, search, page, alphaFilter, ownerFilter, fetchAll, cumulative]);
 
+  // ── Reactivate handler ─────────────────────────────────────────
+  const handleReactivate = useCallback(async (contactId: string, contactName: string) => {
+    if (!isAdmin) return;
+    const confirmed = window.confirm(`Reactivate "${contactName}"?\n\nThis will make the contact active again and visible in all lists.\n\nContinue?`);
+    if (!confirmed) return;
+
+    const { error: reactErr } = await supabase
+      .from('contacts')
+      .update({ is_active: true })
+      .eq('id', contactId);
+
+    if (reactErr) {
+      toast({ title: 'Reactivate failed', description: reactErr.message, variant: 'destructive' });
+      return;
+    }
+
+    toast({ title: 'Contact reactivated', description: `"${contactName}" is now active.` });
+    await refetchAll();
+  }, [isAdmin, toast, refetchAll]);
+
   // ── Archive handler ───────────────────────────────────────────
   const handleArchive = useCallback(async (contactId: string, contactName: string) => {
     if (!isAdmin) return;
@@ -970,12 +1001,15 @@ export default function ContactsV2() {
       case 'archive':
         handleArchive(row.id, row.full_name);
         break;
+      case 'reactivate':
+        handleReactivate(row.id, row.full_name);
+        break;
       case 'delete':
         setDeleteContact(contact);
         setDeleteDialogOpen(true);
         break;
     }
-  }, [handleArchive, crmUserId, isAdmin]);
+  }, [handleArchive, handleReactivate, crmUserId, isAdmin]);
 
   // ── Inline assignment handlers ────────────────────────────────
   const handleInlineAssign = useCallback(async (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => {
