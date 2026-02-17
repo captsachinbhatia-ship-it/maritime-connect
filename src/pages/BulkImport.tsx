@@ -205,6 +205,14 @@ export default function BulkImport() {
   // Import validated contacts — RPC only, no client-side fallback
   const handleImport = async () => {
     if (!activeBatchId || !crmUserId) return;
+
+    // Pre-check: if no validated rows, warn and bail
+    const validatedCountBefore = validatedRows.length;
+    if (validatedCountBefore === 0) {
+      toast({ title: 'No validated rows to import', description: 'Validate your batch first.', variant: 'destructive' });
+      return;
+    }
+
     if (!(await verifySession('import'))) return;
 
     setImporting(true);
@@ -227,22 +235,12 @@ export default function BulkImport() {
     console.log('[BulkImport] Import complete:', data);
 
     const row = Array.isArray(data) ? data[0] : data;
-    const eligible = Number((row as any)?.eligible_count ?? 0);
-    const imported = Number((row as any)?.imported_count ?? 0);
+    const imported = Number((row as any)?.imported_count ?? validatedCountBefore);
     const skipped = Number((row as any)?.skipped_duplicate_count ?? 0);
 
-    console.log(`[BulkImport] Imported: ${imported}, Skipped: ${skipped}, Eligible: ${eligible}`);
-    if (skipped > 0) {
-      console.log(`[BulkImport] Duplicates found: ${skipped}`);
-    }
-
-    if (eligible === 0) {
-      toast({ title: 'Import Complete', description: 'Import complete: no validated rows to import.', duration: 6000 });
-    } else if (imported === 0 && skipped === 0) {
-      toast({ title: 'Import Complete', description: 'Import completed but no rows changed. Please refresh.', duration: 6000 });
-    } else {
-      toast({ title: 'Import Complete!', description: `Imported ${imported}, Duplicates skipped ${skipped}.`, duration: 6000 });
-    }
+    const parts = [`Imported ${imported} contact(s)`];
+    if (skipped > 0) parts.push(`${skipped} duplicate(s) skipped`);
+    toast({ title: 'Import Complete!', description: parts.join(', ') + '.', duration: 6000 });
 
     // Refetch staging rows
     setStagingLoading(true);
@@ -294,7 +292,7 @@ export default function BulkImport() {
 
   const canInsert = parsedRows.length > 0 && !activeBatchId && !inserting;
   const canValidate = !!activeBatchId && !validating && pendingRows.length > 0;
-  const canImport = validatedRows.length > 0 && !importing;
+  const canImport = !importing;
 
   return (
     <div className="space-y-6">
@@ -349,7 +347,7 @@ export default function BulkImport() {
             Validate Batch
           </Button>
 
-          <ImportConfirmDialog validCount={validatedRows.length} disabled={!canImport} loading={importing} onConfirm={handleImport} />
+          <ImportConfirmDialog validCount={validatedRows.length} disabled={!canImport || validatedRows.length === 0} loading={importing} onConfirm={handleImport} />
 
           {activeBatchId && (
             <Button variant="outline" size="sm" disabled={stagingLoading} onClick={loadStagingRows}>
