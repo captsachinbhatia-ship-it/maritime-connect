@@ -748,7 +748,7 @@ function PaginationBar({
 
 
 // ── Hook for cumulative bar counts ───────────────────────────────
-function useCumulativeCounts(isAdmin: boolean) {
+function useCumulativeCounts() {
   const { crmUserId } = useCrmUser();
   const [directoryTotal, setDirectoryTotal] = useState(0);
   const [primaryTotal, setPrimaryTotal] = useState(0);
@@ -764,38 +764,39 @@ function useCumulativeCounts(isAdmin: boolean) {
       ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId).is('primary_owner_id', null)
       : null;
 
-    // User-scoped primary/secondary counts (for non-admin)
-    const userPrimaryQuery = (!isAdmin && crmUserId)
-      ? supabase.from('v_my_primary_contacts').select('*', { count: 'exact', head: true })
+    // User-scoped primary/secondary counts from contact_assignments
+    const userPrimaryQuery = crmUserId
+      ? supabase.from('contact_assignments').select('*', { count: 'exact', head: true })
+          .eq('assigned_to_crm_user_id', crmUserId)
+          .eq('assignment_role', 'primary')
+          .eq('status', 'ACTIVE')
+          .is('ended_at', null)
       : null;
-    const userSecondaryQuery = (!isAdmin && crmUserId)
-      ? supabase.from('v_my_secondary_contacts').select('*', { count: 'exact', head: true })
+    const userSecondaryQuery = crmUserId
+      ? supabase.from('contact_assignments').select('*', { count: 'exact', head: true })
+          .eq('assigned_to_crm_user_id', crmUserId)
+          .eq('assignment_role', 'secondary')
+          .eq('status', 'ACTIVE')
+          .is('ended_at', null)
       : null;
 
     const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes] = await Promise.all([
       supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
       supabase.from('v_owner_summary_ui').select('*'),
       addedQuery ?? Promise.resolve({ count: 0 } as any),
-      userPrimaryQuery ?? Promise.resolve({ count: null } as any),
-      userSecondaryQuery ?? Promise.resolve({ count: null } as any),
+      userPrimaryQuery ?? Promise.resolve({ count: 0 } as any),
+      userSecondaryQuery ?? Promise.resolve({ count: 0 } as any),
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
     setMyAddedTotal(addedRes.count ?? 0);
 
     const ownerRows = (ownerRes.data || []) as OwnerSummaryRow[];
-    const globalPrimary = ownerRows.reduce((a, r) => a + (r.primary_count || 0), 0);
-    const globalSecondary = ownerRows.reduce((a, r) => a + (r.secondary_count || 0), 0);
     setOwnerTotalSum(ownerRows.reduce((a, r) => a + (r.total_count || 0), 0));
 
-    if (isAdmin) {
-      setPrimaryTotal(globalPrimary);
-      setSecondaryTotal(globalSecondary);
-    } else {
-      setPrimaryTotal(userPrimRes.count ?? 0);
-      setSecondaryTotal(userSecRes.count ?? 0);
-    }
-  }, [crmUserId, isAdmin]);
+    setPrimaryTotal(userPrimRes.count ?? 0);
+    setSecondaryTotal(userSecRes.count ?? 0);
+  }, [crmUserId]);
 
   return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, refresh };
 }
@@ -829,7 +830,7 @@ export default function ContactsV2() {
     fetchAll,
   } = useContactsV2Data();
 
-  const cumulative = useCumulativeCounts(isAdmin);
+  const cumulative = useCumulativeCounts();
 
   // ── Selection state ────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
