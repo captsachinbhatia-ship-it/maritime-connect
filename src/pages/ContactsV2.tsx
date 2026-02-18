@@ -822,8 +822,7 @@ function useCumulativeCounts() {
   const [ownerTotalSum, setOwnerTotalSum] = useState(0);
   const [myAddedTotal, setMyAddedTotal] = useState(0);
   const [deletedTotal, setDeletedTotal] = useState(0);
-
-  const unassignedTotal = Math.max(0, directoryTotal - ownerTotalSum);
+  const [unassignedTotal, setUnassignedTotal] = useState(0);
 
   const refresh = useCallback(async () => {
     // My Added query
@@ -844,13 +843,16 @@ function useCumulativeCounts() {
     // Deleted contacts count
     const deletedQuery = supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('is_deleted', true);
 
-    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes, deletedRes] = await Promise.all([
+    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes, deletedRes, unassignedRes] = await Promise.all([
       supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
       supabase.from('v_owner_summary_ui').select('*'),
       addedQuery ?? Promise.resolve({ count: 0 } as any),
       userPrimaryQuery ?? Promise.resolve({ count: 0 } as any),
       userSecondaryQuery ?? Promise.resolve({ count: 0 } as any),
       deletedQuery,
+      // Unassigned count from the dedicated view: contacts.deleted_at IS NULL
+      // AND NOT EXISTS active primary assignment — no is_active filter applied
+      supabase.from('v_unassigned_contacts').select('*', { count: 'exact', head: true }),
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
@@ -862,6 +864,14 @@ function useCumulativeCounts() {
 
     setPrimaryTotal(userPrimRes.count ?? 0);
     setSecondaryTotal(userSecRes.count ?? 0);
+
+    if (unassignedRes.error) {
+      console.warn('[useCumulativeCounts] v_unassigned_contacts count failed:', unassignedRes.error);
+      // Fallback to derived count
+      setUnassignedTotal(Math.max(0, (dirRes.count ?? 0) - ownerRows.reduce((a, r) => a + (r.total_count || 0), 0)));
+    } else {
+      setUnassignedTotal(unassignedRes.count ?? 0);
+    }
   }, [crmUserId]);
 
   return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, deletedTotal, refresh };
