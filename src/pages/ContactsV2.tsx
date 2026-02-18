@@ -850,9 +850,8 @@ function useCumulativeCounts() {
       userPrimaryQuery ?? Promise.resolve({ count: 0 } as any),
       userSecondaryQuery ?? Promise.resolve({ count: 0 } as any),
       deletedQuery,
-      // Unassigned count from the dedicated view: contacts.deleted_at IS NULL
-      // AND NOT EXISTS active primary assignment — no is_active filter applied
-      supabase.from('v_unassigned_contacts').select('*', { count: 'exact', head: true }),
+      // Unassigned count: direct head-only query, no client-side filtering, no row fetching
+      supabase.from('v_unassigned_contacts').select('id', { count: 'exact', head: true }),
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
