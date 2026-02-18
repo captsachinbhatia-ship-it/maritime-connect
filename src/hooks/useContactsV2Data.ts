@@ -10,6 +10,7 @@ export interface ContactV2Row {
   designation: string | null;
   email: string | null;
   phone: string | null;
+  country_code: string | null;
   primary_owner: string | null;
   primary_owner_id: string | null;
   secondary_owner: string | null;
@@ -72,6 +73,7 @@ function normalize(row: any): ContactV2Row {
     designation: row.designation ?? null,
     email: row.email ?? null,
     phone: row.primary_phone ?? row.phone ?? null,
+    country_code: row.country_code ?? null,
     primary_owner: row.primary_owner_name ?? row.assigned_to_name ?? null,
     primary_owner_id: row.primary_owner_id ?? row.assigned_to_crm_user_id ?? null,
     secondary_owner: row.secondary_owner_name ?? null,
