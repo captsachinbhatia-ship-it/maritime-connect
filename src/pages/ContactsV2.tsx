@@ -610,13 +610,15 @@ function ContactsV2Table({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-10">
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={onToggleAll}
-                aria-label="Select all"
-              />
-            </TableHead>
+            {isAdmin && (
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={onToggleAll}
+                  aria-label="Select all"
+                />
+              </TableHead>
+            )}
             <TableHead className="min-w-[160px]">Full Name</TableHead>
             <TableHead className="min-w-[140px]">Company</TableHead>
             <TableHead className="min-w-[120px]">Designation</TableHead>
@@ -641,13 +643,15 @@ function ContactsV2Table({
               className={`${clickable ? 'cursor-pointer' : ''} hover:bg-accent/50 ${isUnassigned ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''}`}
               onClick={(e) => handleRowClick(e, row)}
             >
-              <TableCell>
-                <Checkbox
-                  checked={selectedIds.includes(row.id)}
-                  onCheckedChange={() => onToggleSelect(row.id)}
-                  aria-label={`Select ${row.full_name}`}
-                />
-              </TableCell>
+              {isAdmin && (
+                <TableCell>
+                  <Checkbox
+                    checked={selectedIds.includes(row.id)}
+                    onCheckedChange={() => onToggleSelect(row.id)}
+                    aria-label={`Select ${row.full_name}`}
+                  />
+                </TableCell>
+              )}
               <TableCell className="font-medium">{row.full_name}</TableCell>
               <TableCell>
                 {row.company_name ? (
