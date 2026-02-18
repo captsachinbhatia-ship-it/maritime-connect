@@ -71,6 +71,16 @@ import {
 // ── Alphabet letters ─────────────────────────────────────────────
 const ALPHA_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
+// ── Phone formatter ───────────────────────────────────────────────
+function formatPhone(countryCode?: string | number | null, phone?: string | null): string {
+  if (!phone) return '—';
+  const p = String(phone).trim();
+  if (p.startsWith('+')) return p;
+  const cc = String(countryCode || '').replace(/\D/g, '');
+  if (cc) return `+${cc} ${p}`;
+  return `+91 ${p}`;
+}
+
 // ── Tab metadata ─────────────────────────────────────────────────
 const TAB_META: { value: TabKey; label: string; icon: React.ElementType }[] = [
   { value: 'directory', label: 'Directory', icon: BookOpen },
@@ -655,7 +665,7 @@ function ContactsV2Table({
                 </TableCell>
               )}
               {!isDirectory && (
-                <TableCell className="text-sm text-muted-foreground">{row.phone ?? '—'}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{formatPhone(row.country_code, row.phone)}</TableCell>
               )}
               {showOwners && (
                 <TableCell className={!row.primary_owner ? 'bg-amber-100/60 dark:bg-amber-950/30' : ''}>
@@ -1312,9 +1322,13 @@ export default function ContactsV2() {
 
   // ── Bulk action complete ──────────────────────────────────────
   const handleBulkComplete = useCallback(() => {
+    if (!isAdmin) {
+      toast({ title: 'Unauthorized', description: 'Bulk assignment is restricted to Admin users.', variant: 'destructive' });
+      return;
+    }
     setSelectedIds([]);
     refetchAll();
-  }, [refetchAll]);
+  }, [isAdmin, toast, refetchAll]);
 
   if (authLoading) {
     return (
@@ -1418,8 +1432,8 @@ export default function ContactsV2() {
         />
       )}
 
-      {/* Bulk toolbar */}
-      {selectedIds.length > 0 && (
+      {/* Bulk toolbar — admin-only */}
+      {isAdmin && selectedIds.length > 0 && (
         <DirectoryBulkToolbar
           selectedIds={selectedIds}
           onClearSelection={() => setSelectedIds([])}
