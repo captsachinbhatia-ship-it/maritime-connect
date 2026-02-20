@@ -295,12 +295,12 @@ interface OwnerSummaryRow {
 
 function OwnerSummaryBlock({
   visible,
-  directoryTotal,
+  unassignedTotal,
   activeOwnerFilter,
   onOwnerFilter,
 }: {
   visible: boolean;
-  directoryTotal: number;
+  unassignedTotal: number;
   activeOwnerFilter: OwnerFilterState;
   onOwnerFilter: (of: OwnerFilterState) => void;
 }) {
@@ -320,15 +320,9 @@ function OwnerSummaryBlock({
       });
   }, [visible]);
 
-  const { sumTotal, unassignedTotal } = useMemo(() => {
-    const st = rows.reduce((a, r) => a + (r.total_count || 0), 0);
-    const ua = Math.max(0, directoryTotal - st);
-    return { sumTotal: st, unassignedTotal: ua };
-  }, [rows, directoryTotal]);
-
   if (!visible) return null;
   if (loading) return <Skeleton className="h-24 w-full" />;
-  if (rows.length === 0 && directoryTotal === 0) return null;
+  if (rows.length === 0 && unassignedTotal === 0) return null;
 
   const isFilterActive = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) => {
     return activeOwnerFilter.userId === userId && activeOwnerFilter.role === role && activeOwnerFilter.unassigned === unassigned;
@@ -1439,7 +1433,7 @@ export default function ContactsV2() {
       {isDirectory && (
         <OwnerSummaryBlock
           visible
-          directoryTotal={cumulative.directoryTotal}
+          unassignedTotal={cumulative.unassignedTotal}
           activeOwnerFilter={ownerFilter}
           onOwnerFilter={setOwnerFilter}
         />
