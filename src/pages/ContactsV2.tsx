@@ -20,6 +20,7 @@ import {
   Archive,
   UserX,
   RotateCcw,
+  Ban,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -87,6 +88,7 @@ const TAB_META: { value: TabKey; label: string; icon: React.ElementType }[] = [
   { value: 'my-primary', label: 'My Primary', icon: User },
   { value: 'my-secondary', label: 'My Secondary', icon: Users2 },
   { value: 'my-added', label: 'My Added', icon: UserPlus },
+  { value: 'inactive', label: 'Inactive', icon: Ban },
   { value: 'deleted', label: 'Deleted', icon: Trash2 },
 ];
 
@@ -438,7 +440,7 @@ function RowActionsMenu({
   onEdit,
   onLogInteraction,
   onAddFollowup,
-  onArchive,
+  onMarkInactive,
   onReactivate,
   onCloseAssignment,
   onDelete,
@@ -452,7 +454,7 @@ function RowActionsMenu({
   onEdit: () => void;
   onLogInteraction: () => void;
   onAddFollowup: () => void;
-  onArchive: () => void;
+  onMarkInactive: () => void;
   onReactivate: () => void;
   onCloseAssignment: () => void;
   onDelete: () => void;
@@ -531,9 +533,9 @@ function RowActionsMenu({
                         Close Assignment
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onClick={onArchive} className="text-destructive">
-                      <Archive className="mr-2 h-4 w-4" />
-                      Archive
+                    <DropdownMenuItem onClick={onMarkInactive} className="text-destructive">
+                      <Ban className="mr-2 h-4 w-4" />
+                      Mark Inactive
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={onDelete} className="text-destructive">
                       <Trash2 className="mr-2 h-4 w-4" />
@@ -711,7 +713,7 @@ function ContactsV2Table({
                 </TableCell>
               )}
               <TableCell>
-                {row.stage ? (() => {
+                {row.stage && row.is_active !== false ? (() => {
                   const canEditStage =
                     isAdmin ||
                     (activeTab === 'my-primary' && row.primary_owner_id === crmUserId);
@@ -724,7 +726,7 @@ function ContactsV2Table({
                     />
                   );
                 })() : (
-                  <span className="text-muted-foreground/50">—</span>
+                  <span className="text-muted-foreground/50">{row.stage ? row.stage : '—'}</span>
                 )}
               </TableCell>
               <TableCell>
@@ -740,7 +742,7 @@ function ContactsV2Table({
                   onEdit={() => onRowAction('edit', row)}
                   onLogInteraction={() => onRowAction('log-interaction', row)}
                   onAddFollowup={() => onRowAction('add-followup', row)}
-                  onArchive={() => onRowAction('archive', row)}
+                  onMarkInactive={() => onRowAction('mark-inactive', row)}
                   onReactivate={() => onRowAction('reactivate', row)}
                   onCloseAssignment={() => onRowAction('close-assignment', row)}
                   onDelete={() => onRowAction('delete', row)}
@@ -815,6 +817,7 @@ function useCumulativeCounts() {
   const [secondaryTotal, setSecondaryTotal] = useState(0);
   const [ownerTotalSum, setOwnerTotalSum] = useState(0);
   const [myAddedTotal, setMyAddedTotal] = useState(0);
+  const [inactiveTotal, setInactiveTotal] = useState(0);
   const [deletedTotal, setDeletedTotal] = useState(0);
   const [unassignedTotal, setUnassignedTotal] = useState(0);
 
@@ -836,20 +839,24 @@ function useCumulativeCounts() {
 
     // Deleted contacts count
     const deletedQuery = supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('is_deleted', true);
+    // Inactive contacts count (is_active=false, not deleted)
+    const inactiveQuery = supabase.from('contacts').select('*', { count: 'exact', head: true }).eq('is_active', false).or('is_deleted.is.null,is_deleted.eq.false');
 
-    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes, deletedRes, unassignedRes] = await Promise.all([
+    const [dirRes, ownerRes, addedRes, userPrimRes, userSecRes, deletedRes, inactiveRes, unassignedRes] = await Promise.all([
       supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }),
       supabase.from('v_owner_summary_ui').select('*'),
       addedQuery ?? Promise.resolve({ count: 0 } as any),
       userPrimaryQuery ?? Promise.resolve({ count: 0 } as any),
       userSecondaryQuery ?? Promise.resolve({ count: 0 } as any),
       deletedQuery,
+      inactiveQuery,
       // Unassigned count: direct head-only query, no client-side filtering, no row fetching
       supabase.from('v_unassigned_contacts').select('id', { count: 'exact', head: true }),
     ]);
 
     setDirectoryTotal(dirRes.count ?? 0);
     setMyAddedTotal(addedRes.count ?? 0);
+    setInactiveTotal(inactiveRes.count ?? 0);
     setDeletedTotal(deletedRes.count ?? 0);
 
     const ownerRows = (ownerRes.data || []) as OwnerSummaryRow[];
@@ -867,7 +874,7 @@ function useCumulativeCounts() {
     }
   }, [crmUserId]);
 
-  return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, deletedTotal, refresh };
+  return { directoryTotal, primaryTotal, secondaryTotal, unassignedTotal, myAddedTotal, inactiveTotal, deletedTotal, refresh };
 }
 
 // ── Main page ────────────────────────────────────────────────────
@@ -968,33 +975,34 @@ export default function ContactsV2() {
     await refetchAll();
   }, [isAdmin, toast, refetchAll]);
 
-  // ── Archive handler ───────────────────────────────────────────
-  const handleArchive = useCallback(async (contactId: string, contactName: string) => {
+  // ── Mark Inactive handler (replaces Archive) ──────────────────
+  const handleMarkInactive = useCallback(async (contactId: string, contactName: string) => {
     if (!isAdmin) return;
-    const confirmed = window.confirm(`⚠️ Archive "${contactName}"?\n\nThis will hide the contact from all lists.\n\nContinue?`);
+    const confirmed = window.confirm(`⚠️ Mark "${contactName}" as Inactive?\n\nThis will deactivate the contact and close all active assignments.\n\nContinue?`);
     if (!confirmed) return;
 
     const now = new Date().toISOString();
-    const { error: archErr } = await supabase
+    const { error: inactiveErr } = await supabase
       .from('contacts')
-      .update({ is_archived: true, archived_at: now })
+      .update({ is_active: false })
       .eq('id', contactId);
 
-    if (archErr) {
-      toast({ title: 'Archive failed', description: archErr.message, variant: 'destructive' });
+    if (inactiveErr) {
+      toast({ title: 'Mark Inactive failed', description: inactiveErr.message, variant: 'destructive' });
       return;
     }
 
-    // Close active assignments
+    // Close ALL active assignments
     await supabase
       .from('contact_assignments')
-      .update({ status: 'CLOSED', ended_at: now })
+      .update({ status: 'CLOSED', ended_at: now, ended_by_crm_user_id: crmUserId })
       .eq('contact_id', contactId)
-      .eq('status', 'ACTIVE');
+      .in('status', ['ACTIVE', 'active'])
+      .is('ended_at', null);
 
-    toast({ title: 'Contact archived', description: `"${contactName}" has been archived.` });
+    toast({ title: 'Contact marked inactive', description: `"${contactName}" has been deactivated.` });
     await refetchAll();
-  }, [isAdmin, toast, refetchAll]);
+  }, [isAdmin, crmUserId, toast, refetchAll]);
 
   // ── Soft delete handler ────────────────────────────────────────
   const handleSoftDelete = useCallback(async (contactId: string, contactName: string) => {
@@ -1137,8 +1145,8 @@ export default function ContactsV2() {
         setActionContactName(row.full_name);
         setFollowupOpen(true);
         break;
-      case 'archive':
-        handleArchive(row.id, row.full_name);
+      case 'mark-inactive':
+        handleMarkInactive(row.id, row.full_name);
         break;
       case 'reactivate':
         handleReactivate(row.id, row.full_name);
@@ -1153,7 +1161,7 @@ export default function ContactsV2() {
         handleRestore(row.id, row.full_name);
         break;
     }
-  }, [handleArchive, handleReactivate, handleCloseAssignment, handleSoftDelete, handleRestore, crmUserId, isAdmin]);
+  }, [handleMarkInactive, handleReactivate, handleCloseAssignment, handleSoftDelete, handleRestore, crmUserId, isAdmin]);
 
   // ── Inline assignment handlers ────────────────────────────────
   const handleInlineAssign = useCallback(async (contactId: string, userId: string, role: 'PRIMARY' | 'SECONDARY') => {
@@ -1356,6 +1364,7 @@ export default function ContactsV2() {
                 'my-primary': cumulative.primaryTotal,
                 'my-secondary': cumulative.secondaryTotal,
                 'my-added': cumulative.myAddedTotal,
+                inactive: cumulative.inactiveTotal,
                 deleted: cumulative.deletedTotal,
               };
               return (

@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 import { useCrmUser } from "@/hooks/useCrmUser";
 
-type AssignmentStage = "COLD_CALLING" | "ASPIRATION" | "ACHIEVEMENT" | "INACTIVE";
+type AssignmentStage = "COLD_CALLING" | "ASPIRATION" | "ACHIEVEMENT";
 
 interface DirectoryBulkToolbarProps {
   selectedIds: string[];
@@ -20,7 +20,6 @@ const STAGES: { value: AssignmentStage; label: string }[] = [
   { value: "COLD_CALLING", label: "Cold Calling" },
   { value: "ASPIRATION", label: "Aspiration" },
   { value: "ACHIEVEMENT", label: "Achievement" },
-  { value: "INACTIVE", label: "Inactive" },
 ];
 
 export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete }: DirectoryBulkToolbarProps) {
