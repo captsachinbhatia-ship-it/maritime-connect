@@ -988,16 +988,20 @@ export default function ContactsV2() {
     }
 
     // Close ALL active assignments
-    await supabase
+    const { error: closeErr } = await supabase
       .from('contact_assignments')
-      .update({ status: 'CLOSED', ended_at: now, ended_by_crm_user_id: crmUserId })
+      .update({ status: 'CLOSED', ended_at: now })
       .eq('contact_id', contactId)
-      .in('status', ['ACTIVE', 'active'])
+      .eq('status', 'ACTIVE')
       .is('ended_at', null);
+
+    if (closeErr) {
+      console.error('Failed to close assignments:', closeErr.message);
+    }
 
     toast({ title: 'Contact marked inactive', description: `"${contactName}" has been deactivated.` });
     await refetchAll();
-  }, [isAdmin, crmUserId, toast, refetchAll]);
+  }, [isAdmin, toast, refetchAll]);
 
   // ── Soft delete handler ────────────────────────────────────────
   const handleSoftDelete = useCallback(async (contactId: string, contactName: string) => {
@@ -1021,7 +1025,7 @@ export default function ContactsV2() {
       .from('contact_assignments')
       .update({ status: 'CLOSED', ended_at: now })
       .eq('contact_id', contactId)
-      .in('status', ['ACTIVE', 'active'])
+      .eq('status', 'ACTIVE')
       .is('ended_at', null);
 
     toast({ title: 'Contact deleted', description: `"${contactName}" has been soft-deleted.` });
@@ -1049,7 +1053,7 @@ export default function ContactsV2() {
       .from('contact_assignments')
       .select('id, stage')
       .eq('contact_id', contactId)
-      .in('status', ['ACTIVE', 'active'])
+      .eq('status', 'ACTIVE')
       .is('ended_at', null);
 
     if (activeAssignments && activeAssignments.length > 0) {
@@ -1078,7 +1082,7 @@ export default function ContactsV2() {
       .from('contact_assignments')
       .update({ status: 'CLOSED', ended_at: now })
       .eq('contact_id', contactId)
-      .in('status', ['ACTIVE', 'active'])
+      .eq('status', 'ACTIVE')
       .is('ended_at', null);
 
     if (err) {
