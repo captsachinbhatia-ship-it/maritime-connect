@@ -26,9 +26,9 @@ export interface ContactV2Row {
 
 export type TabKey = 'directory' | 'my-primary' | 'my-secondary' | 'my-added' | 'inactive' | 'deleted';
 
-export type StageFilter = 'ALL' | 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+export type StageFilter = 'ALL' | 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
 
-const STAGES: StageFilter[] = ['COLD_CALLING', 'ASPIRATION', 'ACHIEVEMENT', 'INACTIVE'];
+const STAGES: StageFilter[] = ['COLD_CALLING', 'ASPIRATION', 'ACHIEVEMENT'];
 
 export const STAGE_CHIPS: { value: StageFilter; label: string }[] = [
   { value: 'ALL', label: 'All' },
@@ -121,14 +121,13 @@ export function useContactsV2Data() {
     COLD_CALLING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
-    INACTIVE: 0,
   });
 
   // ── Fetch stage counts ─────────────────────────────────────────
   const fetchStageCounts = useCallback(async (tab: TabKey) => {
     // No stage counts for deleted or inactive tabs
     if (tab === 'deleted' || tab === 'inactive') {
-      setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 });
+      setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
       return;
     }
     try {
@@ -149,7 +148,7 @@ export function useContactsV2Data() {
           return;
         }
         const counts: Record<StageFilter, number> = {
-          ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0,
+          ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0,
         };
         (data || []).forEach((r: any) => {
           const stage = normalizeStage(r.stage);
@@ -168,7 +167,7 @@ export function useContactsV2Data() {
         return;
       }
       const counts: Record<StageFilter, number> = {
-        ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0,
+        ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0,
       };
       (data || []).forEach((r: any) => {
         const stage = normalizeStage(r.stage ?? r.primary_stage);

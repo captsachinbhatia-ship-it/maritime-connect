@@ -26,7 +26,6 @@ export async function fetchDashboardMetrics(): Promise<{ data: DashboardMetrics 
     COLD_CALLING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
-    INACTIVE: 0,
   };
 
   const byPrimaryOwner: Record<string, number> = {};

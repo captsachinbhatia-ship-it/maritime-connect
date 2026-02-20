@@ -1,8 +1,7 @@
 export type AssignmentStage =
   | 'COLD_CALLING'
   | 'ASPIRATION'
-  | 'ACHIEVEMENT'
-  | 'INACTIVE';
+  | 'ACHIEVEMENT';
 
 export interface DirectoryRow {
   id: string;

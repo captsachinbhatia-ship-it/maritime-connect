@@ -96,7 +96,6 @@ const STAGE_COLORS: Record<string, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   ASPIRATION: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   ACHIEVEMENT: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  INACTIVE: 'bg-muted text-muted-foreground',
 };
 
 // ── Cumulative Bar (clickable chips) ─────────────────────────────
@@ -237,8 +236,7 @@ function StatusBadge({ row }: { row: ContactV2Row }) {
       </Badge>
     );
   }
-  const stageInactive = String(row.stage || '').toUpperCase() === 'INACTIVE';
-  if (row.is_active === false || stageInactive) {
+  if (row.is_active === false) {
     return (
       <Badge variant="outline" className="text-xs border-muted text-muted-foreground">
         Inactive
@@ -462,10 +460,7 @@ function RowActionsMenu({
 }) {
   const directoryNonAdmin = isDirectory && !isAdmin;
   const isDeletedRow = !!(row.is_deleted);
-  const isInactiveRow = !isDeletedRow && (
-    row?.is_active === false ||
-    String(row?.stage || '').toUpperCase() === 'INACTIVE'
-  );
+  const isInactiveRow = !isDeletedRow && row?.is_active === false;
   const isActiveRow = !isDeletedRow && !isInactiveRow;
   const hasActiveAssignment = !!(row.primary_owner_id || row.secondary_owner_id);
 
@@ -669,7 +664,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell className={!row.primary_owner ? 'bg-amber-100/60 dark:bg-amber-950/30' : ''}>
-                  {isAdmin && row.is_active !== false && !row.is_deleted && String(row.stage || '').toUpperCase() !== 'INACTIVE' ? (
+                  {isAdmin && row.is_active !== false && !row.is_deleted ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.primary_owner ?? null}
@@ -686,7 +681,7 @@ function ContactsV2Table({
               )}
               {showOwners && (
                 <TableCell>
-                  {isAdmin && row.is_active !== false && !row.is_deleted && String(row.stage || '').toUpperCase() !== 'INACTIVE' ? (
+                  {isAdmin && row.is_active !== false && !row.is_deleted ? (
                     <InlineOwnerSelector
                       contactId={row.id}
                       currentOwnerName={row.secondary_owner ?? null}
