@@ -241,18 +241,19 @@ export async function changeContactStage(params: {
 
     if (error) {
       // Fallback: direct update on contact_assignments
-      const { error: updateError } = await supabase
+      const { error: updateError, count } = await supabase
         .from('contact_assignments')
         .update({
           stage: params.to_stage,
           stage_changed_at: new Date().toISOString(),
-        })
+        }, { count: 'exact' })
         .eq('contact_id', params.contact_id)
         .eq('status', 'ACTIVE')
         .is('ended_at', null)
         .eq('assignment_role', 'PRIMARY');
 
       if (updateError) return { data: null, error: updateError.message };
+      if (count === 0) return { data: { action: 'NO_ROWS' }, error: null };
       return { data: { action: 'UPDATED' }, error: null };
     }
 
