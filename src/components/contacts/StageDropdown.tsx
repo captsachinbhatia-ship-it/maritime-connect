@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Loader2, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, ChevronDown, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +10,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { changeContactStage, AssignmentStage } from '@/services/assignments';
+import { supabase } from '@/lib/supabaseClient';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface StageDropdownProps {
   contactId: string;
@@ -42,13 +48,29 @@ export function StageDropdown({
 }: StageDropdownProps) {
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [hasActivePrimary, setHasActivePrimary] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (readOnly) return;
+    let cancelled = false;
+    supabase
+      .from('contact_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('contact_id', contactId)
+      .eq('assignment_role', 'PRIMARY')
+      .eq('status', 'ACTIVE')
+      .is('ended_at', null)
+      .then(({ count }) => {
+        if (!cancelled) setHasActivePrimary((count ?? 0) > 0);
+      });
+    return () => { cancelled = true; };
+  }, [contactId, readOnly, currentStage]);
 
   const handleStageSelect = async (newStage: AssignmentStage) => {
     if (newStage === currentStage) return;
 
     setIsUpdating(true);
 
-    // Call RPC for all stage changes - it handles INACTIVE requests internally
     const result = await changeContactStage({
       contact_id: contactId,
       to_stage: newStage,
@@ -61,20 +83,25 @@ export function StageDropdown({
         description: result.error,
       });
     } else if (result.data) {
-      if (result.data.action === 'REQUESTED') {
-        // INACTIVE transition created a request for admin approval
+      if (result.data.action === 'NO_ROWS') {
+        toast({
+          variant: 'destructive',
+          title: 'Stage update failed',
+          description: 'No active primary assignment found.',
+        });
+      } else if (result.data.action === 'REQUESTED') {
         toast({
           title: 'Inactive request sent for admin approval',
           description: 'An administrator will review this request.',
         });
+        onStageChange();
       } else {
-        // Direct update succeeded
         toast({
           title: 'Stage updated',
           description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}`,
         });
+        onStageChange();
       }
-      onStageChange();
     }
 
     setIsUpdating(false);
@@ -92,13 +119,32 @@ export function StageDropdown({
     );
   }
 
+  // No active primary assignment — show disabled badge with tooltip
+  if (hasActivePrimary === false) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            className={`h-7 px-2 font-medium text-xs cursor-not-allowed opacity-60 ${STAGE_COLORS[currentStage]}`}
+          >
+            {currentStageInfo?.label ?? currentStage}
+            <AlertCircle className="ml-1 h-3 w-3" />
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          No active Primary assignment. Assign a Primary Owner to move stage.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="sm"
-          disabled={disabled || isUpdating}
+          disabled={disabled || isUpdating || hasActivePrimary === null}
           className={`h-7 px-2 font-medium ${STAGE_COLORS[currentStage]}`}
         >
           {isUpdating ? (
