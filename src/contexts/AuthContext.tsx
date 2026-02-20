@@ -96,15 +96,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCrmUser(result.crmUser);
       setAuthError(null);
       
-      // Check admin status from profiles table
-      if (currentSession?.user?.id) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', currentSession.user.id)
-          .maybeSingle();
-        setDbIsAdmin(data?.role === 'ADMIN' || data?.role === 'CEO');
+      // Verify current_crm_user_id() returns non-null after linking
+      const { data: crmId, error: crmIdErr } = await supabase.rpc('current_crm_user_id');
+      
+      if (crmIdErr || !crmId) {
+        // Retry link once more then re-check
+        console.warn('current_crm_user_id() returned null after bootstrap, retrying link...');
+        await supabase.rpc('link_google_user_to_crm_user');
+        const { data: retryId } = await supabase.rpc('current_crm_user_id');
+        
+        if (!retryId) {
+          console.error('current_crm_user_id() still null after retry');
+          setSession(null);
+          setCrmUser(null);
+          setDbIsAdmin(false);
+          setAuthError({ code: 'NOT_PROVISIONED', message: 'User not provisioned in CRM. Contact admin.' });
+          setLoading(false);
+          return;
+        }
       }
+      
+      // Check admin status via is_admin RPC (uses current_crm_user_id internally)
+      const { data: adminFlag } = await supabase.rpc('is_admin');
+      setDbIsAdmin(adminFlag === true);
     } else {
       setSession(null);
       setCrmUser(null);
