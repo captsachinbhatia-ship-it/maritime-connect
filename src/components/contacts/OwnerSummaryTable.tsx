@@ -52,7 +52,7 @@ export function OwnerSummaryTable({
         const dbUnassigned = unassignedRes.count ?? 0;
         const filtered = (summaryRes.data as SummaryRow[]).filter(r => r.user_id !== null);
         // Inject canonical unassigned row
-        filtered.push({ user_id: null, primary_count: dbUnassigned, secondary_count: 0, total: dbUnassigned });
+        filtered.push({ user_id: null, primary_count: 0, secondary_count: 0, total: dbUnassigned });
 
         setRows(filtered);
 
@@ -135,7 +135,7 @@ export function OwnerSummaryTable({
 
   if (userRows.length === 0 && !unassignedRow) return null;
 
-  const unassignedCount = unassignedRow?.primary_count ?? 0;
+  const unassignedCount = unassignedRow?.total ?? 0;
 
   return (
     <Card className="mb-4">
