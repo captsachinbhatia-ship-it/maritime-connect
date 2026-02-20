@@ -29,7 +29,6 @@ const STAGES: { value: AssignmentStage; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
-  { value: 'INACTIVE', label: 'Inactive' },
 ];
 
 const STAGE_COLORS: Record<AssignmentStage, string> = {
@@ -132,7 +131,7 @@ export function StageDropdown({
           </Badge>
         </TooltipTrigger>
         <TooltipContent>
-          No active Primary assignment. Assign a Primary Owner to move stage.
+          Assign a Primary Owner to change stage.
         </TooltipContent>
       </Tooltip>
     );
@@ -165,7 +164,7 @@ export function StageDropdown({
             className={currentStage === stage.value ? 'bg-accent' : ''}
           >
             {stage.label}
-            {stage.value === 'INACTIVE' && currentStage !== 'INACTIVE' && (
+            {false && (
               <span className="ml-2 text-xs text-muted-foreground">(requires approval)</span>
             )}
           </DropdownMenuItem>

@@ -24,7 +24,7 @@ export interface ContactV2Row {
   deleted_at?: string | null;
 }
 
-export type TabKey = 'directory' | 'my-primary' | 'my-secondary' | 'my-added' | 'deleted';
+export type TabKey = 'directory' | 'my-primary' | 'my-secondary' | 'my-added' | 'inactive' | 'deleted';
 
 export type StageFilter = 'ALL' | 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
@@ -35,7 +35,6 @@ export const STAGE_CHIPS: { value: StageFilter; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
-  { value: 'INACTIVE', label: 'Inactive' },
 ];
 
 // ── View maps ────────────────────────────────────────────────────
@@ -44,6 +43,7 @@ const VIEW_MAP: Record<TabKey, string> = {
   'my-primary': 'v_my_primary_contacts',
   'my-secondary': 'v_my_secondary_contacts',
   'my-added': 'v_my_added_unassigned',
+  inactive: 'contacts',
   deleted: 'contacts',
 };
 
@@ -52,6 +52,7 @@ const STAGE_COUNT_VIEW_MAP: Record<TabKey, string> = {
   'my-primary': 'v_my_primary_stage_counts',
   'my-secondary': 'v_my_secondary_stage_counts',
   'my-added': 'v_my_added_stage_counts',
+  inactive: '',
   deleted: '',
 };
 
@@ -125,8 +126,8 @@ export function useContactsV2Data() {
 
   // ── Fetch stage counts ─────────────────────────────────────────
   const fetchStageCounts = useCallback(async (tab: TabKey) => {
-    // No stage counts for deleted tab
-    if (tab === 'deleted') {
+    // No stage counts for deleted or inactive tabs
+    if (tab === 'deleted' || tab === 'inactive') {
       setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 });
       return;
     }
@@ -209,6 +210,42 @@ export function useContactsV2Data() {
           }
 
           const { data, count, error: fetchErr } = await dQuery;
+          if (fetchErr) { setError(fetchErr.message); setRows([]); setTotalRows(0); return; }
+
+          const normalized: ContactV2Row[] = (data || []).map((row: any) => normalize({
+            ...row,
+            company_name: row.companies?.company_name ?? row.company_name ?? null,
+          }));
+          setRows(normalized);
+          setTotalRows(count ?? normalized.length);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Fetch failed');
+          setRows([]); setTotalRows(0);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Handle Inactive tab (is_active=false, not deleted)
+      if (tab === 'inactive') {
+        try {
+          let iQuery = supabase
+            .from('contacts')
+            .select('*, companies(company_name)', { count: 'exact' })
+            .eq('is_active', false)
+            .or('is_deleted.is.null,is_deleted.eq.false')
+            .order('full_name', { ascending: true })
+            .range(from, to);
+
+          if (q.trim()) {
+            iQuery = iQuery.ilike('full_name', `%${q.trim()}%`);
+          }
+          if (alpha && alpha !== '#') {
+            iQuery = iQuery.ilike('full_name', `${alpha}%`);
+          }
+
+          const { data, count, error: fetchErr } = await iQuery;
           if (fetchErr) { setError(fetchErr.message); setRows([]); setTotalRows(0); return; }
 
           const normalized: ContactV2Row[] = (data || []).map((row: any) => normalize({
