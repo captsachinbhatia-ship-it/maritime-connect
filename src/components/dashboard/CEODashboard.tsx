@@ -3,6 +3,7 @@ import { ContactHealthSnapshot } from './ContactHealthSnapshot';
 import { DashboardLineChart } from './DashboardLineChart';
 import { ActivityMatrix } from './ActivityMatrix';
 import { TouchTargets } from './TouchTargets';
+import { ExecutiveSnapshot } from './ExecutiveSnapshot';
 
 import { RecentCompanies } from './RecentCompanies';
 import { RecentInteractions } from './RecentInteractions';
@@ -99,6 +100,9 @@ export function CEODashboard({ isAdmin, isCEO }: CEODashboardProps) {
 
         {/* Dashboard Tab — mirrors CallerDashboard layout */}
         <TabsContent value="dashboard" className="space-y-6 mt-4">
+          {/* Executive Snapshot — KPI row */}
+          <ExecutiveSnapshot />
+
           {/* Contact Health — full width */}
           <ContactHealthSnapshot crmUserId={selectedUserId} />
 

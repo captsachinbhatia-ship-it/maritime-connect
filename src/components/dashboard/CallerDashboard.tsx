@@ -3,6 +3,7 @@ import { ContactHealthSnapshot } from './ContactHealthSnapshot';
 import { DashboardLineChart } from './DashboardLineChart';
 import { ActivityMatrix } from './ActivityMatrix';
 import { TouchTargets } from './TouchTargets';
+import { ExecutiveSnapshot } from './ExecutiveSnapshot';
 
 import { RecentCompanies } from './RecentCompanies';
 import { RecentInteractions } from './RecentInteractions';
@@ -45,6 +46,9 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         </div>
         {isAdmin && <ModeIndicator isCEO={isCEO} />}
       </div>
+
+      {/* Executive Snapshot — KPI row */}
+      <ExecutiveSnapshot />
 
       {/* Contact Health — full width */}
       <ContactHealthSnapshot />
