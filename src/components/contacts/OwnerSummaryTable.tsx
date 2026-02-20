@@ -36,20 +36,28 @@ export function OwnerSummaryTable({
     const load = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('v_owner_summary')
-          .select('*');
+        const [summaryRes, unassignedRes] = await Promise.all([
+          supabase.from('v_owner_summary').select('*'),
+          // Direct DB count — no client-side derivation
+          supabase.from('v_unassigned_contacts').select('id', { count: 'exact', head: true }),
+        ]);
 
-        if (error || !data) {
+        if (summaryRes.error || !summaryRes.data) {
           setRows([]);
           setIsLoading(false);
           return;
         }
 
-        setRows(data as SummaryRow[]);
+        // Replace the view's unassigned row with the canonical count
+        const dbUnassigned = unassignedRes.count ?? 0;
+        const filtered = (summaryRes.data as SummaryRow[]).filter(r => r.user_id !== null);
+        // Inject canonical unassigned row
+        filtered.push({ user_id: null, primary_count: dbUnassigned, secondary_count: 0, total: dbUnassigned });
+
+        setRows(filtered);
 
         // Resolve user names
-        const userIds = (data as SummaryRow[])
+        const userIds = filtered
           .map(r => r.user_id)
           .filter((id): id is string => !!id);
         if (userIds.length > 0) {
