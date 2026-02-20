@@ -1033,7 +1033,7 @@ export default function ContactsV2() {
 
     const { error: restErr } = await supabase
       .from('contacts')
-      .update({ is_deleted: false, deleted_at: null, deleted_by_crm_user_id: null, is_active: true, primary_stage: 'COLD_CALLING' })
+      .update({ is_deleted: false, deleted_at: null, deleted_by_crm_user_id: null, is_active: true })
       .eq('id', contactId);
 
     if (restErr) {
