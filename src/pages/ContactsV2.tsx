@@ -951,13 +951,12 @@ export default function ContactsV2() {
   // ── Reactivate handler ─────────────────────────────────────────
   const handleReactivate = useCallback(async (contactId: string, contactName: string) => {
     if (!isAdmin) return;
-    const confirmed = window.confirm(`Reactivate "${contactName}"?\n\nThis will make the contact active again and reset stage to Cold Calling.\n\nContinue?`);
+    const confirmed = window.confirm(`Reactivate "${contactName}"?\n\nThis will make the contact active and visible again.\n\nContinue?`);
     if (!confirmed) return;
 
-    // 1. Reactivate the contact record + reset stage on the contact row itself
     const { error: reactErr } = await supabase
       .from('contacts')
-      .update({ is_active: true, primary_stage: 'COLD_CALLING' })
+      .update({ is_active: true })
       .eq('id', contactId);
 
     if (reactErr) {
@@ -965,28 +964,7 @@ export default function ContactsV2() {
       return;
     }
 
-    // 2. Reset stage on active assignments that have INACTIVE stage
-    const { data: activeAssignments } = await supabase
-      .from('contact_assignments')
-      .select('id, stage')
-      .eq('contact_id', contactId)
-      .in('status', ['ACTIVE', 'active'])
-      .is('ended_at', null);
-
-    if (activeAssignments && activeAssignments.length > 0) {
-      const inactiveAssignments = activeAssignments.filter(
-        (a: any) => String(a.stage || '').toUpperCase() === 'INACTIVE'
-      );
-      if (inactiveAssignments.length > 0) {
-        const ids = inactiveAssignments.map((a: any) => a.id);
-        await supabase
-          .from('contact_assignments')
-          .update({ stage: 'COLD_CALLING', stage_changed_at: new Date().toISOString() })
-          .in('id', ids);
-      }
-    }
-
-    toast({ title: 'Contact reactivated (stage reset to Cold Calling)' });
+    toast({ title: 'Contact reactivated' });
     await refetchAll();
   }, [isAdmin, toast, refetchAll]);
 
