@@ -38,20 +38,20 @@ import { RequestInactiveDialog } from './RequestInactiveDialog';
 import { ContactRowHoverCard } from './ContactRowHoverCard';
 import { extractKeywordChips } from '@/lib/interactionKeywords';
 
-type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
 
 const STAGES: { value: StageType; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
-  { value: 'INACTIVE', label: 'Inactive' },
+  
 ];
 
 const STAGE_COLORS: Record<StageType, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800',
   ASPIRATION: 'bg-amber-100 text-amber-800',
   ACHIEVEMENT: 'bg-green-100 text-green-800',
-  INACTIVE: 'bg-gray-100 text-gray-800',
+  
 };
 
 const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -160,7 +160,7 @@ export function MyContactsTab() {
 
   // Compute stage counts from the full dataset
   const stageCounts = useMemo(() => {
-    const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+    const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
     allContacts.forEach(c => {
       const key = ((c as any).stage ?? '').trim().toUpperCase() as StageType;
       if (key in counts) counts[key]++;
@@ -448,7 +448,7 @@ export function MyContactsTab() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {availableStages.filter(s => s.value !== 'INACTIVE').map((stage) => (
+                            {availableStages.map((stage) => (
                               <DropdownMenuItem
                                 key={stage.value}
                                 onClick={() => handleStageUpdate(contact.id, stage.value)}

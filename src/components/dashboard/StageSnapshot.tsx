@@ -10,7 +10,6 @@ const stageConfig = [
   { key: 'COLD_CALLING' as AssignmentStage, label: 'Cold Calling', color: 'bg-blue-500' },
   { key: 'ASPIRATION' as AssignmentStage, label: 'Aspiration', color: 'bg-amber-500' },
   { key: 'ACHIEVEMENT' as AssignmentStage, label: 'Achievement', color: 'bg-emerald-500' },
-  { key: 'INACTIVE' as AssignmentStage, label: 'Inactive', color: 'bg-slate-400' },
 ] as const;
 
 interface StageSnapshotProps {
@@ -23,7 +22,6 @@ export function StageSnapshot({ crmUserId: crmUserIdProp }: StageSnapshotProps =
     COLD_CALLING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
-    INACTIVE: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 

@@ -26,21 +26,21 @@ const STAGE_OPTIONS: { value: AssignmentStage; label: string }[] = [
   { value: "COLD_CALLING", label: "Cold Calling" },
   { value: "ASPIRATION", label: "Aspiration" },
   { value: "ACHIEVEMENT", label: "Achievement" },
-  { value: "INACTIVE", label: "Inactive" },
+  
 ];
 
 const STAGE_LABELS: Record<string, string> = {
   COLD_CALLING: "Cold Calling",
   ASPIRATION: "Aspiration",
   ACHIEVEMENT: "Achievement",
-  INACTIVE: "Inactive",
+  
 };
 
 const STAGE_COLORS: Record<string, string> = {
   COLD_CALLING: "bg-blue-100 text-blue-800",
   ASPIRATION: "bg-amber-100 text-amber-800",
   ACHIEVEMENT: "bg-green-100 text-green-800",
-  INACTIVE: "bg-gray-100 text-gray-800",
+  
 };
 
 interface DirectoryTabProps {
@@ -143,7 +143,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
   // Stage counts
   const stageCounts = useMemo(() => {
-    const counts: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0, INACTIVE: 0 };
+    const counts: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
     contacts.forEach((c) => {
       if (c.primary_stage && counts[c.primary_stage] !== undefined) counts[c.primary_stage]++;
     });

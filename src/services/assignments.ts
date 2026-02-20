@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 
-export type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+export type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
 export type AssignmentRole = 'primary' | 'secondary';
 
 export interface ContactAssignment {
