@@ -27,7 +27,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCrmUser } from '@/hooks/useCrmUser';
 // Company name comes from the pipeline view — no separate lookup needed
-import { changeContactStage } from '@/services/assignments';
+// stage update is done directly via supabase in handleStageUpdate
 import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { ContactsSearch } from './ContactsSearch';
@@ -104,6 +104,7 @@ export function MyContactsTab() {
       const { data: pipelineData, error: pipelineError } = await supabase
         .from('v_my_primary_contacts')
         .select('*')
+        .eq('assigned_to_crm_user_id', crmUserId)
         .order('full_name', { ascending: true });
 
       if (pipelineError) {
@@ -170,7 +171,9 @@ export function MyContactsTab() {
 
   // Contacts for the active stage
   const contacts = useMemo(() => {
-    return allContacts.filter(c => ((c as any).stage ?? '').trim().toUpperCase() === activeStage);
+    return allContacts
+      .filter(c => ((c as any).stage ?? '').trim().toUpperCase() === activeStage)
+      .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
   }, [allContacts, activeStage]);
 
   // Client-side search filter for multi-field search
@@ -196,44 +199,52 @@ export function MyContactsTab() {
   }, [loadContacts, authLoading]);
 
   const handleStageUpdate = async (contactId: string, newStage: StageType) => {
+    if (!crmUserId) return;
     setIsUpdatingStage(contactId);
 
     try {
-      const result = await changeContactStage({
-        contact_id: contactId,
-        to_stage: newStage,
-      });
+      // Fetch active PRIMARY assignment for this contact
+      const { data: assignment, error: fetchErr } = await supabase
+        .from('contact_assignments')
+        .select('id, assigned_to_crm_user_id')
+        .eq('contact_id', contactId)
+        .eq('assignment_role', 'PRIMARY')
+        .eq('status', 'ACTIVE')
+        .is('ended_at', null)
+        .maybeSingle();
 
-      if (result.error) {
-        toast({
-          variant: 'destructive',
-          title: 'Failed to update stage',
-          description: result.error,
-        });
+      if (fetchErr || !assignment) {
+        toast({ variant: 'destructive', title: 'Stage update failed', description: 'No active primary assignment found.' });
         setIsUpdatingStage(null);
         return;
       }
 
-      if (result.data?.action === 'REQUESTED') {
-        toast({
-          title: 'Inactive request sent for admin approval',
-          description: 'An administrator will review this request.',
-        });
-      } else {
-        toast({
-          title: 'Stage updated',
-          description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}`,
-        });
+      // Verify ownership
+      if (assignment.assigned_to_crm_user_id !== crmUserId) {
+        toast({ variant: 'destructive', title: 'Not allowed', description: 'Only the primary owner can change the stage.' });
+        setIsUpdatingStage(null);
+        return;
       }
 
-      // Refresh the list (counts derived automatically)
-      loadContacts();
+      // Update by assignment ID
+      const { error: updateErr } = await supabase
+        .from('contact_assignments')
+        .update({
+          stage: newStage,
+          stage_changed_at: new Date().toISOString(),
+          stage_changed_by: crmUserId,
+        })
+        .eq('id', assignment.id);
+
+      if (updateErr) {
+        toast({ variant: 'destructive', title: 'Failed to update stage', description: updateErr.message });
+      } else {
+        toast({ title: 'Stage updated', description: `Contact moved to ${STAGES.find(s => s.value === newStage)?.label}` });
+        // Refresh to update counts and row positions
+        loadContacts();
+      }
     } catch (err) {
-      toast({
-        variant: 'destructive',
-        title: 'Failed to update stage',
-        description: err instanceof Error ? err.message : 'Unknown error',
-      });
+      toast({ variant: 'destructive', title: 'Failed to update stage', description: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setIsUpdatingStage(null);
     }
