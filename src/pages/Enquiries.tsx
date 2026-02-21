@@ -8,7 +8,7 @@ export default function Enquiries() {
   const navigate = useNavigate();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
@@ -42,6 +42,16 @@ export default function Enquiries() {
           <EnquiryGlobalFeed tab="HOT" />
         </TabsContent>
       </Tabs>
+
+      {/* Floating Action Button */}
+      <Button
+        onClick={() => navigate('/enquiries/new')}
+        className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 transition-shadow"
+        size="icon"
+        aria-label="New Enquiry"
+      >
+        <Plus className="h-6 w-6" />
+      </Button>
     </div>
   );
 }
