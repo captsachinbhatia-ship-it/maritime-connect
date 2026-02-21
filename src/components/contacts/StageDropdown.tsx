@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import { changeContactStage, AssignmentStage } from '@/services/assignments';
+import { type AssignmentStage } from '@/services/assignments';
 import { supabase } from '@/lib/supabaseClient';
 import {
   Tooltip,
@@ -23,6 +23,8 @@ interface StageDropdownProps {
   onStageChange: () => void;
   disabled?: boolean;
   readOnly?: boolean;
+  /** CRM user ID of the logged-in user — stage update only allowed if this matches the PRIMARY owner */
+  crmUserId?: string | null;
 }
 
 const STAGES: { value: AssignmentStage; label: string }[] = [
@@ -43,6 +45,7 @@ export function StageDropdown({
   onStageChange,
   disabled = false,
   readOnly = false,
+  crmUserId,
 }: StageDropdownProps) {
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -69,30 +72,54 @@ export function StageDropdown({
 
     setIsUpdating(true);
 
-    const result = await changeContactStage({
-      contact_id: contactId,
-      to_stage: newStage,
-    });
+    try {
+      // Step 1: Fetch the active PRIMARY assignment row
+      const { data: assignment, error: fetchErr } = await supabase
+        .from('contact_assignments')
+        .select('id, assigned_to_crm_user_id')
+        .eq('contact_id', contactId)
+        .eq('assignment_role', 'PRIMARY')
+        .eq('status', 'ACTIVE')
+        .is('ended_at', null)
+        .maybeSingle();
 
-    if (result.error) {
-      toast({
-        variant: 'destructive',
-        title: 'Failed to update stage',
-        description: result.error,
-      });
-    } else if (result.data) {
-      if (result.data.action === 'NO_ROWS') {
+      if (fetchErr || !assignment) {
         toast({
           variant: 'destructive',
           title: 'Stage update failed',
           description: 'No active primary assignment found.',
         });
-      } else if (result.data.action === 'REQUESTED') {
+        setIsUpdating(false);
+        return;
+      }
+
+      // Step 2: Verify ownership — only the PRIMARY owner can change stage
+      if (crmUserId && assignment.assigned_to_crm_user_id !== crmUserId) {
         toast({
-          title: 'Inactive request sent for admin approval',
-          description: 'An administrator will review this request.',
+          variant: 'destructive',
+          title: 'Not allowed',
+          description: 'Only the primary owner can change the stage.',
         });
-        onStageChange();
+        setIsUpdating(false);
+        return;
+      }
+
+      // Step 3: Update by assignment ID
+      const { error: updateErr } = await supabase
+        .from('contact_assignments')
+        .update({
+          stage: newStage,
+          stage_changed_at: new Date().toISOString(),
+          stage_changed_by: crmUserId ?? null,
+        })
+        .eq('id', assignment.id);
+
+      if (updateErr) {
+        toast({
+          variant: 'destructive',
+          title: 'Failed to update stage',
+          description: updateErr.message,
+        });
       } else {
         toast({
           title: 'Stage updated',
@@ -100,6 +127,12 @@ export function StageDropdown({
         });
         onStageChange();
       }
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update stage',
+        description: err?.message || 'Unknown error',
+      });
     }
 
     setIsUpdating(false);
@@ -163,9 +196,6 @@ export function StageDropdown({
             className={currentStage === stage.value ? 'bg-accent' : ''}
           >
             {stage.label}
-            {false && (
-              <span className="ml-2 text-xs text-muted-foreground">(requires approval)</span>
-            )}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

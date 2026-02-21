@@ -708,16 +708,17 @@ function ContactsV2Table({
                 </TableCell>
               )}
               <TableCell>
-                {row.stage && row.is_active !== false ? (() => {
+              {row.stage && row.is_active !== false ? (() => {
+                  // Only the PRIMARY owner of this contact can edit stage (not admin)
                   const canEditStage =
-                    isAdmin ||
-                    (activeTab === 'my-primary' && row.primary_owner_id === crmUserId);
+                    !!(crmUserId && row.primary_owner_id === crmUserId);
                   return (
                     <StageDropdown
                       contactId={row.id}
                       currentStage={row.stage as AssignmentStage}
                       onStageChange={onStageChange}
                       readOnly={!canEditStage}
+                      crmUserId={crmUserId}
                     />
                   );
                 })() : (
