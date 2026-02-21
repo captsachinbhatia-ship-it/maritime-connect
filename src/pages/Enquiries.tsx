@@ -2,8 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Anchor } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { EnquiryFeedTab } from '@/components/enquiries/EnquiryFeedTab';
-import { EnquiryPipelineTab } from '@/components/enquiries/EnquiryPipelineTab';
+import { EnquiryGlobalFeed } from '@/components/enquiries/EnquiryGlobalFeed';
 
 export default function Enquiries() {
   const navigate = useNavigate();
@@ -14,10 +13,10 @@ export default function Enquiries() {
         <div>
           <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
             <Anchor className="h-7 w-7" />
-            Tanker Enquiry Desk
+            Enquiries
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Manage cargo enquiries and open vessel positions
+            Global enquiry feed — cargo & vessel positions
           </p>
         </div>
         <Button onClick={() => navigate('/enquiries/new')} className="gap-2">
@@ -26,22 +25,21 @@ export default function Enquiries() {
         </Button>
       </div>
 
-      <Tabs defaultValue="feed">
+      <Tabs defaultValue="ALL">
         <TabsList>
-          <TabsTrigger value="feed" className="gap-1.5">
-            Market Feed (All)
-          </TabsTrigger>
-          <TabsTrigger value="pipeline" className="gap-1.5">
-            My Work
-          </TabsTrigger>
+          <TabsTrigger value="ALL">All</TabsTrigger>
+          <TabsTrigger value="MY_ENQS">My ENQs</TabsTrigger>
+          <TabsTrigger value="HOT">Hot</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="feed" className="mt-4">
-          <EnquiryFeedTab />
+        <TabsContent value="ALL" className="mt-4">
+          <EnquiryGlobalFeed tab="ALL" />
         </TabsContent>
-
-        <TabsContent value="pipeline" className="mt-4">
-          <EnquiryPipelineTab />
+        <TabsContent value="MY_ENQS" className="mt-4">
+          <EnquiryGlobalFeed tab="MY_ENQS" />
+        </TabsContent>
+        <TabsContent value="HOT" className="mt-4">
+          <EnquiryGlobalFeed tab="HOT" />
         </TabsContent>
       </Tabs>
     </div>
