@@ -247,7 +247,6 @@ export async function createContact(
         assigned_by_crm_user_id: crmUser.id,
         assigned_at: now,
         stage_changed_at: now,
-        stage_changed_by_crm_user_id: crmUser.id,
       });
 
     if (assignmentError) {

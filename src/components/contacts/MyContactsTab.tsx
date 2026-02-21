@@ -232,7 +232,6 @@ export function MyContactsTab() {
         .update({
           stage: newStage,
           stage_changed_at: new Date().toISOString(),
-          stage_changed_by: crmUserId,
         })
         .eq('id', assignment.id);
 
