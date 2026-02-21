@@ -110,7 +110,6 @@ export function StageDropdown({
         .update({
           stage: newStage,
           stage_changed_at: new Date().toISOString(),
-          stage_changed_by: crmUserId ?? null,
         })
         .eq('id', assignment.id);
 

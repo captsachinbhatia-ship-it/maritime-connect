@@ -83,7 +83,6 @@ export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete
           status: "ACTIVE",
           assigned_at: now,
           stage_changed_at: now,
-          stage_changed_by_crm_user_id: crmUserId,
         }));
 
         const { error } = await supabase.from("contact_assignments").insert(payloads);
@@ -95,7 +94,6 @@ export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete
           .update({
             stage: bulkStage,
             stage_changed_at: now,
-            stage_changed_by_crm_user_id: crmUserId,
           })
           .in("contact_id", selectedIds)
           .eq("status", "ACTIVE")
