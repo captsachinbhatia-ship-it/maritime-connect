@@ -36,22 +36,37 @@ export function OwnerSummaryTable({
     const load = async () => {
       setIsLoading(true);
       try {
-        const [summaryRes, unassignedRes] = await Promise.all([
-          supabase.from('v_owner_summary').select('*'),
-          // Direct DB count — no client-side derivation
-          supabase.from('v_unassigned_contacts').select('id', { count: 'exact', head: true }),
+      const [countRes, unassignedRes] = await Promise.all([
+          supabase.from('v_owner_contact_counts').select('*'),
+          supabase.from('v_unassigned_active_contacts').select('id', { count: 'exact', head: true }),
         ]);
 
-        if (summaryRes.error || !summaryRes.data) {
+        if (countRes.error || !countRes.data) {
           setRows([]);
           setIsLoading(false);
           return;
         }
 
-        // Replace the view's unassigned row with the canonical count
+        // Build summary rows from v_owner_contact_counts
+        const userMap: Record<string, SummaryRow> = {};
+        (countRes.data as any[]).forEach((r: any) => {
+          const uid = r.owner_crm_user_id as string | null;
+          if (!uid) return;
+          if (!userMap[uid]) {
+            userMap[uid] = { user_id: uid, primary_count: 0, secondary_count: 0, total: 0 };
+          }
+          const count = Number(r.contact_count ?? 0);
+          const role = (r.assignment_role ?? '').toUpperCase();
+          if (role === 'PRIMARY') {
+            userMap[uid].primary_count = count;
+          } else if (role === 'SECONDARY') {
+            userMap[uid].secondary_count = count;
+          }
+          userMap[uid].total = userMap[uid].primary_count + userMap[uid].secondary_count;
+        });
+
         const dbUnassigned = unassignedRes.count ?? 0;
-        const filtered = (summaryRes.data as SummaryRow[]).filter(r => r.user_id !== null);
-        // Inject canonical unassigned row
+        const filtered = Object.values(userMap);
         filtered.push({ user_id: null, primary_count: 0, secondary_count: 0, total: dbUnassigned });
 
         setRows(filtered);
