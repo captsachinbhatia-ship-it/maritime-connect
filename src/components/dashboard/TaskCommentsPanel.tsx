@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Send } from 'lucide-react';
 import { getTaskComments, addTaskComment, type TaskComment } from '@/services/teamTasks';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { toast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -12,6 +13,7 @@ interface TaskCommentsPanelProps {
 }
 
 export function TaskCommentsPanel({ taskId }: TaskCommentsPanelProps) {
+  const { crmUserId } = useCrmUser();
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
@@ -29,9 +31,9 @@ export function TaskCommentsPanel({ taskId }: TaskCommentsPanelProps) {
   }, [fetchComments]);
 
   const handleSubmit = async () => {
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || !crmUserId) return;
     setSending(true);
-    const { error } = await addTaskComment(taskId, newComment.trim());
+    const { error } = await addTaskComment(taskId, crmUserId, newComment.trim());
     if (error) {
       toast({ title: 'Error', description: error, variant: 'destructive' });
     } else {

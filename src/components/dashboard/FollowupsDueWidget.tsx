@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { CalendarClock, Check, Clock, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow, format, isToday, isPast } from 'date-fns';
 import { getMyFollowupsDue, markFollowupComplete, type FollowupWithContact, type FollowupDueFilter } from '@/services/followups';
+import { supabase } from '@/lib/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 
@@ -19,6 +20,61 @@ export function FollowupsDueWidget() {
 
   const fetchData = useCallback(async (filter: FollowupDueFilter) => {
     setLoading(true);
+    // Try RPC first, fallback to existing service
+    try {
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('get_dashboard_followups', { p_days: 7 });
+
+      if (!rpcError && rpcData) {
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        const allItems: FollowupWithContact[] = rpcData.map((r: any) => ({
+          id: r.id,
+          contact_id: r.contact_id,
+          assignment_id: r.assignment_id || null,
+          interaction_id: null,
+          followup_type: r.followup_type || 'OTHER',
+          followup_reason: r.followup_reason || '',
+          notes: r.notes || null,
+          due_at: r.next_follow_up_at || r.due_at,
+          status: r.status || 'OPEN',
+          completed_at: null,
+          created_at: r.created_at || '',
+          created_by: null,
+          recurrence_enabled: null,
+          recurrence_frequency: null,
+          recurrence_interval: null,
+          recurrence_end_date: null,
+          recurrence_count: null,
+          contact_name: r.contact_name || 'Unknown',
+          company_name: r.company_name || null,
+        }));
+
+        let filtered = allItems;
+        if (filter === 'overdue') {
+          filtered = allItems.filter(f => f.due_at && f.due_at.slice(0, 10) < todayStr);
+        } else if (filter === 'today') {
+          filtered = allItems.filter(f => f.due_at && f.due_at.slice(0, 10) === todayStr);
+        } else if (filter === 'next7days') {
+          filtered = allItems.filter(f => f.due_at && f.due_at.slice(0, 10) > todayStr);
+        }
+
+        // Set counts
+        setCounts({
+          overdue: allItems.filter(f => f.due_at && f.due_at.slice(0, 10) < todayStr).length,
+          today: allItems.filter(f => f.due_at && f.due_at.slice(0, 10) === todayStr).length,
+          next7days: allItems.filter(f => f.due_at && f.due_at.slice(0, 10) > todayStr).length,
+        });
+
+        setData(filtered);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // RPC not available, fallback
+    }
+
+    // Fallback to existing service
     const { data: items } = await getMyFollowupsDue(filter);
     setData(items || []);
     setLoading(false);
@@ -27,6 +83,7 @@ export function FollowupsDueWidget() {
   // Fetch counts for all tabs on mount
   useEffect(() => {
     const fetchCounts = async () => {
+      // If RPC fetch works, counts are set there. Otherwise use fallback.
       const [od, td, n7] = await Promise.all([
         getMyFollowupsDue('overdue'),
         getMyFollowupsDue('today'),
