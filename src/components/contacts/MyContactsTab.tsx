@@ -100,21 +100,64 @@ export function MyContactsTab() {
     setError(null);
 
     try {
-      // Fetch ALL contacts (no stage filter) so we can derive counts client-side
-      const { data: pipelineData, error: pipelineError } = await supabase
-        .from('v_my_primary_contacts')
-        .select('*')
+      // STEP 1: Fetch assignment rows ONLY (no inner joins)
+      const { data: assignments, error: aErr } = await supabase
+        .from('contact_assignments')
+        .select('contact_id, stage')
         .eq('assigned_to_crm_user_id', crmUserId)
-        .order('full_name', { ascending: true });
+        .eq('assignment_role', 'PRIMARY')
+        .eq('status', 'ACTIVE')
+        .is('ended_at', null);
 
-      if (pipelineError) {
-        setError(pipelineError.message);
+      if (aErr) {
+        setError(aErr.message);
         setAllContacts([]);
         setIsLoading(false);
         return;
       }
 
-      let contactsList = (pipelineData || []) as ContactWithCompany[];
+      if (!assignments || assignments.length === 0) {
+        setAllContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const stageMap = new Map<string, string | null>();
+      assignments.forEach((a: any) => stageMap.set(a.contact_id, a.stage));
+      const contactIds = Array.from(stageMap.keys());
+
+      // STEP 2: Fetch contacts by IDs (NO inner joins)
+      const { data: contactData, error: cErr } = await supabase
+        .from('contacts')
+        .select('id, full_name, email, designation, phone, country_code, company_id, is_active, updated_at, created_by_crm_user_id, primary_phone, primary_phone_type')
+        .in('id', contactIds)
+        .is('deleted_at', null)
+        .order('full_name', { ascending: true });
+
+      if (cErr) {
+        setError(cErr.message);
+        setAllContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Lookup company names
+      const companyIds = [...new Set((contactData || []).map((c: any) => c.company_id).filter(Boolean))];
+      let companyMap = new Map<string, string>();
+      if (companyIds.length > 0) {
+        const { data: companies } = await supabase
+          .from('companies')
+          .select('id, company_name')
+          .in('id', companyIds);
+        (companies || []).forEach((co: any) => companyMap.set(co.id, co.company_name));
+      }
+
+      // Merge stage + company name into contacts
+      let contactsList = (contactData || []).map((c: any) => ({
+        ...c,
+        stage: stageMap.get(c.id) ?? null,
+        company_name: c.company_id ? (companyMap.get(c.company_id) ?? null) : null,
+      })) as ContactWithCompany[];
 
       // Fetch last interaction data
       if (contactsList.length > 0) {
