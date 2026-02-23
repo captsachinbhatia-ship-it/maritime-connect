@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
-import { getCurrentCrmUserId } from '@/services/profiles';
-import { MessageSquare, Phone, Mail, Video, StickyNote } from 'lucide-react';
+import { useCrmUser } from '@/hooks/useCrmUser';
+import { MessageSquare, Phone, Mail, Video, StickyNote, Plus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 interface RecentInteraction {
   id: string;
@@ -16,6 +18,7 @@ interface RecentInteraction {
   subject: string | null;
   notes: string | null;
   outcome: string | null;
+  creator_name: string | null;
 }
 
 const typeIcons: Record<string, typeof Phone> = {
@@ -27,8 +30,6 @@ const typeIcons: Record<string, typeof Phone> = {
 };
 
 // Keywords that indicate commercial info worth highlighting
-const COMMERCIAL_KEYWORDS = ['subs', 'sub', 'rate', 'rates', 'freight', 'hire', 'fixture', 'offer'];
-
 function extractCommercialChips(text: string | null): string[] {
   if (!text) return [];
   const lower = text.toLowerCase();
@@ -46,40 +47,63 @@ interface RecentInteractionsProps {
 }
 
 export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteractionsProps = {}) {
+  const { crmUserId: currentCrmUserId } = useCrmUser();
+  const navigate = useNavigate();
   const [interactions, setInteractions] = useState<RecentInteraction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [useRpc, setUseRpc] = useState(true);
+
+  const effectiveUserId = crmUserIdProp === undefined ? currentCrmUserId : crmUserIdProp;
 
   useEffect(() => {
     const fetchRecentInteractions = async () => {
       setIsLoading(true);
       try {
-        let userId: string | null = null;
+        // Try RPC first for ownership-aware fetching
+        if (effectiveUserId && useRpc) {
+          const { data: rpcData, error: rpcError } = await supabase
+            .rpc('get_my_recent_interactions', {
+              p_crm_user_id: effectiveUserId,
+              p_limit: 20,
+            });
 
-        if (crmUserIdProp === undefined) {
-          const { data: currentCrmUserId, error: crmError } = await getCurrentCrmUserId();
-          if (crmError || !currentCrmUserId) {
-            setInteractions([]);
+          if (!rpcError && rpcData) {
+            setInteractions(rpcData.map((r: any) => ({
+              id: r.id,
+              contact_id: r.contact_id,
+              contact_name: r.contact_name || 'Unknown',
+              interaction_type: r.interaction_type,
+              interaction_at: r.interaction_at,
+              subject: r.subject || null,
+              notes: r.notes || null,
+              outcome: r.outcome || null,
+              creator_name: r.creator_name || null,
+            })));
             setIsLoading(false);
             return;
           }
-          userId = currentCrmUserId;
-        } else {
-          userId = crmUserIdProp;
+          // RPC not available, fall back
+          if (rpcError) {
+            console.warn('RPC get_my_recent_interactions not available, falling back:', rpcError.message);
+            setUseRpc(false);
+          }
         }
 
-        let assignQuery = supabase
+        // Fallback: existing assignment-based logic
+        if (!effectiveUserId) {
+          setInteractions([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const { data: assignments } = await supabase
           .from('contact_assignments')
           .select('contact_id')
+          .eq('assigned_to_crm_user_id', effectiveUserId)
           .eq('status', 'ACTIVE')
           .in('assignment_role', ['primary', 'secondary']);
 
-        if (userId) {
-          assignQuery = assignQuery.eq('assigned_to_crm_user_id', userId);
-        }
-
-        const { data: assignments } = await assignQuery;
         const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
-
         if (contactIds.length === 0) {
           setInteractions([]);
           setIsLoading(false);
@@ -88,10 +112,10 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
 
         const { data: interactionsData } = await supabase
           .from('v_contact_interactions_timeline')
-          .select('id, contact_id, interaction_type, interaction_at, subject, notes, outcome')
+          .select('id, contact_id, interaction_type, interaction_at, subject, notes, outcome, creator_full_name')
           .in('contact_id', contactIds.slice(0, 500))
           .order('interaction_at', { ascending: false })
-          .limit(8);
+          .limit(20);
 
         if (!interactionsData || interactionsData.length === 0) {
           setInteractions([]);
@@ -112,6 +136,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
           contact_name: contactMap.get(i.contact_id) || 'Unknown',
           notes: i.notes || null,
           outcome: i.outcome || null,
+          creator_name: (i as any).creator_full_name || null,
         })));
       } catch (error) {
         console.error('Failed to fetch recent interactions:', error);
@@ -120,7 +145,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
       }
     };
     fetchRecentInteractions();
-  }, [crmUserIdProp]);
+  }, [effectiveUserId, useRpc]);
 
   return (
     <Card className="flex flex-col">
@@ -147,9 +172,14 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
             ))}
           </div>
         ) : interactions.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No recent interactions</p>
+          <div className="py-6 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">No interactions logged yet</p>
+            <Button variant="outline" size="sm" onClick={() => navigate('/contacts-v2')}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Log Interaction
+            </Button>
+          </div>
         ) : (
-          <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
             {interactions.map((interaction) => {
               const Icon = typeIcons[interaction.interaction_type] || MessageSquare;
               const commercialChips = extractCommercialChips(
@@ -190,6 +220,11 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
                           {chip}
                         </Badge>
                       ))}
+                      {interaction.creator_name && (
+                        <span className="text-[10px] text-muted-foreground">
+                          by {interaction.creator_name}
+                        </span>
+                      )}
                       <span className="text-[10px] text-muted-foreground ml-auto">
                         {formatDistanceToNow(new Date(interaction.interaction_at), { addSuffix: true })}
                       </span>
