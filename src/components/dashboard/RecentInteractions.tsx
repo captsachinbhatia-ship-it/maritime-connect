@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
+import { useAuth } from '@/contexts/AuthContext';
 import { MessageSquare, Phone, Mail, Video, StickyNote, Plus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -48,114 +49,55 @@ interface RecentInteractionsProps {
 
 export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteractionsProps = {}) {
   const { crmUserId: currentCrmUserId } = useCrmUser();
+  const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const [interactions, setInteractions] = useState<RecentInteraction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [useRpc, setUseRpc] = useState(true);
 
   const effectiveUserId = crmUserIdProp === undefined ? currentCrmUserId : crmUserIdProp;
 
   useEffect(() => {
     const fetchRecentInteractions = async () => {
+      if (!effectiveUserId && !isAdmin) {
+        setInteractions([]);
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       try {
-        // Primary: use dashboard RPC
-        const { data: rpcData, error: rpcError } = await supabase
-          .rpc('get_dashboard_recent_interactions', { p_limit: 10 });
-
-        if (!rpcError && rpcData) {
-          setInteractions(rpcData.map((r: any) => ({
-            id: r.id,
-            contact_id: r.contact_id,
-            contact_name: r.contact_name || 'Unknown',
-            interaction_type: r.interaction_type,
-            interaction_at: r.interaction_at,
-            subject: r.subject || null,
-            notes: r.notes || null,
-            outcome: r.outcome || null,
-            creator_name: r.creator_name || null,
-          })));
-          setIsLoading(false);
-          return;
-        }
-
-        // Fallback: try older RPC
-        if (effectiveUserId && useRpc) {
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .rpc('get_my_recent_interactions', {
-              p_crm_user_id: effectiveUserId,
-              p_limit: 20,
-            });
-
-          if (!fallbackError && fallbackData) {
-            setInteractions(fallbackData.map((r: any) => ({
-              id: r.id,
-              contact_id: r.contact_id,
-              contact_name: r.contact_name || 'Unknown',
-              interaction_type: r.interaction_type,
-              interaction_at: r.interaction_at,
-              subject: r.subject || null,
-              notes: r.notes || null,
-              outcome: r.outcome || null,
-              creator_name: r.creator_name || null,
-            })));
-            setIsLoading(false);
-            return;
-          }
-          if (fallbackError) {
-            console.warn('RPC get_my_recent_interactions not available:', fallbackError.message);
-            setUseRpc(false);
-          }
-        }
-
-        // Last resort: assignment-based
-        if (!effectiveUserId) {
-          setInteractions([]);
-          setIsLoading(false);
-          return;
-        }
-
-        const { data: assignments } = await supabase
-          .from('contact_assignments')
-          .select('contact_id')
-          .eq('assigned_to_crm_user_id', effectiveUserId)
-          .eq('status', 'ACTIVE')
-          .in('assignment_role', ['primary', 'secondary']);
-
-        const contactIds = [...new Set(assignments?.map(a => a.contact_id) || [])];
-        if (contactIds.length === 0) {
-          setInteractions([]);
-          setIsLoading(false);
-          return;
-        }
-
-        const { data: interactionsData } = await supabase
-          .from('v_contact_interactions_timeline')
-          .select('id, contact_id, interaction_type, interaction_at, subject, notes, outcome, creator_full_name')
-          .in('contact_id', contactIds.slice(0, 500))
+        // Query v_interaction_timeline_v2
+        let query = supabase
+          .from('v_interaction_timeline_v2')
+          .select('*')
           .order('interaction_at', { ascending: false })
-          .limit(20);
+          .limit(15);
 
-        if (!interactionsData || interactionsData.length === 0) {
+        // Non-admin: filter to PRIMARY assignments for current user
+        if (!isAdmin && effectiveUserId) {
+          query = query
+            .eq('assignment_role', 'PRIMARY')
+            .eq('assigned_to_crm_user_id', effectiveUserId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error('v_interaction_timeline_v2 error:', error.message);
           setInteractions([]);
           setIsLoading(false);
           return;
         }
 
-        const uniqueContactIds = [...new Set(interactionsData.map(i => i.contact_id))];
-        const { data: contacts } = await supabase
-          .from('contacts')
-          .select('id, full_name')
-          .in('id', uniqueContactIds);
-
-        const contactMap = new Map(contacts?.map(c => [c.id, c.full_name || 'Unknown']) || []);
-
-        setInteractions(interactionsData.map(i => ({
-          ...i,
-          contact_name: contactMap.get(i.contact_id) || 'Unknown',
-          notes: i.notes || null,
-          outcome: i.outcome || null,
-          creator_name: (i as any).creator_full_name || null,
+        setInteractions((data || []).map((r: any) => ({
+          id: r.id,
+          contact_id: r.contact_id,
+          contact_name: r.contact_name || r.full_name || 'Unknown',
+          interaction_type: r.interaction_type,
+          interaction_at: r.interaction_at,
+          subject: r.subject || null,
+          notes: r.notes || null,
+          outcome: r.outcome || null,
+          creator_name: r.creator_name || r.creator_full_name || null,
         })));
       } catch (error) {
         console.error('Failed to fetch recent interactions:', error);
@@ -164,7 +106,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
       }
     };
     fetchRecentInteractions();
-  }, [effectiveUserId, useRpc]);
+  }, [effectiveUserId, isAdmin]);
 
   return (
     <Card className="flex flex-col">
