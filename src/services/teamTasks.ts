@@ -127,6 +127,13 @@ export async function createTeamTask(input: {
   recipient_ids?: string[];
 }): Promise<{ error: string | null }> {
   try {
+    // Auth gate: ensure session is present so RLS can resolve auth.uid()
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('[createTeamTask] session uid:', session?.user?.id ?? 'NULL');
+    if (!session?.access_token) {
+      return { error: 'Session expired. Please login again.' };
+    }
+
     const { data: taskData, error: taskError } = await supabase
       .from('tasks')
       .insert({
