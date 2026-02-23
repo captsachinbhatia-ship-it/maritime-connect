@@ -432,7 +432,7 @@ export function useContactsV2Data() {
             if (normalized && normalized in computedCounts) computedCounts[normalized]++;
             computedCounts.ALL++;
           });
-          setStageCounts(computedCounts);
+          // Do NOT override stage counts for my-primary / my-secondary. // Those are computed separately to guarantee they match DB truth. if (tab !== 'my-primary' && tab !== 'my-secondary') {   setStageCounts(computedCounts); }
 
           // Apply stage filter to narrow contact IDs for the table
           let filteredIds = Array.from(validIdSet);
