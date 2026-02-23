@@ -294,43 +294,60 @@ export function useContactsV2Data() {
       // ── My Primary: 2-step assignment-first fetch (no inner joins) ──
       if (tab === 'my-primary') {
         try {
-          if (!crmUserId) { setRows([]); setTotalRows(0); setIsLoading(false); return; }
+          if (!crmUserId) { setRows([]); setTotalRows(0); setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 }); setIsLoading(false); return; }
 
           // STEP 1: fetch all assignment contact_ids + stage
-          let aQuery = supabase
+          const { data: assignments, error: aErr } = await supabase
             .from('contact_assignments')
             .select('contact_id, stage')
             .eq('assigned_to_crm_user_id', crmUserId)
             .eq('assignment_role', 'PRIMARY')
             .eq('status', 'ACTIVE')
             .is('ended_at', null);
-          const { data: assignments, error: aErr } = await aQuery;
           if (aErr) { setError(aErr.message); setRows([]); setTotalRows(0); setIsLoading(false); return; }
-          if (!assignments || assignments.length === 0) { setRows([]); setTotalRows(0); setIsLoading(false); return; }
+          if (!assignments || assignments.length === 0) { setRows([]); setTotalRows(0); setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 }); setIsLoading(false); return; }
 
           // Build stage map from assignments
           const stageMap = new Map<string, string | null>();
           assignments.forEach((a: any) => stageMap.set(a.contact_id, a.stage));
+          const allAssignmentIds = Array.from(stageMap.keys());
 
-          // Apply stage filter to narrow contact IDs
-          let filteredIds = Array.from(stageMap.keys());
+          // STEP 1b: Fetch ALL contact IDs that actually exist (not deleted) to compute accurate stage counts
+          const { data: validContacts, error: vcErr } = await supabase
+            .from('contacts')
+            .select('id')
+            .in('id', allAssignmentIds)
+            .is('deleted_at', null);
+          if (vcErr) { setError(vcErr.message); setRows([]); setTotalRows(0); setIsLoading(false); return; }
+
+          // Compute stage counts from the intersection of assignments + valid contacts
+          const validIdSet = new Set((validContacts || []).map((c: any) => c.id));
+          const computedCounts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
+          stageMap.forEach((stage, contactId) => {
+            if (!validIdSet.has(contactId)) return;
+            const normalized = normalizeStage(stage);
+            if (normalized && normalized in computedCounts) computedCounts[normalized]++;
+            computedCounts.ALL++;
+          });
+          setStageCounts(computedCounts);
+
+          // Apply stage filter to narrow contact IDs for the table
+          let filteredIds = Array.from(validIdSet);
           if (sf !== 'ALL') {
             filteredIds = filteredIds.filter(id => normalizeStage(stageMap.get(id)) === sf);
           }
           if (filteredIds.length === 0) { setRows([]); setTotalRows(0); setIsLoading(false); return; }
 
-          // STEP 2: fetch contacts by IDs (NO joins)
+          // STEP 2: fetch contacts by IDs for display (NO joins)
           let cQuery = supabase
             .from('contacts')
             .select('id, full_name, email, designation, phone, country_code, company_id, is_active, updated_at, created_by_crm_user_id, is_deleted, deleted_at', { count: 'exact' })
             .in('id', filteredIds)
             .is('deleted_at', null);
 
-          // Text search
           if (q.trim()) {
             cQuery = cQuery.ilike('full_name', `%${q.trim()}%`);
           }
-          // Alpha filter
           if (alpha && alpha !== '#') {
             cQuery = cQuery.ilike('full_name', `${alpha}%`);
           } else if (alpha === '#') {
@@ -355,7 +372,7 @@ export function useContactsV2Data() {
           const { data: contacts, count: cCount, error: cErr } = await cQuery;
           if (cErr) { setError(cErr.message); setRows([]); setTotalRows(0); setIsLoading(false); return; }
 
-          // Lookup company names in a lightweight second query
+          // Lookup company names
           const companyIds = [...new Set((contacts || []).map((c: any) => c.company_id).filter(Boolean))];
           let companyMap = new Map<string, string>();
           if (companyIds.length > 0) {
@@ -634,7 +651,12 @@ export function useContactsV2Data() {
   // ── Combined fetch ─────────────────────────────────────────────
   const fetchAll = useCallback(
     async (tab: TabKey, sf: StageFilter, q: string, p: number, alpha: string | null = null, of: OwnerFilterState = EMPTY_OWNER_FILTER) => {
-      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha, of)]);
+      // For my-primary, stage counts are computed inside fetchContacts from the same dataset
+      if (tab === 'my-primary') {
+        await fetchContacts(tab, sf, q, p, alpha, of);
+      } else {
+        await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha, of)]);
+      }
     },
     [fetchStageCounts, fetchContacts]
   );
