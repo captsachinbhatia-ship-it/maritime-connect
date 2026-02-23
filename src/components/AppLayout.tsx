@@ -5,9 +5,11 @@ import { NotificationCenter } from '@/components/notifications/NotificationCente
 import { EnquiryNotificationBell } from '@/components/notifications/EnquiryNotificationBell';
  import { PreviewBanner } from '@/components/PreviewBanner';
  import { useAuth } from '@/contexts/AuthContext';
+import { useEnquiryPopup } from '@/hooks/useEnquiryPopup';
 
 export function AppLayout() {
   const { isPreviewMode } = useAuth();
+  useEnquiryPopup();
 
   return (
     <SidebarProvider>
