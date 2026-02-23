@@ -123,6 +123,20 @@ export function useContactsV2Data() {
     ACHIEVEMENT: 0,
   });
 
+  const [myPrimaryStageCounts, setMyPrimaryStageCounts] = useState<Record<StageFilter, number>>({
+    ALL: 0,
+    COLD_CALLING: 0,
+    ASPIRATION: 0,
+    ACHIEVEMENT: 0,
+  });
+
+  const [mySecondaryStageCounts, setMySecondaryStageCounts] = useState<Record<StageFilter, number>>({
+    ALL: 0,
+    COLD_CALLING: 0,
+    ASPIRATION: 0,
+    ACHIEVEMENT: 0,
+  });
+
   // ── Fetch stage counts ─────────────────────────────────────────
   const fetchStageCounts = useCallback(
     async (tab: TabKey) => {
@@ -184,7 +198,7 @@ export function useContactsV2Data() {
               counts.ALL++;
             });
 
-            setStageCounts(counts);
+            setMyPrimaryStageCounts(counts);
             return;
           }
         }
@@ -230,7 +244,7 @@ export function useContactsV2Data() {
             if (stage && stage in counts) counts[stage]++;
             counts.ALL++;
           });
-          setStageCounts(counts);
+          setMySecondaryStageCounts(counts);
           return;
         }
 
@@ -851,12 +865,7 @@ export function useContactsV2Data() {
       alpha: string | null = null,
       of: OwnerFilterState = EMPTY_OWNER_FILTER,
     ) => {
-      // For my-primary, stage counts are computed inside fetchContacts from the same dataset
-      if (tab === "my-primary") {
-        await fetchContacts(tab, sf, q, p, alpha, of);
-      } else {
-        await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha, of)]);
-      }
+      await Promise.all([fetchStageCounts(tab), fetchContacts(tab, sf, q, p, alpha, of)]);
     },
     [fetchStageCounts, fetchContacts],
   );
@@ -941,6 +950,8 @@ export function useContactsV2Data() {
     totalRows,
     totalPages,
     stageCounts,
+    myPrimaryStageCounts,
+    mySecondaryStageCounts,
     changeTab,
     setStageFilter,
     setSearch,

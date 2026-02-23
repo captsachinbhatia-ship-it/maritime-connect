@@ -899,6 +899,8 @@ export default function ContactsV2() {
     totalRows,
     totalPages,
     stageCounts,
+    myPrimaryStageCounts,
+    mySecondaryStageCounts,
     changeTab,
     setStageFilter,
     setSearch,
@@ -1407,7 +1409,7 @@ export default function ContactsV2() {
       {/* Stage chips (My Primary only) + search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {activeTab === 'my-primary' && (
-          <StageChipBar counts={stageCounts} active={stageFilter} onChange={setStageFilter} />
+          <StageChipBar counts={activeTab === 'my-primary' ? myPrimaryStageCounts : stageCounts} active={stageFilter} onChange={setStageFilter} />
         )}
         <div className={`relative w-full max-w-sm ${activeTab !== 'my-primary' ? '' : ''}`}>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
