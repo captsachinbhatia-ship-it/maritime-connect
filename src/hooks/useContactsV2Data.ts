@@ -146,61 +146,46 @@ export function useContactsV2Data() {
         return;
       }
       try {
-        // For my-primary: 2-step fetch from contact_assignments to avoid view inner-join drops
         if (tab === "my-primary") {
           if (!crmUserId) {
             setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             return;
           }
-          // ✅ My Primary: count stages from CONTACTS (source of truth) and exclude deleted contacts
-          if (tab === "my-primary") {
-            if (!crmUserId) {
-              setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
-              return;
-            }
 
-            const { data: assignments, error: aErr } = await supabase
-              .from("contact_assignments")
-              .select("contact_id")
-              .eq("assigned_to_crm_user_id", crmUserId)
-              .eq("assignment_role", "PRIMARY")
-              .eq("status", "ACTIVE")
-              .is("ended_at", null);
+          const { data: asg, error: aErr } = await supabase
+            .from("contact_assignments")
+            .select("contact_id")
+            .eq("assigned_to_crm_user_id", crmUserId)
+            .eq("assignment_role", "PRIMARY")
+            .eq("status", "ACTIVE")
+            .is("ended_at", null);
 
-            if (aErr) {
-              console.error("My Primary assignment fetch failed:", aErr.message);
-              return;
-            }
+          if (aErr) return;
 
-            const contactIds = (assignments ?? []).map((a: any) => a.contact_id).filter(Boolean);
-
-            if (contactIds.length === 0) {
-              setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
-              return;
-            }
-
-            const { data: contacts, error: cErr } = await supabase
-              .from("contacts")
-              .select("id, stage, deleted_at")
-              .in("id", contactIds)
-              .is("deleted_at", null);
-
-            if (cErr) {
-              console.error("My Primary contacts stage fetch failed:", cErr.message);
-              return;
-            }
-
-            const counts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
-
-            (contacts ?? []).forEach((c: any) => {
-              const stage = normalizeStage(c.stage);
-              if (stage && stage in counts) counts[stage]++;
-              counts.ALL++;
-            });
-
-            setMyPrimaryStageCounts(counts);
+          const ids = (asg || []).map((r: any) => r.contact_id);
+          if (!ids.length) {
+            setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             return;
           }
+
+          const { data: rows, error: cErr } = await supabase
+            .from("contacts")
+            .select("id, stage")
+            .in("id", ids)
+            .is("deleted_at", null);
+
+          if (cErr) return;
+
+          const counts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
+
+          (rows || []).forEach((c: any) => {
+            const stage = normalizeStage(c.stage);
+            if (stage && stage in counts) counts[stage]++;
+            counts.ALL++;
+          });
+
+          setMyPrimaryStageCounts(counts);
+          return;
         }
 
         // For my-secondary: 2-step fetch from contact_assignments
