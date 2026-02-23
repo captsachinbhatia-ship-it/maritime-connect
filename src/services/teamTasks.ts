@@ -48,7 +48,7 @@ export interface TaskUserState {
 
 /* ─── Fetch tasks (RLS handles visibility) ─── */
 
-export async function getMyTasks(limit = 50, offset = 0): Promise<{
+export async function getMyTasks(limit = 50): Promise<{
   data: Task[] | null;
   error: string | null;
 }> {
@@ -57,13 +57,20 @@ export async function getMyTasks(limit = 50, offset = 0): Promise<{
       .from('tasks')
       .select(`
         *,
-        created_by:crm_users!tasks_created_by_fk(full_name, email),
-        assigned_to:crm_users!tasks_assigned_to_fk(full_name, email),
-        task_user_state(status, pinned),
-        task_recipients(count)
+        created_by:crm_users!tasks_created_by_fk(id, full_name, email),
+        assigned_to:crm_users!tasks_assigned_to_fk(id, full_name, email),
+        task_recipients(
+          crm_user_id,
+          user:crm_users!task_recipients_user_fk(id, full_name, email)
+        ),
+        task_user_state(
+          status,
+          pinned,
+          pinned_order
+        )
       `)
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .limit(limit);
 
     if (error) {
       // Table might not exist yet
@@ -86,7 +93,7 @@ export async function getMyTasks(limit = 50, offset = 0): Promise<{
       creator_name: row.created_by?.full_name || null,
       my_status: row.task_user_state?.[0]?.status || 'OPEN',
       my_pinned: row.task_user_state?.[0]?.pinned ?? false,
-      recipient_count: row.task_recipients?.[0]?.count ?? 0,
+      recipient_count: Array.isArray(row.task_recipients) ? row.task_recipients.length : 0,
     }));
 
     // Sort: pinned first, then by due_at asc nulls last, then created_at desc

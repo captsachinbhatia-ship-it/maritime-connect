@@ -171,7 +171,7 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <ScrollArea className="max-h-[150px] rounded-md border p-2">
+                <ScrollArea className="max-h-[260px] rounded-md border p-2">
                   <div className="space-y-1">
                     {users.map((u) => (
                       <label key={u.id} className="flex items-center gap-2 rounded p-1.5 hover:bg-muted cursor-pointer">

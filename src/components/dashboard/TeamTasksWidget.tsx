@@ -49,7 +49,7 @@ export function TeamTasksWidget() {
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await getMyTasks(50, 0);
+    const { data, error } = await getMyTasks(50);
     if (error) {
       toast({ title: 'Error loading tasks', description: error, variant: 'destructive' });
     }
