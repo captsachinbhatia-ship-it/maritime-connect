@@ -59,16 +59,36 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
     const fetchRecentInteractions = async () => {
       setIsLoading(true);
       try {
-        // Try RPC first for ownership-aware fetching
+        // Primary: use dashboard RPC
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('get_dashboard_recent_interactions', { p_limit: 10 });
+
+        if (!rpcError && rpcData) {
+          setInteractions(rpcData.map((r: any) => ({
+            id: r.id,
+            contact_id: r.contact_id,
+            contact_name: r.contact_name || 'Unknown',
+            interaction_type: r.interaction_type,
+            interaction_at: r.interaction_at,
+            subject: r.subject || null,
+            notes: r.notes || null,
+            outcome: r.outcome || null,
+            creator_name: r.creator_name || null,
+          })));
+          setIsLoading(false);
+          return;
+        }
+
+        // Fallback: try older RPC
         if (effectiveUserId && useRpc) {
-          const { data: rpcData, error: rpcError } = await supabase
+          const { data: fallbackData, error: fallbackError } = await supabase
             .rpc('get_my_recent_interactions', {
               p_crm_user_id: effectiveUserId,
               p_limit: 20,
             });
 
-          if (!rpcError && rpcData) {
-            setInteractions(rpcData.map((r: any) => ({
+          if (!fallbackError && fallbackData) {
+            setInteractions(fallbackData.map((r: any) => ({
               id: r.id,
               contact_id: r.contact_id,
               contact_name: r.contact_name || 'Unknown',
@@ -82,14 +102,13 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
             setIsLoading(false);
             return;
           }
-          // RPC not available, fall back
-          if (rpcError) {
-            console.warn('RPC get_my_recent_interactions not available, falling back:', rpcError.message);
+          if (fallbackError) {
+            console.warn('RPC get_my_recent_interactions not available:', fallbackError.message);
             setUseRpc(false);
           }
         }
 
-        // Fallback: existing assignment-based logic
+        // Last resort: assignment-based
         if (!effectiveUserId) {
           setInteractions([]);
           setIsLoading(false);

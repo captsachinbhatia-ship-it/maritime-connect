@@ -14,7 +14,6 @@ export interface Task {
   is_broadcast: boolean;
   created_by_crm_user_id: string;
   created_at: string;
-  updated_at: string;
   // joined
   creator_name?: string;
   my_status?: TaskUserStatus;
@@ -48,7 +47,7 @@ export interface TaskUserState {
 
 /* ─── Fetch tasks (RLS handles visibility) ─── */
 
-export async function getMyTasks(limit = 50): Promise<{
+export async function getMyTasks(crmUserId: string, limit = 50): Promise<{
   data: Task[] | null;
   error: string | null;
 }> {
@@ -56,14 +55,21 @@ export async function getMyTasks(limit = 50): Promise<{
     const { data, error } = await supabase
       .from('tasks')
       .select(`
-        *,
+        id,
+        title,
+        notes,
+        priority,
+        due_at,
+        is_broadcast,
+        created_at,
+        created_by_crm_user_id,
         created_by:crm_users!tasks_created_by_fk(id, full_name, email),
-        assigned_to:crm_users!tasks_assigned_to_fk(id, full_name, email),
         task_recipients(
           crm_user_id,
           user:crm_users!task_recipients_user_fk(id, full_name, email)
         ),
         task_user_state(
+          crm_user_id,
           status,
           pinned,
           pinned_order
@@ -73,34 +79,38 @@ export async function getMyTasks(limit = 50): Promise<{
       .limit(limit);
 
     if (error) {
-      // Table might not exist yet
       if (error.message.includes('does not exist') || error.code === '42P01') {
         return { data: [], error: null };
       }
       return { data: null, error: error.message };
     }
 
-    const mapped: Task[] = (data || []).map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      notes: row.notes,
-      due_at: row.due_at,
-      priority: row.priority || 'MED',
-      is_broadcast: row.is_broadcast ?? false,
-      created_by_crm_user_id: row.created_by_crm_user_id,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      creator_name: row.created_by?.full_name || null,
-      my_status: row.task_user_state?.[0]?.status || 'OPEN',
-      my_pinned: row.task_user_state?.[0]?.pinned ?? false,
-      recipient_count: Array.isArray(row.task_recipients) ? row.task_recipients.length : 0,
-    }));
+    const mapped: Task[] = (data || []).map((row: any) => {
+      // Find the task_user_state row for the current user
+      const myState = Array.isArray(row.task_user_state)
+        ? row.task_user_state.find((s: any) => s.crm_user_id === crmUserId)
+        : null;
+
+      return {
+        id: row.id,
+        title: row.title,
+        notes: row.notes,
+        due_at: row.due_at,
+        priority: row.priority || 'MED',
+        is_broadcast: row.is_broadcast ?? false,
+        created_by_crm_user_id: row.created_by_crm_user_id,
+        created_at: row.created_at,
+        creator_name: row.created_by?.full_name || null,
+        my_status: myState?.status || 'OPEN',
+        my_pinned: myState?.pinned ?? false,
+        recipient_count: Array.isArray(row.task_recipients) ? row.task_recipients.length : 0,
+      };
+    });
 
     // Sort: pinned first, then by due_at asc nulls last, then created_at desc
     mapped.sort((a, b) => {
       if (a.my_pinned && !b.my_pinned) return -1;
       if (!a.my_pinned && b.my_pinned) return 1;
-      // due_at asc nulls last
       if (a.due_at && b.due_at) {
         const diff = new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
         if (diff !== 0) return diff;
@@ -125,15 +135,17 @@ export async function createTeamTask(input: {
   priority: TaskPriority;
   is_broadcast: boolean;
   recipient_ids?: string[];
+  crmUserId: string;
 }): Promise<{ error: string | null }> {
   try {
-    // Auth gate: ensure session is present so RLS can resolve auth.uid()
+    // Auth gate
     const { data: { session } } = await supabase.auth.getSession();
     console.log('[createTeamTask] session uid:', session?.user?.id ?? 'NULL');
     if (!session?.access_token) {
       return { error: 'Session expired. Please login again.' };
     }
 
+    // Do NOT set created_by_crm_user_id — DB default handles it
     const { data: taskData, error: taskError } = await supabase
       .from('tasks')
       .insert({
@@ -153,6 +165,7 @@ export async function createTeamTask(input: {
       const rows = input.recipient_ids.map((uid) => ({
         task_id: taskData.id,
         crm_user_id: uid,
+        assigned_by_crm_user_id: input.crmUserId,
       }));
       const { error: recError } = await supabase
         .from('task_recipients')
@@ -175,7 +188,7 @@ export async function updateTeamTask(
   try {
     const { error } = await supabase
       .from('tasks')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('id', taskId);
     if (error) return { error: error.message };
     return { error: null };
@@ -200,6 +213,7 @@ export async function deleteTeamTask(taskId: string): Promise<{ error: string | 
 
 export async function upsertTaskUserState(
   taskId: string,
+  crmUserId: string,
   updates: Partial<Pick<TaskUserState, 'status' | 'pinned'>>
 ): Promise<{ error: string | null }> {
   try {
@@ -208,6 +222,7 @@ export async function upsertTaskUserState(
       .upsert(
         {
           task_id: taskId,
+          crm_user_id: crmUserId,
           ...updates,
         },
         { onConflict: 'task_id,crm_user_id' }
@@ -252,11 +267,11 @@ export async function getTaskComments(taskId: string): Promise<{
   }
 }
 
-export async function addTaskComment(taskId: string, comment: string): Promise<{ error: string | null }> {
+export async function addTaskComment(taskId: string, crmUserId: string, comment: string): Promise<{ error: string | null }> {
   try {
     const { error } = await supabase
       .from('task_comments')
-      .insert({ task_id: taskId, comment });
+      .insert({ task_id: taskId, crm_user_id: crmUserId, comment });
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
@@ -295,9 +310,13 @@ export async function getTaskRecipients(taskId: string): Promise<{
   }
 }
 
-export async function addTaskRecipients(taskId: string, userIds: string[]): Promise<{ error: string | null }> {
+export async function addTaskRecipients(taskId: string, userIds: string[], assignedByCrmUserId: string): Promise<{ error: string | null }> {
   try {
-    const rows = userIds.map((uid) => ({ task_id: taskId, crm_user_id: uid }));
+    const rows = userIds.map((uid) => ({
+      task_id: taskId,
+      crm_user_id: uid,
+      assigned_by_crm_user_id: assignedByCrmUserId,
+    }));
     const { error } = await supabase.from('task_recipients').insert(rows);
     if (error) return { error: error.message };
     return { error: null };

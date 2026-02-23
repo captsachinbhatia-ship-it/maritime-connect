@@ -18,6 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import { createTeamTask, type TaskPriority } from '@/services/teamTasks';
 import { listCrmUsers, type CrmUser } from '@/services/users';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { toast } from '@/hooks/use-toast';
 
 interface CreateTaskModalProps {
@@ -27,6 +28,7 @@ interface CreateTaskModalProps {
 }
 
 export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskModalProps) {
+  const { crmUserId } = useCrmUser();
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -57,7 +59,7 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
   };
 
   const handleSubmit = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !crmUserId) return;
     setSubmitting(true);
 
     const { error } = await createTeamTask({
@@ -67,6 +69,7 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
       priority,
       is_broadcast: isBroadcast,
       recipient_ids: isBroadcast ? [] : selectedRecipients,
+      crmUserId,
     });
 
     if (error) {
@@ -100,48 +103,25 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Title */}
           <div className="space-y-1">
             <Label htmlFor="task-title" className="text-xs">Title *</Label>
-            <Input
-              id="task-title"
-              placeholder="Task title..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="h-9"
-            />
+            <Input id="task-title" placeholder="Task title..." value={title} onChange={(e) => setTitle(e.target.value)} className="h-9" />
           </div>
 
-          {/* Notes */}
           <div className="space-y-1">
             <Label htmlFor="task-notes" className="text-xs">Notes</Label>
-            <Textarea
-              id="task-notes"
-              placeholder="Optional notes..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="min-h-[60px] text-sm resize-none"
-            />
+            <Textarea id="task-notes" placeholder="Optional notes..." value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-[60px] text-sm resize-none" />
           </div>
 
-          {/* Due Date + Priority row */}
           <div className="flex gap-3">
             <div className="flex-1 space-y-1">
               <Label htmlFor="task-due" className="text-xs">Due Date</Label>
-              <Input
-                id="task-due"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="h-9"
-              />
+              <Input id="task-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="h-9" />
             </div>
             <div className="w-28 space-y-1">
               <Label className="text-xs">Priority</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {(['LOW', 'MED', 'HIGH'] as TaskPriority[]).map((p) => (
                     <SelectItem key={p} value={p}>
@@ -153,7 +133,6 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
             </div>
           </div>
 
-          {/* Broadcast toggle */}
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
               <p className="text-sm font-medium">Broadcast to All Users</p>
@@ -162,7 +141,6 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
             <Switch checked={isBroadcast} onCheckedChange={setIsBroadcast} />
           </div>
 
-          {/* Recipient selector (only if not broadcast) */}
           {!isBroadcast && (
             <div className="space-y-1">
               <Label className="text-xs">Select Recipients</Label>
@@ -175,10 +153,7 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
                   <div className="space-y-1">
                     {users.map((u) => (
                       <label key={u.id} className="flex items-center gap-2 rounded p-1.5 hover:bg-muted cursor-pointer">
-                        <Checkbox
-                          checked={selectedRecipients.includes(u.id)}
-                          onCheckedChange={() => toggleRecipient(u.id)}
-                        />
+                        <Checkbox checked={selectedRecipients.includes(u.id)} onCheckedChange={() => toggleRecipient(u.id)} />
                         <span className="text-sm">{u.full_name}</span>
                         <span className="text-[10px] text-muted-foreground ml-auto">{u.role}</span>
                       </label>
@@ -194,9 +169,7 @@ export function CreateTaskModal({ open, onOpenChange, onCreated }: CreateTaskMod
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={submitting || !title.trim()}>
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}
             Create Task

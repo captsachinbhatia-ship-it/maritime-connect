@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,7 +17,6 @@ import {
   PinOff,
   Trash2,
   ChevronDown,
-  MessageSquare,
   Users,
   Globe,
   AlertCircle,
@@ -48,22 +47,24 @@ export function TeamTasksWidget() {
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
 
   const fetchTasks = useCallback(async () => {
+    if (!crmUserId) return;
     setLoading(true);
-    const { data, error } = await getMyTasks(50);
+    const { data, error } = await getMyTasks(crmUserId, 50);
     if (error) {
       toast({ title: 'Error loading tasks', description: error, variant: 'destructive' });
     }
     setTasks(data || []);
     setLoading(false);
-  }, []);
+  }, [crmUserId]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
 
   const handleToggleDone = async (task: Task) => {
+    if (!crmUserId) return;
     const newStatus = task.my_status === 'DONE' ? 'OPEN' : 'DONE';
-    const { error } = await upsertTaskUserState(task.id, { status: newStatus });
+    const { error } = await upsertTaskUserState(task.id, crmUserId, { status: newStatus });
     if (error) {
       toast({ title: 'Error', description: error, variant: 'destructive' });
     } else {
@@ -72,7 +73,8 @@ export function TeamTasksWidget() {
   };
 
   const handleTogglePin = async (task: Task) => {
-    const { error } = await upsertTaskUserState(task.id, { pinned: !task.my_pinned });
+    if (!crmUserId) return;
+    const { error } = await upsertTaskUserState(task.id, crmUserId, { pinned: !task.my_pinned });
     if (error) {
       toast({ title: 'Error', description: error, variant: 'destructive' });
     } else {
@@ -89,16 +91,11 @@ export function TeamTasksWidget() {
     }
   };
 
-  // Filter tasks based on main tab and filter tab
   const getFilteredTasks = () => {
     let filtered = tasks;
-
-    // Main tab filter
     if (mainTab === 'team') {
       filtered = filtered.filter((t) => t.created_by_crm_user_id === crmUserId);
     }
-
-    // Sub-filter
     switch (filterTab) {
       case 'open':
         filtered = filtered.filter((t) => t.my_status !== 'DONE');
@@ -113,7 +110,6 @@ export function TeamTasksWidget() {
         filtered = filtered.filter((t) => t.created_by_crm_user_id === crmUserId);
         break;
     }
-
     return filtered;
   };
 
@@ -141,7 +137,6 @@ export function TeamTasksWidget() {
         </div>
       </CardHeader>
       <CardContent className="flex-1">
-        {/* Main tabs: My Tasks / Team Tasks */}
         <Tabs value={mainTab} onValueChange={setMainTab}>
           <TabsList className="w-full h-8 mb-2">
             <TabsTrigger value="my" className="text-xs flex-1">My Tasks</TabsTrigger>
@@ -149,7 +144,6 @@ export function TeamTasksWidget() {
           </TabsList>
         </Tabs>
 
-        {/* Filter sub-tabs */}
         <Tabs value={filterTab} onValueChange={(v) => setFilterTab(v as FilterTab)}>
           <TabsList className="w-full h-7">
             <TabsTrigger value="all" className="text-[10px] flex-1">All</TabsTrigger>
@@ -160,7 +154,6 @@ export function TeamTasksWidget() {
           </TabsList>
         </Tabs>
 
-        {/* Task list */}
         <div className="mt-2">
           {loading ? (
             <div className="space-y-2">
@@ -181,11 +174,7 @@ export function TeamTasksWidget() {
                   open={expandedTask === task.id}
                   onOpenChange={(open) => setExpandedTask(open ? task.id : null)}
                 >
-                  <div
-                    className={`rounded-lg border p-2 ${
-                      task.my_status === 'DONE' ? 'opacity-50' : ''
-                    }`}
-                  >
+                  <div className={`rounded-lg border p-2 ${task.my_status === 'DONE' ? 'opacity-50' : ''}`}>
                     <div className="flex items-start gap-2">
                       <Checkbox
                         checked={task.my_status === 'DONE'}
@@ -193,18 +182,11 @@ export function TeamTasksWidget() {
                         className="shrink-0 mt-0.5"
                       />
                       <div className="min-w-0 flex-1">
-                        <p
-                          className={`text-sm leading-tight ${
-                            task.my_status === 'DONE' ? 'line-through text-muted-foreground' : ''
-                          }`}
-                        >
+                        <p className={`text-sm leading-tight ${task.my_status === 'DONE' ? 'line-through text-muted-foreground' : ''}`}>
                           {task.title}
                         </p>
                         <div className="flex items-center gap-1 mt-1 flex-wrap">
-                          <Badge
-                            variant="secondary"
-                            className={`text-[10px] py-0 h-4 px-1 ${priorityColors[task.priority] || ''}`}
-                          >
+                          <Badge variant="secondary" className={`text-[10px] py-0 h-4 px-1 ${priorityColors[task.priority] || ''}`}>
                             {task.priority}
                           </Badge>
                           {task.is_broadcast ? (
@@ -218,20 +200,14 @@ export function TeamTasksWidget() {
                           )}
                           {task.due_at && (
                             <Badge
-                              variant={
-                                isPast(new Date(task.due_at)) && !isToday(new Date(task.due_at))
-                                  ? 'destructive'
-                                  : 'outline'
-                              }
+                              variant={isPast(new Date(task.due_at)) && !isToday(new Date(task.due_at)) ? 'destructive' : 'outline'}
                               className="text-[10px] py-0 h-4 px-1"
                             >
                               {format(new Date(task.due_at), 'dd MMM')}
                             </Badge>
                           )}
                           {task.creator_name && (
-                            <span className="text-[10px] text-muted-foreground">
-                              by {task.creator_name}
-                            </span>
+                            <span className="text-[10px] text-muted-foreground">by {task.creator_name}</span>
                           )}
                         </div>
                       </div>
@@ -241,36 +217,19 @@ export function TeamTasksWidget() {
                             <ChevronDown className="h-3 w-3" />
                           </Button>
                         </CollapsibleTrigger>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6"
-                          onClick={() => handleTogglePin(task)}
-                        >
-                          {task.my_pinned ? (
-                            <PinOff className="h-3 w-3" />
-                          ) : (
-                            <Pin className="h-3 w-3" />
-                          )}
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleTogglePin(task)}>
+                          {task.my_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                         </Button>
                         {(task.created_by_crm_user_id === crmUserId || isAdmin) && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 text-destructive"
-                            onClick={() => handleDelete(task.id)}
-                          >
+                          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => handleDelete(task.id)}>
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         )}
                       </div>
                     </div>
-
                     <CollapsibleContent>
                       {task.notes && (
-                        <p className="text-[11px] text-muted-foreground mt-2 ml-6">
-                          {task.notes}
-                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-2 ml-6">{task.notes}</p>
                       )}
                       <div className="ml-6">
                         <TaskCommentsPanel taskId={task.id} />
@@ -284,11 +243,7 @@ export function TeamTasksWidget() {
         </div>
       </CardContent>
 
-      <CreateTaskModal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={fetchTasks}
-      />
+      <CreateTaskModal open={createOpen} onOpenChange={setCreateOpen} onCreated={fetchTasks} />
     </Card>
   );
 }
