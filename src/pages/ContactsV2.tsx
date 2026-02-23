@@ -823,14 +823,20 @@ function useCumulativeCounts() {
       ? supabase.from('v_directory_contacts_ro').select('*', { count: 'exact', head: true }).eq('created_by_crm_user_id', crmUserId).is('primary_owner_id', null)
       : null;
 
-    // User-scoped primary/secondary counts from the SAME views used for rows
+    // User-scoped primary/secondary counts from contact_assignments (consistent with row fetch)
     const userPrimaryQuery = crmUserId
-      ? supabase.from('v_my_primary_contacts').select('*', { count: 'exact', head: true })
+      ? supabase.from('contact_assignments').select('*', { count: 'exact', head: true })
           .eq('assigned_to_crm_user_id', crmUserId)
+          .eq('assignment_role', 'PRIMARY')
+          .eq('status', 'ACTIVE')
+          .is('ended_at', null)
       : null;
     const userSecondaryQuery = crmUserId
-      ? supabase.from('v_my_secondary_contacts').select('*', { count: 'exact', head: true })
+      ? supabase.from('contact_assignments').select('*', { count: 'exact', head: true })
           .eq('assigned_to_crm_user_id', crmUserId)
+          .eq('assignment_role', 'SECONDARY')
+          .eq('status', 'ACTIVE')
+          .is('ended_at', null)
       : null;
 
     // Deleted contacts count

@@ -92,28 +92,92 @@ export function SecondaryContactsTab() {
     setError(null);
 
     try {
-      // Single query to the secondary contacts view
-      const { data: viewData, error: viewError } = await supabase
-        .from('v_my_secondary_contacts')
-        .select('*')
-        .order('full_name', { ascending: true });
+      // STEP 1: Fetch secondary assignments for this user
+      const { data: secAsg, error: sErr } = await supabase
+        .from('contact_assignments')
+        .select('contact_id')
+        .eq('assigned_to_crm_user_id', crmUserId)
+        .eq('assignment_role', 'SECONDARY')
+        .eq('status', 'ACTIVE')
+        .is('ended_at', null);
 
-      if (viewError) {
-        setError(viewError.message);
+      if (sErr) {
+        setError(sErr.message);
         setContacts([]);
         setIsLoading(false);
         return;
       }
 
-      let contactsList = (viewData || []) as SecondaryContact[];
+      if (!secAsg || secAsg.length === 0) {
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const contactIds = secAsg.map((a: any) => a.contact_id);
+
+      // STEP 2: Fetch contacts by IDs (NO inner joins)
+      const { data: contactData, error: cErr } = await supabase
+        .from('contacts')
+        .select('id, full_name, email, designation, phone, country_code, company_id, is_active, updated_at, created_by_crm_user_id, primary_phone, primary_phone_type')
+        .in('id', contactIds)
+        .is('deleted_at', null)
+        .order('full_name', { ascending: true });
+
+      if (cErr) {
+        setError(cErr.message);
+        setContacts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // STEP 3: Fetch PRIMARY assignments for these contacts (owner + stage)
+      const { data: priAsg } = await supabase
+        .from('contact_assignments')
+        .select('contact_id, assigned_to_crm_user_id, stage')
+        .in('contact_id', contactIds)
+        .eq('assignment_role', 'PRIMARY')
+        .eq('status', 'ACTIVE')
+        .is('ended_at', null);
+
+      const primaryMap = new Map<string, { ownerId: string | null; stage: string | null }>();
+      (priAsg || []).forEach((r: any) => primaryMap.set(r.contact_id, { ownerId: r.assigned_to_crm_user_id, stage: r.stage }));
+
+      // STEP 4: Fetch primary owner names
+      const ownerIds = [...new Set((priAsg || []).map((r: any) => r.assigned_to_crm_user_id).filter(Boolean))];
+      if (ownerIds.length > 0) {
+        const ownerNamesResult = await getUserNames(ownerIds);
+        if (ownerNamesResult.data) {
+          setPrimaryOwnerNamesMap(ownerNamesResult.data);
+        }
+      }
+
+      // STEP 5: Lookup company names
+      const companyIds = [...new Set((contactData || []).map((c: any) => c.company_id).filter(Boolean))];
+      let companyMap = new Map<string, string>();
+      if (companyIds.length > 0) {
+        const { data: companies } = await supabase.from('companies').select('id, company_name').in('id', companyIds);
+        (companies || []).forEach((co: any) => companyMap.set(co.id, co.company_name));
+      }
+
+      // Compose final rows
+      let contactsList = (contactData || []).map((c: any) => {
+        const pri = primaryMap.get(c.id);
+        return {
+          ...c,
+          stage: pri?.stage ?? null,
+          primary_owner_id: pri?.ownerId ?? null,
+          company_name: c.company_id ? (companyMap.get(c.company_id) ?? null) : null,
+        };
+      }) as SecondaryContact[];
 
       // Fetch last interaction data
       if (contactsList.length > 0) {
-        const contactIds = contactsList.map(c => c.id);
+        const cIds = contactsList.map(c => c.id);
         const { data: lastInteractionData } = await supabase
           .from('v_contacts_last_interaction')
           .select('contact_id, last_interaction_at, last_interaction_type, last_interaction_outcome')
-          .in('contact_id', contactIds);
+          .in('contact_id', cIds);
 
         if (lastInteractionData && lastInteractionData.length > 0) {
           const liMap: Record<string, { last_interaction_at: string | null; last_interaction_type: string | null; last_interaction_outcome: string | null }> = {};
@@ -124,25 +188,11 @@ export function SecondaryContactsTab() {
               last_interaction_outcome: li.last_interaction_outcome,
             };
           });
-          contactsList = contactsList.map(c => ({
-            ...c,
-            ...liMap[c.id],
-          }));
-        }
-
-        // Resolve primary owner names
-        const primaryOwnerIds = contactsList
-          .map(c => c.primary_owner_id)
-          .filter((id): id is string => !!id);
-        if (primaryOwnerIds.length > 0) {
-          const ownerNamesResult = await getUserNames([...new Set(primaryOwnerIds)]);
-          if (ownerNamesResult.data) {
-            setPrimaryOwnerNamesMap(ownerNamesResult.data);
-          }
+          contactsList = contactsList.map(c => ({ ...c, ...liMap[c.id] }));
         }
 
         // Fetch nudge status
-        const nudgeResult = await getNudgeStatusMap(contactIds);
+        const nudgeResult = await getNudgeStatusMap(cIds);
         if (nudgeResult.data) {
           setNudgeStatusMap(nudgeResult.data);
         }

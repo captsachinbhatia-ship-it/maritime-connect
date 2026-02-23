@@ -152,20 +152,35 @@ export function useContactsV2Data() {
         return;
       }
 
-      // For my-secondary, keep using the view
+      // For my-secondary: 2-step fetch from contact_assignments
       if (tab === 'my-secondary') {
-        const listView = VIEW_MAP[tab];
-        let stageQuery = supabase
-          .from(listView)
-          .select('stage');
-        if (crmUserId) {
-          stageQuery = stageQuery.eq('assigned_to_crm_user_id', crmUserId);
-        }
-        const { data, error: err } = await stageQuery;
-        if (err) { console.error('Stage count fetch failed:', err.message); return; }
+        if (!crmUserId) { setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 }); return; }
+        // Get secondary assignments for this user
+        const { data: secAsg, error: sErr } = await supabase
+          .from('contact_assignments')
+          .select('contact_id')
+          .eq('assigned_to_crm_user_id', crmUserId)
+          .eq('assignment_role', 'SECONDARY')
+          .eq('status', 'ACTIVE')
+          .is('ended_at', null);
+        if (sErr) { console.error('Stage count fetch failed:', sErr.message); return; }
+        if (!secAsg || secAsg.length === 0) { setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 }); return; }
+
+        // Get primary assignments for those contacts (stage lives on primary assignment)
+        const secContactIds = secAsg.map((a: any) => a.contact_id);
+        const { data: priAsg } = await supabase
+          .from('contact_assignments')
+          .select('contact_id, stage')
+          .in('contact_id', secContactIds)
+          .eq('assignment_role', 'PRIMARY')
+          .eq('status', 'ACTIVE')
+          .is('ended_at', null);
+
         const counts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
-        (data || []).forEach((r: any) => {
-          const stage = normalizeStage(r.stage);
+        const stageByContact = new Map<string, string | null>();
+        (priAsg || []).forEach((r: any) => stageByContact.set(r.contact_id, r.stage));
+        secContactIds.forEach((cid: string) => {
+          const stage = normalizeStage(stageByContact.get(cid));
           if (stage && stage in counts) counts[stage]++;
           counts.ALL++;
         });
@@ -383,6 +398,125 @@ export function useContactsV2Data() {
         return;
       }
 
+      // ── My Secondary: 2-step assignment-first fetch ──
+      if (tab === 'my-secondary') {
+        try {
+          if (!crmUserId) { setRows([]); setTotalRows(0); setIsLoading(false); return; }
+
+          // STEP 1: fetch secondary assignment contact_ids
+          const { data: secAsg, error: sErr } = await supabase
+            .from('contact_assignments')
+            .select('contact_id')
+            .eq('assigned_to_crm_user_id', crmUserId)
+            .eq('assignment_role', 'SECONDARY')
+            .eq('status', 'ACTIVE')
+            .is('ended_at', null);
+          if (sErr) { setError(sErr.message); setRows([]); setTotalRows(0); setIsLoading(false); return; }
+          if (!secAsg || secAsg.length === 0) { setRows([]); setTotalRows(0); setIsLoading(false); return; }
+
+          const contactIds = secAsg.map((a: any) => a.contact_id);
+
+          // STEP 2: fetch primary assignments for these contacts (stage + primary owner)
+          const { data: priAsg } = await supabase
+            .from('contact_assignments')
+            .select('contact_id, assigned_to_crm_user_id, stage')
+            .in('contact_id', contactIds)
+            .eq('assignment_role', 'PRIMARY')
+            .eq('status', 'ACTIVE')
+            .is('ended_at', null);
+
+          const primaryMap = new Map<string, { ownerId: string | null; stage: string | null }>();
+          (priAsg || []).forEach((r: any) => primaryMap.set(r.contact_id, { ownerId: r.assigned_to_crm_user_id, stage: r.stage }));
+
+          // Apply stage filter
+          let filteredIds = contactIds;
+          if (sf !== 'ALL') {
+            filteredIds = contactIds.filter((id: string) => normalizeStage(primaryMap.get(id)?.stage) === sf);
+          }
+          if (filteredIds.length === 0) { setRows([]); setTotalRows(0); setIsLoading(false); return; }
+
+          // STEP 3: fetch contacts by IDs
+          let cQuery = supabase
+            .from('contacts')
+            .select('id, full_name, email, designation, phone, country_code, company_id, is_active, updated_at, created_by_crm_user_id, is_deleted, deleted_at', { count: 'exact' })
+            .in('id', filteredIds)
+            .is('deleted_at', null);
+
+          if (q.trim()) { cQuery = cQuery.ilike('full_name', `%${q.trim()}%`); }
+          if (alpha && alpha !== '#') {
+            cQuery = cQuery.ilike('full_name', `${alpha}%`);
+          } else if (alpha === '#') {
+            cQuery = cQuery.not('full_name', 'ilike', 'a%')
+              .not('full_name', 'ilike', 'b%').not('full_name', 'ilike', 'c%')
+              .not('full_name', 'ilike', 'd%').not('full_name', 'ilike', 'e%')
+              .not('full_name', 'ilike', 'f%').not('full_name', 'ilike', 'g%')
+              .not('full_name', 'ilike', 'h%').not('full_name', 'ilike', 'i%')
+              .not('full_name', 'ilike', 'j%').not('full_name', 'ilike', 'k%')
+              .not('full_name', 'ilike', 'l%').not('full_name', 'ilike', 'm%')
+              .not('full_name', 'ilike', 'n%').not('full_name', 'ilike', 'o%')
+              .not('full_name', 'ilike', 'p%').not('full_name', 'ilike', 'q%')
+              .not('full_name', 'ilike', 'r%').not('full_name', 'ilike', 's%')
+              .not('full_name', 'ilike', 't%').not('full_name', 'ilike', 'u%')
+              .not('full_name', 'ilike', 'v%').not('full_name', 'ilike', 'w%')
+              .not('full_name', 'ilike', 'x%').not('full_name', 'ilike', 'y%')
+              .not('full_name', 'ilike', 'z%');
+          }
+
+          cQuery = cQuery.order('full_name', { ascending: true }).range(from, to);
+          const { data: contacts, count: cCount, error: cErr } = await cQuery;
+          if (cErr) { setError(cErr.message); setRows([]); setTotalRows(0); setIsLoading(false); return; }
+
+          // STEP 4: lookup company names
+          const companyIds = [...new Set((contacts || []).map((c: any) => c.company_id).filter(Boolean))];
+          let companyMap = new Map<string, string>();
+          if (companyIds.length > 0) {
+            const { data: companies } = await supabase.from('companies').select('id, company_name').in('id', companyIds);
+            (companies || []).forEach((co: any) => companyMap.set(co.id, co.company_name));
+          }
+
+          // STEP 5: lookup primary owner names
+          const ownerIds = [...new Set([...(priAsg || []).map((r: any) => r.assigned_to_crm_user_id)].filter(Boolean))];
+          let ownerNameMap = new Map<string, string>();
+          if (ownerIds.length > 0) {
+            const { data: owners } = await supabase.from('crm_users').select('id, full_name').in('id', ownerIds);
+            (owners || []).forEach((o: any) => ownerNameMap.set(o.id, o.full_name));
+          }
+
+          const normalized: ContactV2Row[] = (contacts || []).map((row: any) => {
+            const pri = primaryMap.get(row.id);
+            return {
+              id: row.id,
+              full_name: row.full_name || '',
+              company_name: row.company_id ? (companyMap.get(row.company_id) ?? null) : null,
+              designation: row.designation ?? null,
+              email: row.email ?? null,
+              phone: row.phone ?? null,
+              country_code: row.country_code ?? null,
+              primary_owner: pri?.ownerId ? (ownerNameMap.get(pri.ownerId) ?? '—') : '—',
+              primary_owner_id: pri?.ownerId ?? null,
+              secondary_owner: null,
+              secondary_owner_id: crmUserId,
+              stage: normalizeStage(pri?.stage),
+              is_active: typeof row.is_active === 'boolean' ? row.is_active : null,
+              updated_at: row.updated_at ?? null,
+              last_interaction_at: null,
+              created_by_crm_user_id: row.created_by_crm_user_id ?? null,
+              is_deleted: row.is_deleted ?? false,
+              deleted_at: row.deleted_at ?? null,
+            };
+          });
+
+          setRows(normalized);
+          setTotalRows(cCount ?? normalized.length);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Fetch failed');
+          setRows([]); setTotalRows(0);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
       const view = VIEW_MAP[tab];
       const stageColumn = tab === 'directory' ? 'primary_stage' : 'stage';
 
@@ -392,11 +526,6 @@ export function useContactsV2Data() {
           .select('*', { count: 'exact' })
           .order('full_name', { ascending: true })
           .range(from, to);
-
-        // Explicit user scoping for my-secondary
-        if (tab === 'my-secondary' && crmUserId) {
-          query = query.eq('assigned_to_crm_user_id', crmUserId);
-        }
 
         if (sf !== 'ALL') {
           query = query.eq(stageColumn, sf);
