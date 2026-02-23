@@ -12,6 +12,8 @@ import { DailyReport } from './DailyReport';
 import { MyWorkToday } from './MyWorkToday';
 import { UserVsTeamComparison } from './UserVsTeamComparison';
 import { ModeIndicator } from './ModeIndicator';
+import { FollowupsDueWidget } from './FollowupsDueWidget';
+import { TasksNotepad } from './TasksNotepad';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
 
@@ -47,13 +49,26 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         {isAdmin && <ModeIndicator isCEO={isCEO} />}
       </div>
 
-      {/* Executive Snapshot — KPI row */}
+      {/* Row A: Recent Interactions (8/12) + Follow-ups Due & Tasks/Notepad (4/12) */}
+      <div className="grid gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <RecentInteractions />
+        </div>
+        <div className="lg:col-span-4 space-y-6">
+          <FollowupsDueWidget />
+          <TasksNotepad />
+        </div>
+      </div>
+
+      {/* Row B: Enquiries Overview */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <EnquiriesSummary isPersonal />
+        <DailyReport />
+      </div>
+
+      {/* Row C: KPI tiles + Analytics */}
       <ExecutiveSnapshot />
-
-      {/* Contact Health — full width */}
       <ContactHealthSnapshot />
-
-      {/* Performance Trend — full width */}
       <DashboardLineChart isPersonal />
 
       {/* Activity Matrix — full width */}
@@ -68,17 +83,8 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* Stale Contacts */}
       <MyWorkToday onContactClick={handleContactClick} />
 
-      {/* Recent Interactions + Recent Companies */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <RecentInteractions />
-        <RecentCompanies />
-      </div>
-
-      {/* Enquiries + Daily Report */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <EnquiriesSummary isPersonal />
-        <DailyReport />
-      </div>
+      {/* Recent Companies */}
+      <RecentCompanies />
 
       {/* Contact Details Drawer */}
       <ContactDetailsDrawer
