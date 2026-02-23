@@ -57,7 +57,8 @@ export async function getMyTasks(limit = 50, offset = 0): Promise<{
       .from('tasks')
       .select(`
         *,
-        creator:crm_users!tasks_created_by_crm_user_id_fkey(full_name),
+        created_by:crm_users!tasks_created_by_fk(full_name, email),
+        assigned_to:crm_users!tasks_assigned_to_fk(full_name, email),
         task_user_state(status, pinned),
         task_recipients(count)
       `)
@@ -82,7 +83,7 @@ export async function getMyTasks(limit = 50, offset = 0): Promise<{
       created_by_crm_user_id: row.created_by_crm_user_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
-      creator_name: row.creator?.full_name || null,
+      creator_name: row.created_by?.full_name || null,
       my_status: row.task_user_state?.[0]?.status || 'OPEN',
       my_pinned: row.task_user_state?.[0]?.pinned ?? false,
       recipient_count: row.task_recipients?.[0]?.count ?? 0,
