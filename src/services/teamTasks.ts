@@ -1,0 +1,302 @@
+import { supabase } from '@/lib/supabaseClient';
+
+/* ─── Types ─── */
+
+export type TaskPriority = 'LOW' | 'MED' | 'HIGH';
+export type TaskUserStatus = 'OPEN' | 'DONE';
+
+export interface Task {
+  id: string;
+  title: string;
+  notes: string | null;
+  due_at: string | null;
+  priority: TaskPriority;
+  is_broadcast: boolean;
+  created_by_crm_user_id: string;
+  created_at: string;
+  updated_at: string;
+  // joined
+  creator_name?: string;
+  my_status?: TaskUserStatus;
+  my_pinned?: boolean;
+  recipient_count?: number;
+}
+
+export interface TaskRecipient {
+  id: string;
+  task_id: string;
+  crm_user_id: string;
+  assigned_by_crm_user_id: string;
+  user_name?: string;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  crm_user_id: string;
+  comment: string;
+  created_at: string;
+  user_name?: string;
+}
+
+export interface TaskUserState {
+  task_id: string;
+  crm_user_id: string;
+  status: TaskUserStatus;
+  pinned: boolean;
+}
+
+/* ─── Fetch tasks (RLS handles visibility) ─── */
+
+export async function getMyTasks(limit = 50, offset = 0): Promise<{
+  data: Task[] | null;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select(`
+        *,
+        creator:crm_users!tasks_created_by_crm_user_id_fkey(full_name),
+        task_user_state(status, pinned),
+        task_recipients(count)
+      `)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      // Table might not exist yet
+      if (error.message.includes('does not exist') || error.code === '42P01') {
+        return { data: [], error: null };
+      }
+      return { data: null, error: error.message };
+    }
+
+    const mapped: Task[] = (data || []).map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      notes: row.notes,
+      due_at: row.due_at,
+      priority: row.priority || 'MED',
+      is_broadcast: row.is_broadcast ?? false,
+      created_by_crm_user_id: row.created_by_crm_user_id,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      creator_name: row.creator?.full_name || null,
+      my_status: row.task_user_state?.[0]?.status || 'OPEN',
+      my_pinned: row.task_user_state?.[0]?.pinned ?? false,
+      recipient_count: row.task_recipients?.[0]?.count ?? 0,
+    }));
+
+    // Sort: pinned first, then by due_at asc nulls last, then created_at desc
+    mapped.sort((a, b) => {
+      if (a.my_pinned && !b.my_pinned) return -1;
+      if (!a.my_pinned && b.my_pinned) return 1;
+      // due_at asc nulls last
+      if (a.due_at && b.due_at) {
+        const diff = new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+        if (diff !== 0) return diff;
+      }
+      if (a.due_at && !b.due_at) return -1;
+      if (!a.due_at && b.due_at) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+
+    return { data: mapped, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : 'Failed to load tasks' };
+  }
+}
+
+/* ─── Create task ─── */
+
+export async function createTeamTask(input: {
+  title: string;
+  notes?: string | null;
+  due_at?: string | null;
+  priority: TaskPriority;
+  is_broadcast: boolean;
+  recipient_ids?: string[];
+}): Promise<{ error: string | null }> {
+  try {
+    const { data: taskData, error: taskError } = await supabase
+      .from('tasks')
+      .insert({
+        title: input.title,
+        notes: input.notes || null,
+        due_at: input.due_at || null,
+        priority: input.priority,
+        is_broadcast: input.is_broadcast,
+      })
+      .select('id')
+      .single();
+
+    if (taskError) return { error: taskError.message };
+
+    // Insert recipients if private task
+    if (!input.is_broadcast && input.recipient_ids && input.recipient_ids.length > 0) {
+      const rows = input.recipient_ids.map((uid) => ({
+        task_id: taskData.id,
+        crm_user_id: uid,
+      }));
+      const { error: recError } = await supabase
+        .from('task_recipients')
+        .insert(rows);
+      if (recError) return { error: `Task created but failed to add recipients: ${recError.message}` };
+    }
+
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to create task' };
+  }
+}
+
+/* ─── Update task (admin or creator) ─── */
+
+export async function updateTeamTask(
+  taskId: string,
+  updates: Partial<Pick<Task, 'title' | 'notes' | 'due_at' | 'priority' | 'is_broadcast'>>
+): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', taskId);
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to update task' };
+  }
+}
+
+/* ─── Delete task ─── */
+
+export async function deleteTeamTask(taskId: string): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to delete task' };
+  }
+}
+
+/* ─── User state (pin / done) ─── */
+
+export async function upsertTaskUserState(
+  taskId: string,
+  updates: Partial<Pick<TaskUserState, 'status' | 'pinned'>>
+): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from('task_user_state')
+      .upsert(
+        {
+          task_id: taskId,
+          ...updates,
+        },
+        { onConflict: 'task_id,crm_user_id' }
+      );
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to update task state' };
+  }
+}
+
+/* ─── Comments ─── */
+
+export async function getTaskComments(taskId: string): Promise<{
+  data: TaskComment[] | null;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('task_comments')
+      .select(`
+        *,
+        commenter:crm_users!task_comments_crm_user_id_fkey(full_name)
+      `)
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true });
+
+    if (error) return { data: null, error: error.message };
+
+    const mapped: TaskComment[] = (data || []).map((r: any) => ({
+      id: r.id,
+      task_id: r.task_id,
+      crm_user_id: r.crm_user_id,
+      comment: r.comment,
+      created_at: r.created_at,
+      user_name: r.commenter?.full_name || 'Unknown',
+    }));
+
+    return { data: mapped, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : 'Failed to load comments' };
+  }
+}
+
+export async function addTaskComment(taskId: string, comment: string): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from('task_comments')
+      .insert({ task_id: taskId, comment });
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to add comment' };
+  }
+}
+
+/* ─── Recipients ─── */
+
+export async function getTaskRecipients(taskId: string): Promise<{
+  data: TaskRecipient[] | null;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('task_recipients')
+      .select(`
+        *,
+        recipient:crm_users!task_recipients_crm_user_id_fkey(full_name)
+      `)
+      .eq('task_id', taskId);
+
+    if (error) return { data: null, error: error.message };
+
+    const mapped: TaskRecipient[] = (data || []).map((r: any) => ({
+      id: r.id,
+      task_id: r.task_id,
+      crm_user_id: r.crm_user_id,
+      assigned_by_crm_user_id: r.assigned_by_crm_user_id,
+      user_name: r.recipient?.full_name || 'Unknown',
+    }));
+
+    return { data: mapped, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : 'Failed to load recipients' };
+  }
+}
+
+export async function addTaskRecipients(taskId: string, userIds: string[]): Promise<{ error: string | null }> {
+  try {
+    const rows = userIds.map((uid) => ({ task_id: taskId, crm_user_id: uid }));
+    const { error } = await supabase.from('task_recipients').insert(rows);
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to add recipients' };
+  }
+}
+
+export async function removeTaskRecipient(recipientId: string): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase.from('task_recipients').delete().eq('id', recipientId);
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to remove recipient' };
+  }
+}

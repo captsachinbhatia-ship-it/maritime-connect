@@ -13,7 +13,8 @@ import { MyWorkToday } from './MyWorkToday';
 import { UserVsTeamComparison } from './UserVsTeamComparison';
 import { ModeIndicator } from './ModeIndicator';
 import { FollowupsDueWidget } from './FollowupsDueWidget';
-import { TasksNotepad } from './TasksNotepad';
+import { TeamTasksWidget } from './TeamTasksWidget';
+import { NotepadCard } from './NotepadCard';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
 
@@ -49,24 +50,33 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         {isAdmin && <ModeIndicator isCEO={isCEO} />}
       </div>
 
-      {/* Row A: Recent Interactions (8/12) + Follow-ups Due & Tasks/Notepad (4/12) */}
+      {/* Row 1: Tasks (8/12) + Notepad (4/12) */}
+      <div className="grid gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <TeamTasksWidget />
+        </div>
+        <div className="lg:col-span-4">
+          <NotepadCard />
+        </div>
+      </div>
+
+      {/* Row 2: Recent Interactions (8/12) + Follow-ups Due (4/12) */}
       <div className="grid gap-6 lg:grid-cols-12">
         <div className="lg:col-span-8">
           <RecentInteractions />
         </div>
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4">
           <FollowupsDueWidget />
-          <TasksNotepad />
         </div>
       </div>
 
-      {/* Row B: Enquiries Overview */}
+      {/* Row 3: Enquiries Overview */}
       <div className="grid gap-6 lg:grid-cols-2">
         <EnquiriesSummary isPersonal />
         <DailyReport />
       </div>
 
-      {/* Row C: KPI tiles + Analytics */}
+      {/* Row 4: KPI tiles + Analytics */}
       <ExecutiveSnapshot />
       <ContactHealthSnapshot />
       <DashboardLineChart isPersonal />
@@ -77,7 +87,7 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* CEO: User vs Team Comparison */}
       <UserVsTeamComparison isCEO={isCEO} isAdmin={isAdmin} />
 
-      {/* Touch Targets — full width (includes Follow-ups / Nudges KPI cards) */}
+      {/* Touch Targets — full width */}
       <TouchTargets onContactClick={handleContactClick} isAdmin={isAdmin} />
 
       {/* Stale Contacts */}
