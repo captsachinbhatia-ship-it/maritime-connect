@@ -145,7 +145,6 @@ export async function createTeamTask(input: {
       return { error: 'Session expired. Please login again.' };
     }
 
-    // Do NOT set created_by_crm_user_id — DB default handles it
     const { data: taskData, error: taskError } = await supabase
       .from('tasks')
       .insert({
@@ -154,6 +153,8 @@ export async function createTeamTask(input: {
         due_at: input.due_at || null,
         priority: input.priority,
         is_broadcast: input.is_broadcast,
+        created_by_crm_user_id: input.crmUserId,
+        assigned_to_crm_user_id: input.crmUserId,
       })
       .select('id')
       .single();
