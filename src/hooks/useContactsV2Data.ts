@@ -146,92 +146,11 @@ export function useContactsV2Data() {
         return;
       }
       try {
-        if (tab === "my-primary") {
-          if (!crmUserId) {
-            setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
-            return;
-          }
-
-          const { data: asg, error: aErr } = await supabase
-            .from("contact_assignments")
-            .select("contact_id")
-            .eq("assigned_to_crm_user_id", crmUserId)
-            .eq("assignment_role", "PRIMARY")
-            .eq("status", "ACTIVE")
-            .is("ended_at", null);
-
-          if (aErr) return;
-
-          const ids = (asg || []).map((r: any) => r.contact_id);
-          if (!ids.length) {
-            setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
-            return;
-          }
-
-          const { data: rows, error: cErr } = await supabase
-            .from("contacts")
-            .select("id, stage")
-            .in("id", ids)
-            .is("deleted_at", null);
-
-          if (cErr) return;
-
-          const counts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
-
-          (rows || []).forEach((c: any) => {
-            const stage = normalizeStage(c.stage);
-            if (stage && stage in counts) counts[stage]++;
-            counts.ALL++;
-          });
-
-          setMyPrimaryStageCounts(counts);
-          return;
-        }
-
-        // For my-secondary: 2-step fetch from contact_assignments
-        if (tab === "my-secondary") {
-          if (!crmUserId) {
-            setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
-            return;
-          }
-          // Get secondary assignments for this user
-          const { data: secAsg, error: sErr } = await supabase
-            .from("contact_assignments")
-            .select("contact_id")
-            .eq("assigned_to_crm_user_id", crmUserId)
-            .eq("assignment_role", "SECONDARY")
-            .eq("status", "ACTIVE")
-            .is("ended_at", null);
-          if (sErr) {
-            console.error("Stage count fetch failed:", sErr.message);
-            return;
-          }
-          if (!secAsg || secAsg.length === 0) {
-            setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
-            return;
-          }
-
-          // Get primary assignments for those contacts (stage lives on primary assignment)
-          const secContactIds = secAsg.map((a: any) => a.contact_id);
-          const { data: priAsg } = await supabase
-            .from("contact_assignments")
-            .select("contact_id, stage")
-            .in("contact_id", secContactIds)
-            .eq("assignment_role", "PRIMARY")
-            .eq("status", "ACTIVE")
-            .is("ended_at", null);
-
-          const counts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
-          const stageByContact = new Map<string, string | null>();
-          (priAsg || []).forEach((r: any) => stageByContact.set(r.contact_id, r.stage));
-          secContactIds.forEach((cid: string) => {
-            const stage = normalizeStage(stageByContact.get(cid));
-            if (stage && stage in counts) counts[stage]++;
-            counts.ALL++;
-          });
-          setMySecondaryStageCounts(counts);
-          return;
-        }
+      // my-primary and my-secondary stage counts are computed inside fetchContacts
+      // from contact_assignments.stage (the same data used to render rows)
+      if (tab === "my-primary" || tab === "my-secondary") {
+        return;
+      }
 
         // For directory and other tabs, use the dedicated stage count views
         const view = STAGE_COUNT_VIEW_MAP[tab];
@@ -370,7 +289,7 @@ export function useContactsV2Data() {
           if (!crmUserId) {
             setRows([]);
             setTotalRows(0);
-            setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
+            setMyPrimaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -393,7 +312,7 @@ export function useContactsV2Data() {
           if (!assignments || assignments.length === 0) {
             setRows([]);
             setTotalRows(0);
-            setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
+            setMyPrimaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -431,7 +350,7 @@ export function useContactsV2Data() {
             if (normalized && normalized in computedCounts) computedCounts[normalized]++;
             computedCounts.ALL++;
           });
-          // Do NOT override stage counts for my-primary / my-secondary. // Those are computed separately to guarantee they match DB truth. if (tab !== 'my-primary' && tab !== 'my-secondary') {   setStageCounts(computedCounts); }
+          setMyPrimaryStageCounts(computedCounts);
 
           // Apply stage filter to narrow contact IDs for the table
           let filteredIds = Array.from(validIdSet);
@@ -551,6 +470,7 @@ export function useContactsV2Data() {
           if (!crmUserId) {
             setRows([]);
             setTotalRows(0);
+            setMySecondaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -573,6 +493,7 @@ export function useContactsV2Data() {
           if (!secAsg || secAsg.length === 0) {
             setRows([]);
             setTotalRows(0);
+            setMySecondaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -592,6 +513,15 @@ export function useContactsV2Data() {
           (priAsg || []).forEach((r: any) =>
             primaryMap.set(r.contact_id, { ownerId: r.assigned_to_crm_user_id, stage: r.stage }),
           );
+
+          // Compute stage counts from contact_assignments.stage (same source as rows)
+          const secStageCounts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
+          contactIds.forEach((cid: string) => {
+            const stage = normalizeStage(primaryMap.get(cid)?.stage);
+            if (stage && stage in secStageCounts) secStageCounts[stage]++;
+            secStageCounts.ALL++;
+          });
+          setMySecondaryStageCounts(secStageCounts);
 
           // Apply stage filter
           let filteredIds = contactIds;
