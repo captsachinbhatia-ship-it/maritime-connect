@@ -65,20 +65,11 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
     setIsLoading(true);
     try {
       // Query v_interaction_timeline_v2
-      let query = supabase
+      const { data, error } = await supabase
         .from('v_interaction_timeline_v2')
         .select('*')
         .order('interaction_at', { ascending: false })
-        .limit(15);
-
-      // Non-admin: filter to PRIMARY assignments for current user
-      if (!isAdmin && effectiveUserId) {
-        query = query
-          .eq('assignment_role', 'PRIMARY')
-          .eq('assigned_to_crm_user_id', effectiveUserId);
-      }
-
-      const { data, error } = await query;
+        .limit(10);
 
       if (error) {
         console.error('v_interaction_timeline_v2 error:', error.message);
@@ -103,7 +94,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveUserId, isAdmin]);
+  }, []);
 
   useEffect(() => {
     fetchRecentInteractions();
