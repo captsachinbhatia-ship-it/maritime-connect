@@ -154,6 +154,10 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
       return { error: 'No authenticated session. Please log in again.' };
     }
 
+    if (!payload.user_id) {
+      return { error: 'crmUserId missing — interaction cannot be inserted without a valid CRM user ID.' };
+    }
+
     // Last-guard: reject invalid interaction_type before hitting DB
     if (!ALLOWED_INTERACTION_TYPES.has(payload.interaction_type)) {
       return { error: `Invalid interaction type: "${payload.interaction_type}". Allowed: ${[...ALLOWED_INTERACTION_TYPES].join(', ')}` };
@@ -161,11 +165,11 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
 
     const insertRow: Record<string, unknown> = {
       contact_id: payload.contact_id,
-      user_id: authUser.id,
+      user_id: payload.user_id,
       interaction_type: payload.interaction_type,
-      direction: 'OUT',
+      direction: payload.direction ?? 'OUT',
       outcome: payload.outcome,
-      notes: payload.notes || payload.subject || '',
+      notes: payload.notes ?? null,
       interaction_at: payload.interaction_at,
       meta: { source: 'app', subject: payload.subject },
     };
