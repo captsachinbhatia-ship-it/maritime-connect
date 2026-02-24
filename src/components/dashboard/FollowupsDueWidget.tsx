@@ -75,12 +75,24 @@ export function FollowupsDueWidget() {
     return () => window.removeEventListener('dashboard:refresh', handler);
   }, [fetchAll]);
 
-  // Bucket items client-side
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Bucket items client-side using LOCAL timezone calendar-day boundaries
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const startOfDayPlus7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+
   const buckets = {
-    overdue: allItems.filter(f => f.due_at && f.due_at.slice(0, 10) < todayStr),
-    today: allItems.filter(f => f.due_at && f.due_at.slice(0, 10) === todayStr),
-    next7days: allItems.filter(f => f.due_at && f.due_at.slice(0, 10) > todayStr),
+    overdue: allItems.filter(f => f.due_at && new Date(f.due_at) < startOfToday),
+    today: allItems.filter(f => {
+      if (!f.due_at) return false;
+      const d = new Date(f.due_at);
+      return d >= startOfToday && d < startOfTomorrow;
+    }),
+    next7days: allItems.filter(f => {
+      if (!f.due_at) return false;
+      const d = new Date(f.due_at);
+      return d >= startOfTomorrow && d < startOfDayPlus7;
+    }),
   };
   const data = buckets[tab] || [];
   const counts = {
