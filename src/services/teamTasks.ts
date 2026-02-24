@@ -32,7 +32,7 @@ export interface TaskRecipient {
 export interface TaskComment {
   id: string;
   task_id: string;
-  crm_user_id: string;
+  user_id: string;
   comment: string;
   created_at: string;
   user_name?: string;
@@ -244,22 +244,30 @@ export async function getTaskComments(taskId: string): Promise<{
   try {
     const { data, error } = await supabase
       .from('task_comments')
-      .select(`
-        *,
-        commenter:crm_users!task_comments_crm_user_id_fkey(full_name)
-      `)
+      .select('id, task_id, user_id, comment_text, created_at')
       .eq('task_id', taskId)
       .order('created_at', { ascending: true });
 
     if (error) return { data: null, error: error.message };
 
+    // Collect unique user_ids to fetch names
+    const userIds = [...new Set((data || []).map((r: any) => r.user_id).filter(Boolean))];
+    let nameMap: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('crm_users')
+        .select('id, full_name')
+        .in('id', userIds);
+      (users || []).forEach((u: any) => { nameMap[u.id] = u.full_name || 'Unknown'; });
+    }
+
     const mapped: TaskComment[] = (data || []).map((r: any) => ({
       id: r.id,
       task_id: r.task_id,
-      crm_user_id: r.crm_user_id,
-      comment: r.comment,
+      user_id: r.user_id,
+      comment: r.comment_text || '',
       created_at: r.created_at,
-      user_name: r.commenter?.full_name || 'Unknown',
+      user_name: nameMap[r.user_id] || 'Unknown',
     }));
 
     return { data: mapped, error: null };
@@ -270,9 +278,15 @@ export async function getTaskComments(taskId: string): Promise<{
 
 export async function addTaskComment(taskId: string, crmUserId: string, comment: string): Promise<{ error: string | null }> {
   try {
+    // Auth gate – ensure RLS can resolve auth.uid()
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      return { error: 'Session expired. Please login again.' };
+    }
+
     const { error } = await supabase
       .from('task_comments')
-      .insert({ task_id: taskId, crm_user_id: crmUserId, comment });
+      .insert({ task_id: taskId, user_id: crmUserId, comment_text: comment });
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
