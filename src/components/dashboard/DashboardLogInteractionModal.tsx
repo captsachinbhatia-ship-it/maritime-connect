@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, CalendarIcon, FileText, Search } from 'lucide-react';
 import { format } from 'date-fns';
+import { useAssignedContacts } from '@/hooks/useAssignedContacts';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -45,8 +46,11 @@ export function DashboardLogInteractionModal({
   const { crmUserId } = useCrmUser();
   const { isAdmin } = useAuth();
 
-  const [contacts, setContacts] = useState<ContactOption[]>([]);
-  const [contactsLoading, setContactsLoading] = useState(false);
+  // Non-admin: reuse the same two-step assignment fetch as My Primary / My Secondary pages
+  const { contacts: assignedContacts, loading: assignedLoading } = useAssignedContacts(crmUserId, open && !isAdmin);
+
+  const [adminContacts, setAdminContacts] = useState<ContactOption[]>([]);
+  const [adminContactsLoading, setAdminContactsLoading] = useState(false);
   const [selectedContact, setSelectedContact] = useState<ContactOption | null>(null);
   const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
 
@@ -61,60 +65,37 @@ export function DashboardLogInteractionModal({
   const [nextAction, setNextAction] = useState('');
   const [dueDate, setDueDate] = useState<Date | undefined>();
 
-  const fetchContacts = useCallback(async () => {
-    if (!crmUserId) return;
-    setContactsLoading(true);
+  // Admin: fetch all active contacts (existing logic)
+  const fetchAdminContacts = useCallback(async () => {
+    if (!crmUserId || !isAdmin) return;
+    setAdminContactsLoading(true);
     try {
-      if (isAdmin) {
-        // Admin: all active, non-deleted contacts
-        const { data } = await supabase
-          .from('contacts')
-          .select('id, full_name, companies(name)')
-          .eq('is_active', true)
-          .eq('is_deleted', false)
-          .order('full_name')
-          .limit(500);
-        setContacts((data || []).map((c: any) => ({
-          id: c.id,
-          full_name: c.full_name || 'Unknown',
-          company_name: c.companies?.name || null,
-        })));
-      } else {
-        // User: only assigned contacts (PRIMARY/SECONDARY, ACTIVE, not ended)
-        const { data: assignments } = await supabase
-          .from('contact_assignments')
-          .select('contact_id, contacts(id, full_name, companies(name))')
-          .eq('assigned_to_crm_user_id', crmUserId)
-          .eq('status', 'ACTIVE')
-          .is('ended_at', null)
-          .in('assignment_role', ['PRIMARY', 'SECONDARY']);
-        
-        const seen = new Set<string>();
-        const list: ContactOption[] = [];
-        (assignments || []).forEach((a: any) => {
-          const c = a.contacts;
-          if (c && !seen.has(c.id)) {
-            seen.add(c.id);
-            list.push({
-              id: c.id,
-              full_name: c.full_name || 'Unknown',
-              company_name: c.companies?.name || null,
-            });
-          }
-        });
-        list.sort((a, b) => a.full_name.localeCompare(b.full_name));
-        setContacts(list);
-      }
+      const { data } = await supabase
+        .from('contacts')
+        .select('id, full_name, companies(name)')
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .order('full_name')
+        .limit(500);
+      setAdminContacts((data || []).map((c: any) => ({
+        id: c.id,
+        full_name: c.full_name || 'Unknown',
+        company_name: c.companies?.name || null,
+      })));
     } catch (err) {
-      console.error('Failed to fetch contacts for log modal:', err);
+      console.error('Failed to fetch admin contacts:', err);
     } finally {
-      setContactsLoading(false);
+      setAdminContactsLoading(false);
     }
   }, [crmUserId, isAdmin]);
 
   useEffect(() => {
-    if (open) fetchContacts();
-  }, [open, fetchContacts]);
+    if (open && isAdmin) fetchAdminContacts();
+  }, [open, isAdmin, fetchAdminContacts]);
+
+  // Unified contacts list + loading flag
+  const contacts: ContactOption[] = isAdmin ? adminContacts : assignedContacts;
+  const contactsLoading = isAdmin ? adminContactsLoading : assignedLoading;
 
   const resetForm = () => {
     setSelectedContact(null);
