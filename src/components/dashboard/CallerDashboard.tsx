@@ -15,8 +15,11 @@ import { ModeIndicator } from './ModeIndicator';
 import { FollowupsDueWidget } from './FollowupsDueWidget';
 import { TeamTasksWidget } from './TeamTasksWidget';
 import { NotepadCard } from './NotepadCard';
+import { DashboardLogInteractionModal } from './DashboardLogInteractionModal';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
 
 interface CallerDashboardProps {
   isAdmin: boolean;
@@ -26,6 +29,7 @@ interface CallerDashboardProps {
 export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logModalOpen, setLogModalOpen] = useState(false);
 
   const handleContactClick = (contact: ContactWithCompany) => {
     setSelectedContact(contact);
@@ -42,12 +46,19 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {isAdmin ? 'Management Dashboard' : 'My Dashboard'}
+          </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Your personal work and assigned contacts
+            {isAdmin ? 'Company-wide overview' : 'Your personal work and assigned contacts'}
           </p>
         </div>
-        {isAdmin && <ModeIndicator isCEO={isCEO} />}
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => setLogModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Log Interaction
+          </Button>
+          {isAdmin && <ModeIndicator isCEO={isCEO} />}
+        </div>
       </div>
 
       {/* Row 1: Tasks (8/12) + Notepad (4/12) */}
@@ -103,6 +114,12 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         currentStage={null}
         isOpen={drawerOpen}
         onClose={handleDrawerClose}
+      />
+
+      {/* Dashboard Log Interaction Modal */}
+      <DashboardLogInteractionModal
+        open={logModalOpen}
+        onOpenChange={setLogModalOpen}
       />
     </div>
   );

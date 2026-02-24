@@ -33,6 +33,8 @@ const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Companies', url: '/companies', icon: Building2 },
   { title: 'Contacts', url: '/contacts', icon: Users },
+  { title: 'Interactions', url: '/interactions', icon: Activity },
+  { title: 'Follow-ups', url: '/follow-ups', icon: CalendarClock },
   { title: 'My Follow-ups', url: '/followups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Reporting', url: '/reporting', icon: BarChart3 },

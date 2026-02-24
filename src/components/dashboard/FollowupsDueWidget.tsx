@@ -10,11 +10,9 @@ import { markFollowupComplete, type FollowupWithContact, type FollowupDueFilter 
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 
 export function FollowupsDueWidget() {
-  const navigate = useNavigate();
   const { crmUserId } = useCrmUser();
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState<FollowupDueFilter>('overdue');
@@ -101,8 +99,12 @@ export function FollowupsDueWidget() {
     }
   };
 
-  const handleSnooze = () => {
-    navigate('/my-followups');
+  const handlePopout = () => {
+    window.open('/follow-ups', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleRowOpen = (contactId: string) => {
+    window.open(`/contacts?contact=${contactId}&tab=followups`, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -113,6 +115,9 @@ export function FollowupsDueWidget() {
             <CalendarClock className="h-4.5 w-4.5 text-primary" />
           </div>
           <CardTitle className="text-base">Follow-ups Due</CardTitle>
+          <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={handlePopout} title="Open all follow-ups">
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="flex-1">
@@ -157,7 +162,7 @@ export function FollowupsDueWidget() {
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleComplete(f.id)} title="Mark done">
                           <Check className="h-3.5 w-3.5" />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSnooze} title="Open follow-ups">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRowOpen(f.contact_id)} title="Open contact follow-ups">
                           <ExternalLink className="h-3.5 w-3.5" />
                         </Button>
                       </div>

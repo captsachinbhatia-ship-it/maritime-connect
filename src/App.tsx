@@ -24,6 +24,8 @@ import AdminUsers from "./pages/AdminUsers";
 import DailyWorkDone from "./pages/DailyWorkDone";
 import AdminSummary from "./pages/AdminSummary";
 import BulkImport from "./pages/BulkImport";
+import AllInteractions from "./pages/AllInteractions";
+import AllFollowups from "./pages/AllFollowups";
 
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
@@ -71,6 +73,8 @@ const App = () => {
                 <Route path="enquiries/new" element={<CreateEnquiry />} />
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
                 <Route path="reporting" element={<Reporting />} />
+                <Route path="interactions" element={<AllInteractions />} />
+                <Route path="follow-ups" element={<AllFollowups />} />
                 <Route path="bulk-import" element={<Navigate to="/contacts/bulk-import" replace />} />
                 <Route path="account/security" element={<AccountSecurity />} />
               </Route>
