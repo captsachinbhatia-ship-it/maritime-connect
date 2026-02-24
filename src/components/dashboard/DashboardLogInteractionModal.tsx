@@ -55,7 +55,10 @@ export function DashboardLogInteractionModal({
   }, [open, crmLoading, crmUserId, isAdmin]);
 
   // Non-admin: reuse the same two-step assignment fetch as My Primary / My Secondary pages
-  const { contacts: assignedContacts, loading: assignedLoading } = useAssignedContacts(crmUserId, open && !isAdmin);
+  const { contacts: assignedContacts, loading: assignedLoading } = useAssignedContacts(
+    crmUserId,
+    open && !isAdmin && !crmLoading,   // do not enable until crmUserId is resolved
+  );
 
   const [adminContacts, setAdminContacts] = useState<ContactOption[]>([]);
   const [adminContactsLoading, setAdminContactsLoading] = useState(false);
@@ -231,8 +234,8 @@ export function DashboardLogInteractionModal({
           <div className="space-y-2">
             <Label>Contact <span className="text-destructive">*</span></Label>
             {/* TEMP DEBUG — remove after diagnosis */}
-            <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded mb-1">
-              crmUserId: {String(crmUserId)} | loading: {String(contactsLoading)} | contacts: {contacts.length}
+            <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded mb-1 font-mono">
+              crmUserId: {String(crmUserId)} | crmLoading: {String(crmLoading)} | contactsLoading: {String(contactsLoading)} | contacts: {contacts.length}
             </div>
 
             <Popover open={contactPopoverOpen} onOpenChange={setContactPopoverOpen}>
@@ -259,7 +262,9 @@ export function DashboardLogInteractionModal({
                   <CommandInput placeholder="Type to search..." />
                   <CommandList className="max-h-[300px] overflow-y-auto overflow-x-hidden overscroll-contain">
                     <CommandEmpty>
-                      {contactsLoading ? 'Loading...' : 'No contacts found.'}
+                      {contactsLoading || (crmLoading && !crmUserId)
+                        ? 'Loading contacts...'
+                        : 'No contacts found.'}
                     </CommandEmpty>
                     <CommandGroup>
                       {contacts.map((c) => (
