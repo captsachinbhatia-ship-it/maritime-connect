@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
 
 export interface InteractionsFiltersState {
   type: string;
@@ -19,19 +20,6 @@ interface InteractionsFiltersProps {
   filters: InteractionsFiltersState;
   onFiltersChange: (filters: InteractionsFiltersState) => void;
 }
-
-const INTERACTION_TYPES = ['CALL', 'EMAIL', 'MEETING', 'WHATSAPP', 'NOTE'] as const;
-
-const OUTCOME_OPTIONS = [
-  'NO_RESPONSE',
-  'INTERESTED',
-  'NOT_INTERESTED',
-  'FOLLOW_UP',
-  'MEETING_SCHEDULED',
-  'DEAL_PROGRESS',
-  'CLOSED_WON',
-  'CLOSED_LOST',
-] as const;
 
 const DATE_RANGE_OPTIONS = [
   { value: 'all', label: 'All time' },
@@ -58,9 +46,9 @@ export function InteractionsFilters({ filters, onFiltersChange }: InteractionsFi
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
-            {INTERACTION_TYPES.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
+            {INTERACTION_TYPE_OPTIONS.map((type) => (
+              <SelectItem key={type.value} value={type.value}>
+                {type.icon} {type.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -75,9 +63,9 @@ export function InteractionsFilters({ filters, onFiltersChange }: InteractionsFi
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Outcomes</SelectItem>
-            {OUTCOME_OPTIONS.map((outcome) => (
-              <SelectItem key={outcome} value={outcome}>
-                {outcome.replace(/_/g, ' ')}
+            {OUTCOME_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.icon} {opt.label}
               </SelectItem>
             ))}
           </SelectContent>
