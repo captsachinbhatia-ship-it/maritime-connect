@@ -103,7 +103,14 @@ export function DashboardLogInteractionModal({
 
   // Unified contacts list + loading flag
   const contacts: ContactOption[] = isAdmin ? adminContacts : assignedContacts;
-  const contactsLoading = isAdmin ? adminContactsLoading : (crmLoading || assignedLoading);
+  const contactsLoading = isAdmin ? adminContactsLoading : assignedLoading;
+
+  // Debug: log contact count when it changes
+  useEffect(() => {
+    if (open && !contactsLoading) {
+      console.log('[DashboardLogInteraction] contacts ready:', contacts.length, isAdmin ? '(admin)' : '(user)');
+    }
+  }, [open, contactsLoading, contacts.length, isAdmin]);
 
   const resetForm = () => {
     setSelectedContact(null);
