@@ -20,13 +20,23 @@ export function FollowupsDueWidget() {
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
+    if (!isAdmin && !crmUserId) {
+      setAllItems([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('v_followup_queue_all_v2')
         .select('*')
-        .order('next_follow_up_at', { ascending: true })
-        .limit(10);
+        .order('next_follow_up_at', { ascending: true });
+
+      if (!isAdmin && crmUserId) {
+        query = query.eq('user_id', crmUserId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('v_followup_queue_all_v2 error:', error.message);
@@ -62,7 +72,7 @@ export function FollowupsDueWidget() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [crmUserId, isAdmin]);
 
   useEffect(() => {
     fetchAll();
@@ -158,7 +168,7 @@ export function FollowupsDueWidget() {
                 </p>
               ) : (
                 <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
-                  {data.slice(0, 10).map((f) => (
+                  {data.map((f) => (
                     <div key={f.id} className="flex items-center gap-2 rounded-lg border p-2">
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{f.contact_name || 'Unknown'}</p>
