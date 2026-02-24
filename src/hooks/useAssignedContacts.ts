@@ -67,14 +67,14 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
         const chunk = contactIds.slice(i, i + batchSize);
         const { data: contactData, error: cErr } = await supabase
           .from('contacts')
-          .select('id, full_name, company_id, companies(name)')
+          .select('id, full_name, company_id, companies(company_name)')
           .in('id', chunk)
           .eq('is_active', true)
           .eq('is_deleted', false)
           .order('full_name', { ascending: true });
 
         if (cErr) {
-          console.error('[useAssignedContacts] Contact fetch ERROR:', cErr.message, '| code:', cErr.code);
+          console.error('[Contacts Fetch Error]', cErr);
           continue;
         }
         console.log('[useAssignedContacts] contact batch fetched:', contactData?.length ?? 0, '| chunk start:', i);
@@ -90,7 +90,7 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
         list.push({
           id: c.id,
           full_name: c.full_name || 'Unknown',
-          company_name: c.companies?.name || null,
+          company_name: c.companies?.company_name || null,
         });
       }
 
