@@ -46,10 +46,9 @@ export function DashboardLogInteractionModal({
   const { crmUserId, loading: crmLoading } = useCrmUser();
   const { isAdmin } = useAuth();
 
-  // Debug guard: warn if CRM user mapping is missing after auth loads
+  // Warn user if CRM mapping is missing
   useEffect(() => {
     if (open && !crmLoading && !crmUserId && !isAdmin) {
-      console.warn('[LogInteraction] crmUserId is null after auth loaded');
       toast({ title: 'Warning', description: 'CRM user mapping missing for this login. Contact admin.', variant: 'destructive' });
     }
   }, [open, crmLoading, crmUserId, isAdmin]);
@@ -113,12 +112,7 @@ export function DashboardLogInteractionModal({
   const contacts: ContactOption[] = isAdmin ? adminContacts : assignedContacts;
   const contactsLoading = isAdmin ? adminContactsLoading : assignedLoading;
 
-  // Debug: log contact count when it changes
-  useEffect(() => {
-    if (open && !contactsLoading) {
-      console.log('[DashboardLogInteraction] contacts ready:', contacts.length, isAdmin ? '(admin)' : '(user)');
-    }
-  }, [open, contactsLoading, contacts.length, isAdmin]);
+
 
   const resetForm = () => {
     setSelectedContact(null);
@@ -238,11 +232,6 @@ export function DashboardLogInteractionModal({
           {/* Contact Selector */}
           <div className="space-y-2">
             <Label>Contact <span className="text-destructive">*</span></Label>
-            {/* TEMP DEBUG — remove after diagnosis */}
-            <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded mb-1 font-mono">
-              crmUserId: {String(crmUserId)} | crmLoading: {String(crmLoading)} | contactsLoading: {String(contactsLoading)} | contacts: {contacts.length}
-            </div>
-
             <Popover open={contactPopoverOpen} onOpenChange={setContactPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between font-normal">

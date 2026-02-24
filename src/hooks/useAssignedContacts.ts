@@ -18,7 +18,6 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
   const hasFetched = useRef(false);
 
   const fetchContacts = useCallback(async (userId: string) => {
-    console.log('[useAssignedContacts] START — crmUserId:', userId);
     setLoading(true);
     try {
       // STEP 1: Fetch ALL assignment rows (no limit) via pagination
@@ -35,20 +34,11 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
           .is('ended_at', null)
           .range(from, from + pageSize - 1);
 
-        if (error) {
-          console.error('[useAssignedContacts] Assignment fetch ERROR:', error.message, '| code:', error.code);
-          break;
-        }
+        if (error) break;
         if (!data || data.length === 0) break;
         allAssignments = allAssignments.concat(data);
         if (data.length < pageSize) break;
         from += pageSize;
-      }
-
-      console.log('[useAssignedContacts] assignment rows fetched:', allAssignments.length);
-
-      if (allAssignments.length === 0) {
-        console.warn('[useAssignedContacts] ZERO assignments returned for crmUserId:', userId, '— check RLS or assigned_to_crm_user_id value');
       }
 
       if (allAssignments.length === 0) {
@@ -58,7 +48,6 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
 
       // De-duplicate contact IDs
       const contactIds = [...new Set(allAssignments.map((a: any) => a.contact_id))];
-      console.log('[useAssignedContacts] unique contact IDs:', contactIds.length);
 
       // STEP 2: Fetch contacts by ID in chunks of 200
       const batchSize = 200;
@@ -77,7 +66,6 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
           console.error('[Contacts Fetch Error]', cErr);
           continue;
         }
-        console.log('[useAssignedContacts] contact batch fetched:', contactData?.length ?? 0, '| chunk start:', i);
         if (contactData) allContactData = allContactData.concat(contactData);
       }
 
@@ -96,10 +84,6 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
 
       // Sort by full_name
       list.sort((a, b) => a.full_name.localeCompare(b.full_name));
-      console.log('[useAssignedContacts] DONE — final contact count:', list.length, '| crmUserId:', userId);
-      if (list.length === 0) {
-        console.warn('[useAssignedContacts] final list is EMPTY — assignments found:', allAssignments.length, '| contacts fetched:', allContactData.length);
-      }
       setContacts(list);
     } catch (err) {
       console.error('[useAssignedContacts] error:', err);
@@ -111,22 +95,18 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
 
   useEffect(() => {
     if (!enabled) {
-      // Modal closed — reset so next open refetches cleanly
       hasFetched.current = false;
       return;
     }
 
     if (!crmUserId) {
-      // enabled=true but crmUserId not yet resolved — stay in loading, do not set contacts=[]
       return;
     }
 
-    // enabled=true and crmUserId ready — fetch
     hasFetched.current = true;
     fetchContacts(crmUserId);
   }, [enabled, crmUserId, fetchContacts]);
 
-  // Derive effective loading: if enabled and we haven't resolved yet
   const effectiveLoading = enabled && (!crmUserId || loading || (!hasFetched.current && contacts.length === 0));
 
   return { contacts, loading: effectiveLoading, refetch: () => crmUserId ? fetchContacts(crmUserId) : Promise.resolve() };
