@@ -6,9 +6,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
-import { MessageSquare, Phone, Mail, Video, StickyNote, Plus } from 'lucide-react';
+import { MessageSquare, Phone, Mail, Video, StickyNote, Plus, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
 
 interface RecentInteraction {
   id: string;
@@ -50,7 +49,7 @@ interface RecentInteractionsProps {
 export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteractionsProps = {}) {
   const { crmUserId: currentCrmUserId } = useCrmUser();
   const { isAdmin } = useAuth();
-  const navigate = useNavigate();
+  
   const [interactions, setInteractions] = useState<RecentInteraction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -107,6 +106,14 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
     return () => window.removeEventListener('dashboard:refresh', handler);
   }, [fetchRecentInteractions]);
 
+  const handlePopout = () => {
+    window.open('/interactions', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleRowOpen = (contactId: string) => {
+    window.open(`/contacts?contact=${contactId}&tab=interactions`, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <Card className="flex flex-col">
       <CardHeader className="pb-3">
@@ -117,11 +124,16 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
             </div>
             <CardTitle className="text-base">Recent Interactions</CardTitle>
           </div>
-          {!isLoading && interactions.length > 0 && (
-            <Badge variant="outline" className="text-xs">
-              {interactions.length} total
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {!isLoading && interactions.length > 0 && (
+              <Badge variant="outline" className="text-xs">
+                {interactions.length} total
+              </Badge>
+            )}
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handlePopout} title="Open all interactions">
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1">
@@ -134,9 +146,6 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
         ) : interactions.length === 0 ? (
           <div className="py-6 text-center space-y-2">
             <p className="text-sm text-muted-foreground">No interactions logged yet</p>
-            <Button variant="outline" size="sm" onClick={() => navigate('/contacts-v2')}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Log Interaction
-            </Button>
           </div>
         ) : (
           <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
@@ -149,7 +158,8 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
               return (
                 <div
                   key={interaction.id}
-                  className="flex items-start gap-3 rounded-lg border p-2.5"
+                  className="flex items-start gap-3 rounded-lg border p-2.5 cursor-pointer hover:bg-muted/50"
+                  onClick={() => handleRowOpen(interaction.contact_id)}
                 >
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted mt-0.5">
                     <Icon className="h-3.5 w-3.5 text-muted-foreground" />
