@@ -141,17 +141,15 @@ export function TouchTargets({ onContactClick, crmUserId: crmUserIdProp, isAdmin
 
       if (allContactIds.length > 0) {
         const { count: fCount } = await supabase
-          .from('contact_followups')
+          .from('v_followup_queue_all_v2')
           .select('*', { count: 'exact', head: true })
           .in('contact_id', allContactIds)
-          .eq('status', 'OPEN')
           .lte('due_at', endOfToday.toISOString());
         setFollowupsPending(fCount ?? 0);
       } else if (!userId) {
         const { count: fCount } = await supabase
-          .from('contact_followups')
+          .from('v_followup_queue_all_v2')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'OPEN')
           .lte('due_at', endOfToday.toISOString());
         setFollowupsPending(fCount ?? 0);
       }

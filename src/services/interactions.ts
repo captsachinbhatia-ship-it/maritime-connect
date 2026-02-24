@@ -34,7 +34,7 @@ export async function getInteractionsByContact(
 }> {
   try {
     let query = supabase
-      .from('v_contact_interactions_timeline')
+      .from('v_interaction_timeline_v2')
       .select('*')
       .eq('contact_id', contactId);
 

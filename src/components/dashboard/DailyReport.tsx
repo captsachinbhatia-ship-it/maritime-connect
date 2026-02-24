@@ -63,7 +63,7 @@ export function DailyReport() {
 
       if (contactIds.length > 0) {
         const { data: todayInteractions } = await supabase
-          .from('v_contact_interactions_timeline')
+          .from('v_interaction_timeline_v2')
           .select('contact_id, interaction_type')
           .in('contact_id', contactIds)
           .gte('interaction_at', todayISO);
@@ -76,9 +76,9 @@ export function DailyReport() {
       }
 
       const { count: followupsCreated } = await supabase
-        .from('contact_followups')
+        .from('v_followup_queue_all_v2')
         .select('*', { count: 'exact', head: true })
-        .eq('created_by_crm_user_id', currentCrmUserId)
+        .eq('user_id', currentCrmUserId)
         .gte('created_at', todayISO);
 
       const endOfToday = new Date(startOfToday);
@@ -86,10 +86,9 @@ export function DailyReport() {
       let followupsDueOverdue = 0;
       if (contactIds.length > 0) {
         const { count } = await supabase
-          .from('contact_followups')
+          .from('v_followup_queue_all_v2')
           .select('*', { count: 'exact', head: true })
           .in('contact_id', contactIds)
-          .eq('status', 'OPEN')
           .lte('due_at', endOfToday.toISOString());
         followupsDueOverdue = count || 0;
       }

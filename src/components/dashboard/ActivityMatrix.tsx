@@ -124,7 +124,7 @@ export function ActivityMatrix({ crmUserId: crmUserIdProp }: ActivityMatrixProps
         companiesQuery,
         assignmentsQuery,
         supabase
-          .from('v_contact_interactions_timeline')
+          .from('v_interaction_timeline_v2')
           .select('contact_id, interaction_at')
           .gte('interaction_at', thirtyDaysAgo),
       ]);

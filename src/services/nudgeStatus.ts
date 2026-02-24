@@ -18,7 +18,7 @@ export async function getNudgeStatus(contactId: string): Promise<{
   try {
     // Get the most recent NUDGE or ACK interaction
     const { data, error } = await supabase
-      .from('v_contact_interactions_timeline')
+      .from('v_interaction_timeline_v2')
       .select('subject, interaction_at')
       .eq('contact_id', contactId)
       .or('subject.ilike.[NUDGE]%,subject.ilike.[ACK]%')
@@ -75,7 +75,7 @@ export async function getNudgeStatusMap(contactIds: string[]): Promise<{
   try {
     // Get all NUDGE/ACK interactions for the contacts
     const { data, error } = await supabase
-      .from('v_contact_interactions_timeline')
+      .from('v_interaction_timeline_v2')
       .select('contact_id, subject, interaction_at')
       .in('contact_id', contactIds)
       .or('subject.ilike.[NUDGE]%,subject.ilike.[ACK]%')

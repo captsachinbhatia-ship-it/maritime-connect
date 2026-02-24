@@ -114,7 +114,7 @@ export function DashboardLineChart({ crmUserId, isPersonal = true }: DashboardLi
 
         const [{ data: assignments }, { data: interactions }] = await Promise.all([
           assignQuery,
-          supabase.from('v_contact_interactions_timeline')
+          supabase.from('v_interaction_timeline_v2')
             .select('contact_id, interaction_at')
             .gte('interaction_at', sinceISO),
         ]);
