@@ -137,6 +137,8 @@ export function AddInteractionModal({
     resetForm();
     onSuccess();
     onClose();
+    // Signal dashboard widgets to refresh
+    window.dispatchEvent(new Event('dashboard:refresh'));
   };
 
   return (
