@@ -14,10 +14,11 @@ export interface AssignedContactOption {
  */
 export function useAssignedContacts(crmUserId: string | null, enabled: boolean) {
   const [contacts, setContacts] = useState<AssignedContactOption[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchContacts = useCallback(async () => {
-    if (!crmUserId) { setContacts([]); return; }
+    if (!crmUserId) { setContacts([]); setLoading(false); return; }
+    console.log('[useAssignedContacts] fetching for crmUserId:', crmUserId);
     setLoading(true);
     try {
       // STEP 1: Fetch ALL assignment rows (no limit)

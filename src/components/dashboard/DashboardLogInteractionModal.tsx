@@ -43,8 +43,16 @@ interface DashboardLogInteractionModalProps {
 export function DashboardLogInteractionModal({
   open, onOpenChange, onSuccess,
 }: DashboardLogInteractionModalProps) {
-  const { crmUserId } = useCrmUser();
+  const { crmUserId, loading: crmLoading } = useCrmUser();
   const { isAdmin } = useAuth();
+
+  // Debug guard: warn if CRM user mapping is missing after auth loads
+  useEffect(() => {
+    if (open && !crmLoading && !crmUserId && !isAdmin) {
+      console.warn('[LogInteraction] crmUserId is null after auth loaded');
+      toast({ title: 'Warning', description: 'CRM user mapping missing for this login. Contact admin.', variant: 'destructive' });
+    }
+  }, [open, crmLoading, crmUserId, isAdmin]);
 
   // Non-admin: reuse the same two-step assignment fetch as My Primary / My Secondary pages
   const { contacts: assignedContacts, loading: assignedLoading } = useAssignedContacts(crmUserId, open && !isAdmin);
@@ -95,7 +103,7 @@ export function DashboardLogInteractionModal({
 
   // Unified contacts list + loading flag
   const contacts: ContactOption[] = isAdmin ? adminContacts : assignedContacts;
-  const contactsLoading = isAdmin ? adminContactsLoading : assignedLoading;
+  const contactsLoading = isAdmin ? adminContactsLoading : (crmLoading || assignedLoading);
 
   const resetForm = () => {
     setSelectedContact(null);
