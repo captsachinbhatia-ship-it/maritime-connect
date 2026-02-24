@@ -81,17 +81,22 @@ export function DashboardLogInteractionModal({
     if (!crmUserId || !isAdmin) return;
     setAdminContactsLoading(true);
     try {
-      const { data } = await supabase
+      const { data, error: adminContactsError } = await supabase
         .from('contacts')
-        .select('id, full_name, companies(name)')
+        .select('id, full_name, companies(company_name)')
         .eq('is_active', true)
         .eq('is_deleted', false)
         .order('full_name')
         .limit(500);
+
+      if (adminContactsError) {
+        console.error('[Contacts Fetch Error]', adminContactsError);
+      }
+
       setAdminContacts((data || []).map((c: any) => ({
         id: c.id,
         full_name: c.full_name || 'Unknown',
-        company_name: c.companies?.name || null,
+        company_name: c.companies?.company_name || null,
       })));
     } catch (err) {
       console.error('Failed to fetch admin contacts:', err);
