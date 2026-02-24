@@ -51,7 +51,7 @@ export function ReceivedAcknowledgements() {
 
       // Get all NUDGE and ACK interactions for these contacts
       const { data: interactions, error: interactionsError } = await supabase
-        .from('v_contact_interactions_timeline')
+        .from('v_interaction_timeline_v2')
         .select('contact_id, subject, notes, interaction_at, created_by_crm_user_id')
         .in('contact_id', contactIds)
         .or('subject.ilike.[NUDGE]%,subject.ilike.[ACK]%')

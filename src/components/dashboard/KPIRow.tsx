@@ -85,19 +85,16 @@ export function KPIRow({ crmUserId: crmUserIdProp }: KPIRowProps = {}) {
 
         if (contactIds.length > 0) {
           const { count } = await supabase
-            .from('contact_followups')
+            .from('v_followup_queue_all_v2')
             .select('*', { count: 'exact', head: true })
             .in('contact_id', contactIds)
-            .eq('status', 'OPEN')
             .lte('due_at', today.toISOString());
 
           followUpsDue = count || 0;
         } else if (!userId) {
-          // Cumulative mode with no specific contacts — count all open followups
           const { count } = await supabase
-            .from('contact_followups')
+            .from('v_followup_queue_all_v2')
             .select('*', { count: 'exact', head: true })
-            .eq('status', 'OPEN')
             .lte('due_at', today.toISOString());
 
           followUpsDue = count || 0;

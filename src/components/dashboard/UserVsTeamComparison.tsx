@@ -121,7 +121,7 @@ export function UserVsTeamComparison({ isCEO, isAdmin }: UserVsTeamComparisonPro
           .eq('status', 'ACTIVE')
           .eq('assignment_role', 'primary'),
         // My interactions (via assigned contacts — will filter client-side)
-        supabase.from('v_contact_interactions_timeline').select('contact_id, interaction_at')
+        supabase.from('v_interaction_timeline_v2').select('contact_id, interaction_at')
           .gte('interaction_at', sinceISO),
         // Same for team — same query, different filter below
         { data: null }, // reuse myInteractionsRes for team too

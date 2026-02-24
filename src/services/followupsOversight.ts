@@ -115,11 +115,10 @@ export async function getOverdueByCaller(): Promise<{
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Get overdue followups with assignment info
+    // Get overdue followups from V2 view
     const { data: followups, error: followupsError } = await supabase
-      .from('contact_followups')
-      .select('id, due_at, assignment_id')
-      .eq('status', 'OPEN')
+      .from('v_followup_queue_all_v2')
+      .select('id, due_at, user_id, contact_id')
       .lt('due_at', startOfToday.toISOString());
 
     if (followupsError) {
@@ -133,35 +132,10 @@ export async function getOverdueByCaller(): Promise<{
       return { data: [], error: null };
     }
 
-    // Get assignment IDs
-    const assignmentIds = [...new Set(followups.map((f) => f.assignment_id).filter(Boolean))];
-
-    if (assignmentIds.length === 0) {
-      return { data: [], error: null };
-    }
-
-    // Fetch assignments to get assigned_to_crm_user_id (caller)
-    const { data: assignments, error: assignmentsError } = await supabase
-      .from('contact_assignments')
-      .select('id, assigned_to_crm_user_id')
-      .in('id', assignmentIds);
-
-    if (assignmentsError) {
-      return { data: null, error: assignmentsError.message };
-    }
-
-    // Build assignment -> caller map
-    const assignmentCallerMap: Record<string, string> = {};
-    (assignments || []).forEach((a) => {
-      if (a.assigned_to_crm_user_id) {
-        assignmentCallerMap[a.id] = a.assigned_to_crm_user_id;
-      }
-    });
-
-    // Group by caller
+    // Group by user_id (caller) directly from v2 view
     const callerStats: Record<string, { count: number; oldestDue: Date }> = {};
-    followups.forEach((f) => {
-      const callerId = f.assignment_id ? assignmentCallerMap[f.assignment_id] : null;
+    followups.forEach((f: any) => {
+      const callerId = f.user_id;
       if (!callerId) return;
 
       if (!callerStats[callerId]) {
@@ -233,32 +207,12 @@ export async function getOverdueByCallerId(callerId: string): Promise<{
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // Get assignments for this caller (callerId is now crm_users.id)
-    const { data: assignments, error: assignmentsError } = await supabase
-      .from('contact_assignments')
-      .select('id, contact_id')
-      .eq('assigned_to_crm_user_id', callerId);
-
-    if (assignmentsError) {
-      return { data: null, error: assignmentsError.message };
-    }
-
-    if (!assignments || assignments.length === 0) {
-      return { data: [], error: null };
-    }
-
-    const assignmentIds = assignments.map((a) => a.id);
-    const contactMap: Record<string, string> = {};
-    assignments.forEach((a) => {
-      contactMap[a.id] = a.contact_id;
-    });
-
-    // Get overdue followups for these assignments
+    // Get overdue followups for this caller from V2 view
     const { data: followups, error: followupsError } = await supabase
-      .from('contact_followups')
-      .select('id, due_at, contact_id, assignment_id, followup_type, followup_reason')
-      .eq('status', 'OPEN')
+      .from('v_followup_queue_all_v2')
+      .select('id, due_at, contact_id, contact_name, company_name, interaction_type, notes')
+      .eq('user_id', callerId)
       .lt('due_at', startOfToday.toISOString())
-      .in('assignment_id', assignmentIds)
       .order('due_at', { ascending: true });
 
     if (followupsError) {
@@ -269,51 +223,14 @@ export async function getOverdueByCallerId(callerId: string): Promise<{
       return { data: [], error: null };
     }
 
-    // Fetch contact names
-    const contactIds = [...new Set(followups.map((f) => f.contact_id))];
-    const { data: contacts, error: contactsError } = await supabase
-      .from('contacts')
-      .select('id, full_name, company_id')
-      .in('id', contactIds);
-
-    if (contactsError) {
-      return { data: null, error: contactsError.message };
-    }
-
-    // Fetch company names
-    const companyIds = (contacts || [])
-      .map((c) => c.company_id)
-      .filter((id): id is string => id !== null);
-
-    let companyNames: Record<string, string> = {};
-    if (companyIds.length > 0) {
-      const { data: companies } = await supabase
-        .from('companies')
-        .select('id, company_name')
-        .in('id', companyIds);
-
-      (companies || []).forEach((c) => {
-        companyNames[c.id] = c.company_name;
-      });
-    }
-
-    // Build contact info map
-    const contactInfoMap: Record<string, { name: string; company: string | null }> = {};
-    (contacts || []).forEach((c) => {
-      contactInfoMap[c.id] = {
-        name: c.full_name || 'Unknown',
-        company: c.company_id ? companyNames[c.company_id] || null : null,
-      };
-    });
-
-    // Build result
-    const result: CallerFollowupDrilldown[] = followups.map((f) => ({
+    // Build result directly from v2 view data
+    const result: CallerFollowupDrilldown[] = followups.map((f: any) => ({
       id: f.id,
       dueAt: f.due_at,
-      contactName: contactInfoMap[f.contact_id]?.name || 'Unknown',
-      companyName: contactInfoMap[f.contact_id]?.company || null,
-      followupType: f.followup_type,
-      followupReason: f.followup_reason,
+      contactName: f.contact_name || 'Unknown',
+      companyName: f.company_name || null,
+      followupType: f.interaction_type || 'OTHER',
+      followupReason: f.notes || '',
     }));
 
     return { data: result, error: null };
@@ -346,11 +263,10 @@ export async function getSlippingContacts(): Promise<{
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const sevenDaysAgo = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Get all overdue followups
+    // Get all overdue followups from V2 view
     const { data: followups, error: followupsError } = await supabase
-      .from('contact_followups')
-      .select('id, due_at, contact_id, assignment_id')
-      .eq('status', 'OPEN')
+      .from('v_followup_queue_all_v2')
+      .select('id, due_at, contact_id, contact_name, company_name, user_id, user_name')
       .lt('due_at', startOfToday.toISOString());
 
     if (followupsError) {
@@ -364,14 +280,25 @@ export async function getSlippingContacts(): Promise<{
       return { data: [], error: null };
     }
 
-    // Group by contact
-    const contactStats: Record<string, { count: number; oldestDue: Date; assignmentId: string | null }> = {};
-    followups.forEach((f) => {
+    // Group by contact — v2 view provides contact_name, company_name, user_id, user_name directly
+    const contactStats: Record<string, {
+      count: number;
+      oldestDue: Date;
+      contactName: string;
+      companyName: string | null;
+      userId: string | null;
+      userName: string;
+    }> = {};
+
+    followups.forEach((f: any) => {
       if (!contactStats[f.contact_id]) {
         contactStats[f.contact_id] = {
           count: 0,
           oldestDue: new Date(f.due_at),
-          assignmentId: f.assignment_id,
+          contactName: f.contact_name || 'Unknown',
+          companyName: f.company_name || null,
+          userId: f.user_id || null,
+          userName: f.user_name || 'Unassigned',
         };
       }
       contactStats[f.contact_id].count++;
@@ -391,91 +318,19 @@ export async function getSlippingContacts(): Promise<{
       return { data: [], error: null };
     }
 
-    // Fetch contact info
-    const { data: contacts, error: contactsError } = await supabase
-      .from('contacts')
-      .select('id, full_name, company_id')
-      .in('id', slippingContactIds);
-
-    if (contactsError) {
-      return { data: null, error: contactsError.message };
-    }
-
-    // Fetch company names
-    const companyIds = (contacts || [])
-      .map((c) => c.company_id)
-      .filter((id): id is string => id !== null);
-
-    let companyNames: Record<string, string> = {};
-    if (companyIds.length > 0) {
-      const { data: companies } = await supabase
-        .from('companies')
-        .select('id, company_name')
-        .in('id', companyIds);
-
-      (companies || []).forEach((c) => {
-        companyNames[c.id] = c.company_name;
-      });
-    }
-
-    // Fetch assignment info (assigned_to_crm_user_id)
-    const assignmentIds = [...new Set(
-      slippingContactIds
-        .map((cid) => contactStats[cid].assignmentId)
-        .filter((id): id is string => id !== null)
-    )];
-
-    let assignmentUserMap: Record<string, string> = {};
-    if (assignmentIds.length > 0) {
-      const { data: assignments } = await supabase
-        .from('contact_assignments')
-        .select('id, assigned_to_crm_user_id')
-        .in('id', assignmentIds);
-
-      (assignments || []).forEach((a) => {
-        if (a.assigned_to_crm_user_id) {
-          assignmentUserMap[a.id] = a.assigned_to_crm_user_id;
-        }
-      });
-    }
-
-    // Fetch user names from crm_users
-    const userIds = [...new Set(Object.values(assignmentUserMap))];
-    let userNameMap: Record<string, string> = {};
-    if (userIds.length > 0) {
-      const { data: users } = await supabase
-        .from('crm_users')
-        .select('id, full_name, email')
-        .in('id', userIds);
-
-      (users || []).forEach((u) => {
-        userNameMap[u.id] = u.full_name || u.email || 'Unknown';
-      });
-    }
-
-    // Build result
-    const contactInfoMap: Record<string, { name: string; company: string | null }> = {};
-    (contacts || []).forEach((c) => {
-      contactInfoMap[c.id] = {
-        name: c.full_name || 'Unknown',
-        company: c.company_id ? companyNames[c.company_id] || null : null,
-      };
-    });
-
     const result: SlippingContact[] = slippingContactIds.map((contactId) => {
       const stats = contactStats[contactId];
-      const assignedToId = stats.assignmentId ? assignmentUserMap[stats.assignmentId] : null;
       const daysDiff = Math.floor((startOfToday.getTime() - stats.oldestDue.getTime()) / (24 * 60 * 60 * 1000));
 
       return {
         contactId,
-        contactName: contactInfoMap[contactId]?.name || 'Unknown',
-        companyName: contactInfoMap[contactId]?.company || null,
+        contactName: stats.contactName,
+        companyName: stats.companyName,
         overdueCount: stats.count,
         oldestOverdueDays: daysDiff,
         oldestDue: stats.oldestDue.toISOString(),
-        assignedTo: assignedToId || '',
-        assignedToName: assignedToId ? userNameMap[assignedToId] || 'Unknown' : 'Unassigned',
+        assignedTo: stats.userId || '',
+        assignedToName: stats.userName,
       };
     });
 
