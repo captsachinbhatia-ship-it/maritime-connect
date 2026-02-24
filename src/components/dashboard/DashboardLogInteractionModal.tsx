@@ -252,32 +252,30 @@ export function DashboardLogInteractionModal({
               >
                 <Command className="flex flex-col" shouldFilter={true}>
                   <CommandInput placeholder="Type to search..." />
-                  <div className="max-h-[320px] overflow-y-auto overflow-x-hidden overscroll-contain">
-                    <CommandList>
-                      <CommandEmpty>
-                        {contactsLoading ? 'Loading...' : 'No contacts found.'}
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {contacts.map((c) => (
-                          <CommandItem
-                            key={c.id}
-                            value={`${c.full_name} ${c.company_name || ''}`}
-                            onSelect={() => {
-                              setSelectedContact(c);
-                              setContactPopoverOpen(false);
-                            }}
-                          >
-                            <span className="truncate">{c.full_name}</span>
-                            {c.company_name && (
-                              <span className="ml-2 text-xs text-muted-foreground truncate">
-                                {c.company_name}
-                              </span>
-                            )}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </div>
+                  <CommandList className="max-h-[300px] overflow-y-auto overflow-x-hidden overscroll-contain">
+                    <CommandEmpty>
+                      {contactsLoading ? 'Loading...' : 'No contacts found.'}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {contacts.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={`${c.full_name} ${c.company_name || ''}`}
+                          onSelect={() => {
+                            setSelectedContact(c);
+                            setContactPopoverOpen(false);
+                          }}
+                        >
+                          <span className="truncate">{c.full_name}</span>
+                          {c.company_name && (
+                            <span className="ml-2 text-xs text-muted-foreground truncate">
+                              {c.company_name}
+                            </span>
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
                 </Command>
               </PopoverContent>
             </Popover>
