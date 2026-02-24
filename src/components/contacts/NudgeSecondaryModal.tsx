@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Loader2, Bell } from 'lucide-react';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -31,10 +32,15 @@ export function NudgeSecondaryModal({
   onClose,
   onSuccess,
 }: NudgeSecondaryModalProps) {
+  const { crmUserId } = useCrmUser();
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    if (!crmUserId) {
+      toast({ title: 'Error', description: 'User session not found.', variant: 'destructive' });
+      return;
+    }
     setIsSubmitting(true);
 
     const notesText = note.trim()
@@ -43,6 +49,7 @@ export function NudgeSecondaryModal({
 
     const result = await createInteraction({
       contact_id: contactId,
+      user_id: crmUserId,
       interaction_type: 'NOTE',
       outcome: null,
       subject: '[NUDGE] Backup requested',

@@ -30,7 +30,7 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { createInteraction, InteractionType } from '@/services/interactions';
-import { createFollowup, getActiveAssignmentForContact, FollowupType } from '@/services/followups';
+import { useCrmUser } from '@/hooks/useCrmUser';
 
 const INTERACTION_TYPES: { value: InteractionType; label: string; icon: string }[] = [
   { value: 'CALL', label: 'Call', icon: '📞' },
@@ -51,7 +51,7 @@ const OUTCOME_OPTIONS = [
   { value: 'CLOSED_LOST', label: 'Closed Lost', icon: '📉' },
 ];
 
-const INTERACTION_TO_FOLLOWUP: Record<string, FollowupType> = {
+const INTERACTION_TO_FOLLOWUP: Record<string, string> = {
   CALL: 'CALL',
   EMAIL: 'EMAIL',
   WHATSAPP: 'WHATSAPP',
@@ -75,6 +75,7 @@ export function LogInteractionDialog({
   onSuccess,
 }: LogInteractionDialogProps) {
   const navigate = useNavigate();
+  const { crmUserId } = useCrmUser();
 
   // Core interaction fields
   const [interactionType, setInteractionType] = useState<InteractionType | ''>('');
@@ -138,37 +139,31 @@ export function LogInteractionDialog({
     setIsSubmitting(true);
 
     try {
-      // 1. Log the interaction
+      if (!crmUserId) {
+        toast({ title: 'Error', description: 'User session not found. Please log in again.', variant: 'destructive' });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Build next_follow_up_at if follow-up requested
+      const nextFollowUpAt = needsFollowup && dueDate ? dueDate.toISOString() : null;
+
+      // Single insert into contact_interactions (V2)
       const result = await createInteraction({
         contact_id: contactId,
+        user_id: crmUserId,
         interaction_type: interactionType,
         outcome: outcome || null,
         subject: subject.trim() || null,
         notes: notes.trim(),
         interaction_at: new Date().toISOString(),
+        next_follow_up_at: nextFollowUpAt,
       });
 
       if (result.error) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' });
         setIsSubmitting(false);
         return;
-      }
-
-      // 2. Follow-up
-      if (needsFollowup && nextAction.trim() && dueDate) {
-        const assignmentResult = await getActiveAssignmentForContact(contactId);
-        const assignmentId = assignmentResult.data?.id;
-
-        if (assignmentId) {
-          await createFollowup({
-            contact_id: contactId,
-            assignment_id: assignmentId,
-            followup_type: INTERACTION_TO_FOLLOWUP[interactionType] || 'OTHER',
-            followup_reason: nextAction.trim(),
-            notes: `Follow-up from ${interactionType.toLowerCase()}: ${subject || notes.substring(0, 100)}`,
-            due_at: dueDate.toISOString(),
-          });
-        }
       }
 
       toast({

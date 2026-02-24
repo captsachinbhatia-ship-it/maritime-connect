@@ -133,11 +133,14 @@ export async function getUserNames(userIds: string[]): Promise<{
 
 export interface CreateInteractionPayload {
   contact_id: string;
+  user_id: string; // crm_users.id — NOT auth.uid()
   interaction_type: InteractionType;
+  direction?: 'INBOUND' | 'OUTBOUND' | null;
   outcome: string | null;
   subject: string | null;
   notes: string;
   interaction_at: string;
+  next_follow_up_at?: string | null;
 }
 
 export async function createInteraction(payload: CreateInteractionPayload): Promise<{
@@ -146,22 +149,29 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
   try {
     // Verify authenticated session exists before insert
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    
+
     if (sessionError || !sessionData.session) {
       return { error: 'No authenticated session. Please log in again.' };
     }
 
-    // Insert using the client with user JWT (auth.uid() will be populated)
+    const insertRow: Record<string, unknown> = {
+      contact_id: payload.contact_id,
+      user_id: payload.user_id,
+      interaction_type: payload.interaction_type,
+      direction: payload.direction ?? 'OUTBOUND',
+      outcome: payload.outcome,
+      notes: payload.notes || payload.subject || '',
+      interaction_at: payload.interaction_at,
+      meta: { source: 'app', subject: payload.subject },
+    };
+
+    if (payload.next_follow_up_at) {
+      insertRow.next_follow_up_at = payload.next_follow_up_at;
+    }
+
     const { error } = await supabase
-      .from('interactions')
-      .insert({
-        contact_id: payload.contact_id,
-        interaction_type: payload.interaction_type,
-        outcome: payload.outcome,
-        subject: payload.subject,
-        notes: payload.notes,
-        interaction_at: payload.interaction_at,
-      });
+      .from('contact_interactions')
+      .insert(insertRow);
 
     if (error) {
       return { error: error.message };

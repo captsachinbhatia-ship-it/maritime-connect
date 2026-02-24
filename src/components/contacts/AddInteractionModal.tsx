@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -52,6 +53,7 @@ export function AddInteractionModal({
   onClose,
   onSuccess,
 }: AddInteractionModalProps) {
+  const { crmUserId } = useCrmUser();
   const [interactionType, setInteractionType] = useState<InteractionType | ''>('');
   const [outcome, setOutcome] = useState<string>('');
   const [subject, setSubject] = useState('');
@@ -101,8 +103,14 @@ export function AddInteractionModal({
 
     setIsSubmitting(true);
 
+    if (!crmUserId) {
+      toast({ title: 'Error', description: 'User session not found. Please log in again.', variant: 'destructive' });
+      return;
+    }
+
     const result = await createInteraction({
       contact_id: contactId,
+      user_id: crmUserId,
       interaction_type: interactionType,
       outcome: outcome || null,
       subject: subject.trim() || null,
