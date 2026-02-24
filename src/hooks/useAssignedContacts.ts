@@ -96,15 +96,18 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
   }, []);
 
   useEffect(() => {
-    if (!enabled || !crmUserId) {
-      // Reset if disabled or no user
-      if (!enabled) {
-        hasFetched.current = false;
-      }
+    if (!enabled) {
+      // Modal closed — reset so next open refetches cleanly
+      hasFetched.current = false;
       return;
     }
 
-    // Fetch when enabled + crmUserId ready
+    if (!crmUserId) {
+      // enabled=true but crmUserId not yet resolved — stay in loading, do not set contacts=[]
+      return;
+    }
+
+    // enabled=true and crmUserId ready — fetch
     hasFetched.current = true;
     fetchContacts(crmUserId);
   }, [enabled, crmUserId, fetchContacts]);
