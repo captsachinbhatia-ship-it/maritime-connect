@@ -8,70 +8,80 @@ export interface AssignedContactOption {
 }
 
 /**
- * Fetches all contacts assigned to a CRM user as PRIMARY or SECONDARY
- * using the same two-step strategy as MyContactsTab / SecondaryContactsTab:
- *   Step 1 – fetch assignment rows (no joins)
- *   Step 2 – fetch contacts by ID
- * This guarantees the dropdown matches those pages exactly.
+ * Fetches ALL contacts assigned to a CRM user as PRIMARY or SECONDARY
+ * using the same two-step strategy as MyContactsTab / SecondaryContactsTab.
+ * No hard limits — handles 500+ contacts via chunked .in() calls.
  */
 export function useAssignedContacts(crmUserId: string | null, enabled: boolean) {
   const [contacts, setContacts] = useState<AssignedContactOption[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetch = useCallback(async () => {
+  const fetchContacts = useCallback(async () => {
     if (!crmUserId) { setContacts([]); return; }
     setLoading(true);
     try {
-      // STEP 1: assignment rows only
-      const { data: assignments, error: aErr } = await supabase
-        .from('contact_assignments')
-        .select('contact_id')
-        .eq('assigned_to_crm_user_id', crmUserId)
-        .in('assignment_role', ['PRIMARY', 'SECONDARY'])
-        .eq('status', 'ACTIVE')
-        .is('ended_at', null);
+      // STEP 1: Fetch ALL assignment rows (no limit)
+      let allAssignments: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('contact_assignments')
+          .select('contact_id')
+          .eq('assigned_to_crm_user_id', crmUserId)
+          .in('assignment_role', ['PRIMARY', 'SECONDARY'])
+          .eq('status', 'ACTIVE')
+          .is('ended_at', null)
+          .range(from, from + pageSize - 1);
 
-      if (aErr || !assignments || assignments.length === 0) {
+        if (error) { console.error('Assignment fetch error:', error.message); break; }
+        if (!data || data.length === 0) break;
+        allAssignments = allAssignments.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      if (allAssignments.length === 0) {
         setContacts([]);
         setLoading(false);
         return;
       }
 
       // De-duplicate contact IDs
-      const contactIds = [...new Set(assignments.map((a: any) => a.contact_id))];
+      const contactIds = [...new Set(allAssignments.map((a: any) => a.contact_id))];
 
-      // STEP 2: fetch contacts by ID
-      const { data: contactData, error: cErr } = await supabase
-        .from('contacts')
-        .select('id, full_name, company_id')
-        .in('id', contactIds)
-        .eq('is_active', true)
-        .is('deleted_at', null)
-        .order('full_name', { ascending: true });
+      // STEP 2: Fetch contacts by ID in chunks of 200
+      const batchSize = 200;
+      let allContactData: any[] = [];
+      for (let i = 0; i < contactIds.length; i += batchSize) {
+        const chunk = contactIds.slice(i, i + batchSize);
+        const { data: contactData, error: cErr } = await supabase
+          .from('contacts')
+          .select('id, full_name, company_id, companies(name)')
+          .in('id', chunk)
+          .eq('is_active', true)
+          .eq('is_deleted', false)
+          .order('full_name', { ascending: true });
 
-      if (cErr || !contactData) {
-        setContacts([]);
-        setLoading(false);
-        return;
+        if (cErr) { console.error('Contact fetch error:', cErr.message); continue; }
+        if (contactData) allContactData = allContactData.concat(contactData);
       }
 
-      // Resolve company names
-      const companyIds = [...new Set(contactData.map((c: any) => c.company_id).filter(Boolean))];
-      const companyMap = new Map<string, string>();
-      if (companyIds.length > 0) {
-        const { data: companies } = await supabase
-          .from('companies')
-          .select('id, company_name')
-          .in('id', companyIds);
-        (companies || []).forEach((co: any) => companyMap.set(co.id, co.company_name));
+      // De-dup by contact id and build final list
+      const seen = new Set<string>();
+      const list: AssignedContactOption[] = [];
+      for (const c of allContactData) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        list.push({
+          id: c.id,
+          full_name: c.full_name || 'Unknown',
+          company_name: c.companies?.name || null,
+        });
       }
 
-      const list: AssignedContactOption[] = contactData.map((c: any) => ({
-        id: c.id,
-        full_name: c.full_name || 'Unknown',
-        company_name: c.company_id ? (companyMap.get(c.company_id) ?? null) : null,
-      }));
-
+      // Sort by full_name
+      list.sort((a, b) => a.full_name.localeCompare(b.full_name));
       setContacts(list);
     } catch (err) {
       console.error('useAssignedContacts error:', err);
@@ -82,8 +92,8 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
   }, [crmUserId]);
 
   useEffect(() => {
-    if (enabled) fetch();
-  }, [enabled, fetch]);
+    if (enabled) fetchContacts();
+  }, [enabled, fetchContacts]);
 
-  return { contacts, loading, refetch: fetch };
+  return { contacts, loading, refetch: fetchContacts };
 }
