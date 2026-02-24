@@ -22,10 +22,12 @@ interface RecentInteraction {
 }
 
 const typeIcons: Record<string, typeof Phone> = {
+  COLD_CALL: Phone,
   CALL: Phone,
-  EMAIL: Mail,
+  EMAIL_SENT: Mail,
+  WHATSAPP_SENT: MessageSquare,
+  WHATSAPP_REPLY: MessageSquare,
   MEETING: Video,
-  WHATSAPP: MessageSquare,
   NOTE: StickyNote,
 };
 

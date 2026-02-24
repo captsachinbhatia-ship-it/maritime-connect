@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 
-export type InteractionType = 'CALL' | 'WHATSAPP' | 'EMAIL' | 'MEETING' | 'NOTE';
+export type InteractionType = 'COLD_CALL' | 'CALL' | 'EMAIL_SENT' | 'WHATSAPP_SENT' | 'WHATSAPP_REPLY' | 'MEETING' | 'NOTE';
 
 export interface ContactInteraction {
   id: string;
