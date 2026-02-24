@@ -147,16 +147,15 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
   error: string | null;
 }> {
   try {
-    // Verify authenticated session exists before insert
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
 
-    if (sessionError || !sessionData.session) {
+    if (authError || !authUser) {
       return { error: 'No authenticated session. Please log in again.' };
     }
 
     const insertRow: Record<string, unknown> = {
       contact_id: payload.contact_id,
-      user_id: payload.user_id,
+      user_id: authUser.id,
       interaction_type: payload.interaction_type,
       direction: 'OUT',
       outcome: payload.outcome,
