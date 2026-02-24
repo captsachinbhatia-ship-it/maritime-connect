@@ -158,7 +158,7 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
       contact_id: payload.contact_id,
       user_id: payload.user_id,
       interaction_type: payload.interaction_type,
-      direction: payload.direction ?? 'OUTBOUND',
+      direction: 'OUT',
       outcome: payload.outcome,
       notes: payload.notes || payload.subject || '',
       interaction_at: payload.interaction_at,
