@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,14 +27,20 @@ export function AcknowledgeNudgeButton({
   contactName,
   onSuccess,
 }: AcknowledgeNudgeButtonProps) {
+  const { crmUserId } = useCrmUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
   const handleAcknowledge = async () => {
+    if (!crmUserId) {
+      toast({ title: 'Error', description: 'User session not found.', variant: 'destructive' });
+      return;
+    }
     setIsSubmitting(true);
 
     const result = await createInteraction({
       contact_id: contactId,
+      user_id: crmUserId,
       interaction_type: 'NOTE',
       outcome: null,
       subject: '[ACK] Backup accepted',
