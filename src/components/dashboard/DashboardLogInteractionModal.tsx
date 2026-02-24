@@ -230,6 +230,11 @@ export function DashboardLogInteractionModal({
           {/* Contact Selector */}
           <div className="space-y-2">
             <Label>Contact <span className="text-destructive">*</span></Label>
+            {/* TEMP DEBUG — remove after diagnosis */}
+            <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded mb-1">
+              crmUserId: {String(crmUserId)} | loading: {String(contactsLoading)} | contacts: {contacts.length}
+            </div>
+
             <Popover open={contactPopoverOpen} onOpenChange={setContactPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button variant="outline" role="combobox" className="w-full justify-between font-normal">
