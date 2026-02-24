@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -56,57 +56,65 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
 
   const effectiveUserId = crmUserIdProp === undefined ? currentCrmUserId : crmUserIdProp;
 
-  useEffect(() => {
-    const fetchRecentInteractions = async () => {
-      if (!effectiveUserId && !isAdmin) {
+  const fetchRecentInteractions = useCallback(async () => {
+    if (!effectiveUserId && !isAdmin) {
+      setInteractions([]);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      // Query v_interaction_timeline_v2
+      let query = supabase
+        .from('v_interaction_timeline_v2')
+        .select('*')
+        .order('interaction_at', { ascending: false })
+        .limit(15);
+
+      // Non-admin: filter to PRIMARY assignments for current user
+      if (!isAdmin && effectiveUserId) {
+        query = query
+          .eq('assignment_role', 'PRIMARY')
+          .eq('assigned_to_crm_user_id', effectiveUserId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('v_interaction_timeline_v2 error:', error.message);
         setInteractions([]);
         setIsLoading(false);
         return;
       }
-      setIsLoading(true);
-      try {
-        // Query v_interaction_timeline_v2
-        let query = supabase
-          .from('v_interaction_timeline_v2')
-          .select('*')
-          .order('interaction_at', { ascending: false })
-          .limit(15);
 
-        // Non-admin: filter to PRIMARY assignments for current user
-        if (!isAdmin && effectiveUserId) {
-          query = query
-            .eq('assignment_role', 'PRIMARY')
-            .eq('assigned_to_crm_user_id', effectiveUserId);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-          console.error('v_interaction_timeline_v2 error:', error.message);
-          setInteractions([]);
-          setIsLoading(false);
-          return;
-        }
-
-        setInteractions((data || []).map((r: any) => ({
-          id: r.id,
-          contact_id: r.contact_id,
-          contact_name: r.contact_name || r.full_name || 'Unknown',
-          interaction_type: r.interaction_type,
-          interaction_at: r.interaction_at,
-          subject: r.subject || null,
-          notes: r.notes || null,
-          outcome: r.outcome || null,
-          creator_name: r.creator_name || r.creator_full_name || null,
-        })));
-      } catch (error) {
-        console.error('Failed to fetch recent interactions:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchRecentInteractions();
+      setInteractions((data || []).map((r: any) => ({
+        id: r.id,
+        contact_id: r.contact_id,
+        contact_name: r.contact_name || r.full_name || 'Unknown',
+        interaction_type: r.interaction_type,
+        interaction_at: r.interaction_at,
+        subject: r.subject || null,
+        notes: r.notes || null,
+        outcome: r.outcome || null,
+        creator_name: r.creator_name || r.creator_full_name || null,
+      })));
+    } catch (error) {
+      console.error('Failed to fetch recent interactions:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [effectiveUserId, isAdmin]);
+
+  useEffect(() => {
+    fetchRecentInteractions();
+  }, [fetchRecentInteractions]);
+
+  // Listen for dashboard refresh events (fired after logging an interaction)
+  useEffect(() => {
+    const handler = () => fetchRecentInteractions();
+    window.addEventListener('dashboard:refresh', handler);
+    return () => window.removeEventListener('dashboard:refresh', handler);
+  }, [fetchRecentInteractions]);
 
   return (
     <Card className="flex flex-col">

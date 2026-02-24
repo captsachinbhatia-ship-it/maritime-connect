@@ -176,6 +176,8 @@ export function LogInteractionDialog({
       resetForm();
       onOpenChange(false);
       onSuccess?.();
+      // Signal dashboard widgets to refresh
+      window.dispatchEvent(new Event('dashboard:refresh'));
     } catch (err) {
       toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to log interaction', variant: 'destructive' });
     } finally {

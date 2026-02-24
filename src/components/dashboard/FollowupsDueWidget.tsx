@@ -84,6 +84,13 @@ export function FollowupsDueWidget() {
     fetchAll();
   }, [fetchAll]);
 
+  // Listen for dashboard refresh events (fired after logging an interaction)
+  useEffect(() => {
+    const handler = () => fetchAll();
+    window.addEventListener('dashboard:refresh', handler);
+    return () => window.removeEventListener('dashboard:refresh', handler);
+  }, [fetchAll]);
+
   // Bucket items client-side
   const todayStr = new Date().toISOString().slice(0, 10);
   const buckets = {
