@@ -25,27 +25,7 @@ import { createInteraction, InteractionType } from '@/services/interactions';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
-
-const INTERACTION_TYPES: { value: InteractionType; label: string; icon: string }[] = [
-  { value: 'COLD_CALL', label: 'Cold Call', icon: '📱' },
-  { value: 'CALL', label: 'Call', icon: '📞' },
-  { value: 'EMAIL_SENT', label: 'Email Sent', icon: '✉️' },
-  { value: 'WHATSAPP_SENT', label: 'WhatsApp Sent', icon: '💬' },
-  { value: 'WHATSAPP_REPLY', label: 'WhatsApp Reply', icon: '💬' },
-  { value: 'MEETING', label: 'Meeting', icon: '🤝' },
-  { value: 'NOTE', label: 'Note', icon: '📝' },
-];
-
-const OUTCOME_OPTIONS = [
-  { value: 'INTERESTED', label: 'Positive', icon: '✅' },
-  { value: 'NO_RESPONSE', label: 'No Response', icon: '🔇' },
-  { value: 'NOT_INTERESTED', label: 'Not Interested', icon: '❌' },
-  { value: 'FOLLOW_UP', label: 'Follow-up Needed', icon: '🔔' },
-  { value: 'MEETING_SCHEDULED', label: 'Meeting Scheduled', icon: '📅' },
-  { value: 'DEAL_PROGRESS', label: 'Deal Progress', icon: '📈' },
-  { value: 'CLOSED_WON', label: 'Closed Won', icon: '🎉' },
-  { value: 'CLOSED_LOST', label: 'Closed Lost', icon: '📉' },
-];
+import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
 
 interface ContactOption {
   id: string;
@@ -306,7 +286,7 @@ export function DashboardLogInteractionModal({
             <Select value={interactionType} onValueChange={(v) => setInteractionType(v as InteractionType)}>
               <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
               <SelectContent>
-                {INTERACTION_TYPES.map((t) => (
+                {INTERACTION_TYPE_OPTIONS.map((t) => (
                   <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>
                 ))}
               </SelectContent>

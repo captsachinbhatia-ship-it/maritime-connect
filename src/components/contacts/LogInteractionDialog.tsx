@@ -31,27 +31,7 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { createInteraction, InteractionType } from '@/services/interactions';
 import { useCrmUser } from '@/hooks/useCrmUser';
-
-const INTERACTION_TYPES: { value: InteractionType; label: string; icon: string }[] = [
-  { value: 'COLD_CALL', label: 'Cold Call', icon: '📱' },
-  { value: 'CALL', label: 'Call', icon: '📞' },
-  { value: 'EMAIL_SENT', label: 'Email Sent', icon: '✉️' },
-  { value: 'WHATSAPP_SENT', label: 'WhatsApp Sent', icon: '💬' },
-  { value: 'WHATSAPP_REPLY', label: 'WhatsApp Reply', icon: '💬' },
-  { value: 'MEETING', label: 'Meeting', icon: '🤝' },
-  { value: 'NOTE', label: 'Note', icon: '📝' },
-];
-
-const OUTCOME_OPTIONS = [
-  { value: 'INTERESTED', label: 'Positive', icon: '✅' },
-  { value: 'NO_RESPONSE', label: 'No Response', icon: '🔇' },
-  { value: 'NOT_INTERESTED', label: 'Not Interested', icon: '❌' },
-  { value: 'FOLLOW_UP', label: 'Follow-up Needed', icon: '🔔' },
-  { value: 'MEETING_SCHEDULED', label: 'Meeting Scheduled', icon: '📅' },
-  { value: 'DEAL_PROGRESS', label: 'Deal Progress', icon: '📈' },
-  { value: 'CLOSED_WON', label: 'Closed Won', icon: '🎉' },
-  { value: 'CLOSED_LOST', label: 'Closed Lost', icon: '📉' },
-];
+import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
 
 const INTERACTION_TO_FOLLOWUP: Record<string, string> = {
   CALL: 'CALL',
@@ -204,7 +184,7 @@ export function LogInteractionDialog({
             <Select value={interactionType} onValueChange={(val) => setInteractionType(val as InteractionType)}>
               <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
               <SelectContent>
-                {INTERACTION_TYPES.map((type) => (
+                {INTERACTION_TYPE_OPTIONS.map((type) => (
                   <SelectItem key={type.value} value={type.value}>{type.icon} {type.label}</SelectItem>
                 ))}
               </SelectContent>

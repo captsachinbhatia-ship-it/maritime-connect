@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { ALLOWED_INTERACTION_TYPES } from '@/lib/interactionConstants';
 
 export type InteractionType = 'COLD_CALL' | 'CALL' | 'EMAIL_SENT' | 'WHATSAPP_SENT' | 'WHATSAPP_REPLY' | 'MEETING' | 'NOTE';
 
@@ -151,6 +152,11 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
 
     if (authError || !authUser) {
       return { error: 'No authenticated session. Please log in again.' };
+    }
+
+    // Last-guard: reject invalid interaction_type before hitting DB
+    if (!ALLOWED_INTERACTION_TYPES.has(payload.interaction_type)) {
+      return { error: `Invalid interaction type: "${payload.interaction_type}". Allowed: ${[...ALLOWED_INTERACTION_TYPES].join(', ')}` };
     }
 
     const insertRow: Record<string, unknown> = {

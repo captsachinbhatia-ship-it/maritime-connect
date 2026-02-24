@@ -20,27 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { createInteraction, InteractionType } from '@/services/interactions';
-
-const INTERACTION_TYPES: { value: InteractionType; label: string }[] = [
-  { value: 'COLD_CALL', label: 'Cold Call' },
-  { value: 'CALL', label: 'Call' },
-  { value: 'EMAIL_SENT', label: 'Email Sent' },
-  { value: 'WHATSAPP_SENT', label: 'WhatsApp Sent' },
-  { value: 'WHATSAPP_REPLY', label: 'WhatsApp Reply' },
-  { value: 'MEETING', label: 'Meeting' },
-  { value: 'NOTE', label: 'Note' },
-];
-
-const OUTCOME_OPTIONS = [
-  { value: 'NO_RESPONSE', label: 'No Response' },
-  { value: 'INTERESTED', label: 'Interested' },
-  { value: 'NOT_INTERESTED', label: 'Not Interested' },
-  { value: 'FOLLOW_UP', label: 'Follow Up' },
-  { value: 'MEETING_SCHEDULED', label: 'Meeting Scheduled' },
-  { value: 'DEAL_PROGRESS', label: 'Deal Progress' },
-  { value: 'CLOSED_WON', label: 'Closed Won' },
-  { value: 'CLOSED_LOST', label: 'Closed Lost' },
-];
+import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
 
 interface AddInteractionModalProps {
   contactId: string;
@@ -162,9 +142,9 @@ export function AddInteractionModal({
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                {INTERACTION_TYPES.map((type) => (
+                {INTERACTION_TYPE_OPTIONS.map((type) => (
                   <SelectItem key={type.value} value={type.value}>
-                    {type.label}
+                    {type.icon} {type.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -180,7 +160,7 @@ export function AddInteractionModal({
               <SelectContent>
                 {OUTCOME_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {opt.icon} {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
