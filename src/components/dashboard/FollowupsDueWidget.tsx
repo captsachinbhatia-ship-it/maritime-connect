@@ -22,27 +22,13 @@ export function FollowupsDueWidget() {
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    if (!crmUserId && !isAdmin) {
-      setAllItems([]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
-      // Query v_followup_queue_all_v2
-      let query = supabase
+      const { data, error } = await supabase
         .from('v_followup_queue_all_v2')
         .select('*')
-        .order('due_at', { ascending: true });
-
-      // Non-admin: filter to PRIMARY assignments for current user
-      if (!isAdmin && crmUserId) {
-        query = query
-          .eq('assignment_role', 'PRIMARY')
-          .eq('user_id', crmUserId);
-      }
-
-      const { data, error } = await query;
+        .order('next_follow_up_at', { ascending: true })
+        .limit(10);
 
       if (error) {
         console.error('v_followup_queue_all_v2 error:', error.message);
@@ -59,7 +45,7 @@ export function FollowupsDueWidget() {
         followup_type: r.followup_type || 'OTHER',
         followup_reason: r.followup_reason || r.reason || '',
         notes: r.notes || null,
-        due_at: r.due_at || r.next_follow_up_at || '',
+        due_at: r.next_follow_up_at || '',
         status: r.status || 'OPEN',
         completed_at: null,
         created_at: r.created_at || '',
@@ -78,7 +64,7 @@ export function FollowupsDueWidget() {
     } finally {
       setLoading(false);
     }
-  }, [crmUserId, isAdmin]);
+  }, []);
 
   useEffect(() => {
     fetchAll();
