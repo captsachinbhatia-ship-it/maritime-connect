@@ -18,7 +18,7 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
   const hasFetched = useRef(false);
 
   const fetchContacts = useCallback(async (userId: string) => {
-    console.log('[useAssignedContacts] fetching for crmUserId:', userId);
+    console.log('[useAssignedContacts] START — crmUserId:', userId);
     setLoading(true);
     try {
       // STEP 1: Fetch ALL assignment rows (no limit) via pagination
@@ -35,14 +35,21 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
           .is('ended_at', null)
           .range(from, from + pageSize - 1);
 
-        if (error) { console.error('[useAssignedContacts] Assignment fetch error:', error.message); break; }
+        if (error) {
+          console.error('[useAssignedContacts] Assignment fetch ERROR:', error.message, '| code:', error.code);
+          break;
+        }
         if (!data || data.length === 0) break;
         allAssignments = allAssignments.concat(data);
         if (data.length < pageSize) break;
         from += pageSize;
       }
 
-      console.log('[useAssignedContacts] total assignment rows:', allAssignments.length);
+      console.log('[useAssignedContacts] assignment rows fetched:', allAssignments.length);
+
+      if (allAssignments.length === 0) {
+        console.warn('[useAssignedContacts] ZERO assignments returned for crmUserId:', userId, '— check RLS or assigned_to_crm_user_id value');
+      }
 
       if (allAssignments.length === 0) {
         setContacts([]);
@@ -66,7 +73,11 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
           .eq('is_deleted', false)
           .order('full_name', { ascending: true });
 
-        if (cErr) { console.error('[useAssignedContacts] Contact fetch error:', cErr.message); continue; }
+        if (cErr) {
+          console.error('[useAssignedContacts] Contact fetch ERROR:', cErr.message, '| code:', cErr.code);
+          continue;
+        }
+        console.log('[useAssignedContacts] contact batch fetched:', contactData?.length ?? 0, '| chunk start:', i);
         if (contactData) allContactData = allContactData.concat(contactData);
       }
 
@@ -85,7 +96,10 @@ export function useAssignedContacts(crmUserId: string | null, enabled: boolean) 
 
       // Sort by full_name
       list.sort((a, b) => a.full_name.localeCompare(b.full_name));
-      console.log('[useAssignedContacts] final contact count:', list.length);
+      console.log('[useAssignedContacts] DONE — final contact count:', list.length, '| crmUserId:', userId);
+      if (list.length === 0) {
+        console.warn('[useAssignedContacts] final list is EMPTY — assignments found:', allAssignments.length, '| contacts fetched:', allContactData.length);
+      }
       setContacts(list);
     } catch (err) {
       console.error('[useAssignedContacts] error:', err);
