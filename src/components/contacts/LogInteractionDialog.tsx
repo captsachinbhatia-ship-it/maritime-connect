@@ -33,9 +33,11 @@ import { createInteraction, InteractionType } from '@/services/interactions';
 import { useCrmUser } from '@/hooks/useCrmUser';
 
 const INTERACTION_TYPES: { value: InteractionType; label: string; icon: string }[] = [
+  { value: 'COLD_CALL', label: 'Cold Call', icon: '📱' },
   { value: 'CALL', label: 'Call', icon: '📞' },
-  { value: 'EMAIL', label: 'Email', icon: '✉️' },
-  { value: 'WHATSAPP', label: 'WhatsApp', icon: '💬' },
+  { value: 'EMAIL_SENT', label: 'Email Sent', icon: '✉️' },
+  { value: 'WHATSAPP_SENT', label: 'WhatsApp Sent', icon: '💬' },
+  { value: 'WHATSAPP_REPLY', label: 'WhatsApp Reply', icon: '💬' },
   { value: 'MEETING', label: 'Meeting', icon: '🤝' },
   { value: 'NOTE', label: 'Note', icon: '📝' },
 ];

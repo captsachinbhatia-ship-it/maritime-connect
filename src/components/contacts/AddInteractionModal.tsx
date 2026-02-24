@@ -22,10 +22,12 @@ import { toast } from '@/hooks/use-toast';
 import { createInteraction, InteractionType } from '@/services/interactions';
 
 const INTERACTION_TYPES: { value: InteractionType; label: string }[] = [
+  { value: 'COLD_CALL', label: 'Cold Call' },
   { value: 'CALL', label: 'Call' },
-  { value: 'EMAIL', label: 'Email' },
+  { value: 'EMAIL_SENT', label: 'Email Sent' },
+  { value: 'WHATSAPP_SENT', label: 'WhatsApp Sent' },
+  { value: 'WHATSAPP_REPLY', label: 'WhatsApp Reply' },
   { value: 'MEETING', label: 'Meeting' },
-  { value: 'WHATSAPP', label: 'WhatsApp' },
   { value: 'NOTE', label: 'Note' },
 ];
 

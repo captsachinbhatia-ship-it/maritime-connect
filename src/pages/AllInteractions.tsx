@@ -25,7 +25,9 @@ interface Interaction {
 }
 
 const typeIcons: Record<string, typeof Phone> = {
-  CALL: Phone, EMAIL: Mail, MEETING: Video, WHATSAPP: MessageSquare, NOTE: StickyNote,
+  COLD_CALL: Phone, CALL: Phone, EMAIL_SENT: Mail,
+  WHATSAPP_SENT: MessageSquare, WHATSAPP_REPLY: MessageSquare,
+  MEETING: Video, NOTE: StickyNote,
 };
 
 export default function AllInteractions() {
@@ -118,12 +120,14 @@ export default function AllInteractions() {
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="COLD_CALL">Cold Call</SelectItem>
             <SelectItem value="CALL">Call</SelectItem>
-            <SelectItem value="EMAIL">Email</SelectItem>
-            <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
+            <SelectItem value="EMAIL_SENT">Email Sent</SelectItem>
+            <SelectItem value="WHATSAPP_SENT">WhatsApp Sent</SelectItem>
+            <SelectItem value="WHATSAPP_REPLY">WhatsApp Reply</SelectItem>
             <SelectItem value="MEETING">Meeting</SelectItem>
             <SelectItem value="NOTE">Note</SelectItem>
           </SelectContent>
