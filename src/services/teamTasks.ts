@@ -1,9 +1,9 @@
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from "@/lib/supabaseClient";
 
 /* ─── Types ─── */
 
-export type TaskPriority = 'LOW' | 'MED' | 'HIGH';
-export type TaskUserStatus = 'OPEN' | 'DONE';
+export type TaskPriority = "LOW" | "MED" | "HIGH";
+export type TaskUserStatus = "OPEN" | "DONE";
 
 export interface Task {
   id: string;
@@ -47,14 +47,18 @@ export interface TaskUserState {
 
 /* ─── Fetch tasks (RLS handles visibility) ─── */
 
-export async function getMyTasks(crmUserId: string, limit = 50): Promise<{
+export async function getMyTasks(
+  crmUserId: string,
+  limit = 50,
+): Promise<{
   data: Task[] | null;
   error: string | null;
 }> {
   try {
     const { data, error } = await supabase
-      .from('tasks')
-      .select(`
+      .from("tasks")
+      .select(
+        `
         id,
         title,
         notes,
@@ -74,12 +78,13 @@ export async function getMyTasks(crmUserId: string, limit = 50): Promise<{
           pinned,
           pinned_order
         )
-      `)
-      .order('created_at', { ascending: false })
+      `,
+      )
+      .order("created_at", { ascending: false })
       .limit(limit);
 
     if (error) {
-      if (error.message.includes('does not exist') || error.code === '42P01') {
+      if (error.message.includes("does not exist") || error.code === "42P01") {
         return { data: [], error: null };
       }
       return { data: null, error: error.message };
@@ -96,12 +101,12 @@ export async function getMyTasks(crmUserId: string, limit = 50): Promise<{
         title: row.title,
         notes: row.notes,
         due_at: row.due_at,
-        priority: row.priority || 'MED',
+        priority: row.priority || "MED",
         is_broadcast: row.is_broadcast ?? false,
         created_by_crm_user_id: row.created_by_crm_user_id,
         created_at: row.created_at,
         creator_name: row.created_by?.full_name || null,
-        my_status: myState?.status || 'OPEN',
+        my_status: myState?.status || "OPEN",
         my_pinned: myState?.pinned ?? false,
         recipient_count: Array.isArray(row.task_recipients) ? row.task_recipients.length : 0,
       };
@@ -122,7 +127,7 @@ export async function getMyTasks(crmUserId: string, limit = 50): Promise<{
 
     return { data: mapped, error: null };
   } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : 'Failed to load tasks' };
+    return { data: null, error: err instanceof Error ? err.message : "Failed to load tasks" };
   }
 }
 
@@ -139,14 +144,16 @@ export async function createTeamTask(input: {
 }): Promise<{ error: string | null }> {
   try {
     // Auth gate
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('[createTeamTask] session uid:', session?.user?.id ?? 'NULL');
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    console.log("[createTeamTask] session uid:", session?.user?.id ?? "NULL");
     if (!session?.access_token) {
-      return { error: 'Session expired. Please login again.' };
+      return { error: "Session expired. Please login again." };
     }
 
     const { data: taskData, error: taskError } = await supabase
-      .from('tasks')
+      .from("tasks")
       .insert({
         title: input.title,
         notes: input.notes || null,
@@ -156,7 +163,7 @@ export async function createTeamTask(input: {
         created_by_crm_user_id: input.crmUserId,
         assigned_to_crm_user_id: input.crmUserId,
       })
-      .select('id')
+      .select("id")
       .single();
 
     if (taskError) return { error: taskError.message };
@@ -168,15 +175,13 @@ export async function createTeamTask(input: {
         crm_user_id: uid,
         assigned_by_crm_user_id: input.crmUserId,
       }));
-      const { error: recError } = await supabase
-        .from('task_recipients')
-        .insert(rows);
+      const { error: recError } = await supabase.from("task_recipients").insert(rows);
       if (recError) return { error: `Task created but failed to add recipients: ${recError.message}` };
     }
 
     return { error: null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to create task' };
+    return { error: err instanceof Error ? err.message : "Failed to create task" };
   }
 }
 
@@ -184,17 +189,14 @@ export async function createTeamTask(input: {
 
 export async function updateTeamTask(
   taskId: string,
-  updates: Partial<Pick<Task, 'title' | 'notes' | 'due_at' | 'priority' | 'is_broadcast'>>
+  updates: Partial<Pick<Task, "title" | "notes" | "due_at" | "priority" | "is_broadcast">>,
 ): Promise<{ error: string | null }> {
   try {
-    const { error } = await supabase
-      .from('tasks')
-      .update(updates)
-      .eq('id', taskId);
+    const { error } = await supabase.from("tasks").update(updates).eq("id", taskId);
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to update task' };
+    return { error: err instanceof Error ? err.message : "Failed to update task" };
   }
 }
 
@@ -202,11 +204,11 @@ export async function updateTeamTask(
 
 export async function deleteTeamTask(taskId: string): Promise<{ error: string | null }> {
   try {
-    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    const { error } = await supabase.from("tasks").delete().eq("id", taskId);
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to delete task' };
+    return { error: err instanceof Error ? err.message : "Failed to delete task" };
   }
 }
 
@@ -215,23 +217,21 @@ export async function deleteTeamTask(taskId: string): Promise<{ error: string | 
 export async function upsertTaskUserState(
   taskId: string,
   crmUserId: string,
-  updates: Partial<Pick<TaskUserState, 'status' | 'pinned'>>
+  updates: Partial<Pick<TaskUserState, "status" | "pinned">>,
 ): Promise<{ error: string | null }> {
   try {
-    const { error } = await supabase
-      .from('task_user_state')
-      .upsert(
-        {
-          task_id: taskId,
-          crm_user_id: crmUserId,
-          ...updates,
-        },
-        { onConflict: 'task_id,crm_user_id' }
-      );
+    const { error } = await supabase.from("task_user_state").upsert(
+      {
+        task_id: taskId,
+        crm_user_id: crmUserId,
+        ...updates,
+      },
+      { onConflict: "task_id,crm_user_id" },
+    );
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to update task state' };
+    return { error: err instanceof Error ? err.message : "Failed to update task state" };
   }
 }
 
@@ -243,10 +243,10 @@ export async function getTaskComments(taskId: string): Promise<{
 }> {
   try {
     const { data, error } = await supabase
-      .from('task_comments')
-      .select('id, task_id, user_id, comment_text, created_at')
-      .eq('task_id', taskId)
-      .order('created_at', { ascending: true });
+      .from("task_comments")
+      .select("id, task_id, user_id, comment, created_at")
+      .eq("task_id", taskId)
+      .order("created_at", { ascending: true });
 
     if (error) return { data: null, error: error.message };
 
@@ -254,43 +254,48 @@ export async function getTaskComments(taskId: string): Promise<{
     const userIds = [...new Set((data || []).map((r: any) => r.user_id).filter(Boolean))];
     let nameMap: Record<string, string> = {};
     if (userIds.length > 0) {
-      const { data: users } = await supabase
-        .from('crm_users')
-        .select('id, full_name')
-        .in('id', userIds);
-      (users || []).forEach((u: any) => { nameMap[u.id] = u.full_name || 'Unknown'; });
+      const { data: users } = await supabase.from("crm_users").select("id, full_name").in("id", userIds);
+      (users || []).forEach((u: any) => {
+        nameMap[u.id] = u.full_name || "Unknown";
+      });
     }
 
     const mapped: TaskComment[] = (data || []).map((r: any) => ({
       id: r.id,
       task_id: r.task_id,
       user_id: r.user_id,
-      comment: r.comment_text || '',
+      comment: r.comment || "",
       created_at: r.created_at,
-      user_name: nameMap[r.user_id] || 'Unknown',
+      user_name: nameMap[r.user_id] || "Unknown",
     }));
 
     return { data: mapped, error: null };
   } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : 'Failed to load comments' };
+    return { data: null, error: err instanceof Error ? err.message : "Failed to load comments" };
   }
 }
 
-export async function addTaskComment(taskId: string, crmUserId: string, comment: string): Promise<{ error: string | null }> {
+export async function addTaskComment(
+  taskId: string,
+  crmUserId: string,
+  comment: string,
+): Promise<{ error: string | null }> {
   try {
     // Auth gate – ensure RLS can resolve auth.uid()
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session?.access_token) {
-      return { error: 'Session expired. Please login again.' };
+      return { error: "Session expired. Please login again." };
     }
 
     const { error } = await supabase
-      .from('task_comments')
-      .insert({ task_id: taskId, user_id: crmUserId, comment_text: comment });
+      .from("task_comments")
+      .insert({ task_id: taskId, user_id: crmUserId, comment: comment });
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to add comment' };
+    return { error: err instanceof Error ? err.message : "Failed to add comment" };
   }
 }
 
@@ -302,12 +307,14 @@ export async function getTaskRecipients(taskId: string): Promise<{
 }> {
   try {
     const { data, error } = await supabase
-      .from('task_recipients')
-      .select(`
+      .from("task_recipients")
+      .select(
+        `
         *,
         recipient:crm_users!task_recipients_crm_user_id_fkey(full_name)
-      `)
-      .eq('task_id', taskId);
+      `,
+      )
+      .eq("task_id", taskId);
 
     if (error) return { data: null, error: error.message };
 
@@ -316,36 +323,40 @@ export async function getTaskRecipients(taskId: string): Promise<{
       task_id: r.task_id,
       crm_user_id: r.crm_user_id,
       assigned_by_crm_user_id: r.assigned_by_crm_user_id,
-      user_name: r.recipient?.full_name || 'Unknown',
+      user_name: r.recipient?.full_name || "Unknown",
     }));
 
     return { data: mapped, error: null };
   } catch (err) {
-    return { data: null, error: err instanceof Error ? err.message : 'Failed to load recipients' };
+    return { data: null, error: err instanceof Error ? err.message : "Failed to load recipients" };
   }
 }
 
-export async function addTaskRecipients(taskId: string, userIds: string[], assignedByCrmUserId: string): Promise<{ error: string | null }> {
+export async function addTaskRecipients(
+  taskId: string,
+  userIds: string[],
+  assignedByCrmUserId: string,
+): Promise<{ error: string | null }> {
   try {
     const rows = userIds.map((uid) => ({
       task_id: taskId,
       crm_user_id: uid,
       assigned_by_crm_user_id: assignedByCrmUserId,
     }));
-    const { error } = await supabase.from('task_recipients').insert(rows);
+    const { error } = await supabase.from("task_recipients").insert(rows);
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to add recipients' };
+    return { error: err instanceof Error ? err.message : "Failed to add recipients" };
   }
 }
 
 export async function removeTaskRecipient(recipientId: string): Promise<{ error: string | null }> {
   try {
-    const { error } = await supabase.from('task_recipients').delete().eq('id', recipientId);
+    const { error } = await supabase.from("task_recipients").delete().eq("id", recipientId);
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Failed to remove recipient' };
+    return { error: err instanceof Error ? err.message : "Failed to remove recipient" };
   }
 }
