@@ -256,7 +256,7 @@ export function DashboardLogInteractionModal({ open, onOpenChange, onSuccess }: 
               >
                 <Command className="flex flex-col" shouldFilter={true}>
                   <CommandInput placeholder="Type to search..." />
-                  <CommandList className="max-h-[300px] overflow-y-auto overflow-x-hidden overscroll-contain">
+                  <CommandList className="max-h-[300px] overflow-y-auto overflow-x-hidden overscroll-contain pointer-events-auto">
                     <CommandEmpty>
                       {contactsLoading || (crmLoading && !crmUserId) ? "Loading contacts..." : "No contacts found."}
                     </CommandEmpty>
