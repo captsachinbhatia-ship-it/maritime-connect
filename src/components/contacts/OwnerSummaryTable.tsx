@@ -1,14 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { RotateCcw } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
-import { getUserNames } from '@/services/interactions';
+import { useState, useEffect, useMemo } from "react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { RotateCcw } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import { getUserNames } from "@/services/interactions";
 
 export interface OwnerFilterState {
-  type: 'primary' | 'secondary' | 'unassigned';
+  type: "primary" | "secondary" | "unassigned";
   userId?: string;
 }
 
@@ -24,10 +24,7 @@ interface OwnerSummaryTableProps {
   onFilterChange: (filter: OwnerFilterState | null) => void;
 }
 
-export function OwnerSummaryTable({
-  activeFilter,
-  onFilterChange,
-}: OwnerSummaryTableProps) {
+export function OwnerSummaryTable({ activeFilter, onFilterChange }: OwnerSummaryTableProps) {
   const [rows, setRows] = useState<SummaryRow[]>([]);
   const [userNamesMap, setUserNamesMap] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -36,9 +33,9 @@ export function OwnerSummaryTable({
     const load = async () => {
       setIsLoading(true);
       try {
-      const [countRes, unassignedRes] = await Promise.all([
-          supabase.from('v_owner_contact_counts').select('*'),
-          supabase.from('v_unassigned_active_contacts').select('id', { count: 'exact', head: true }),
+        const [countRes, unassignedRes] = await Promise.all([
+          supabase.from("v_owner_contact_counts").select("*"),
+          supabase.from("v_unassigned_active_contacts").select("id", { count: "exact", head: true }),
         ]);
 
         if (countRes.error || !countRes.data) {
@@ -56,10 +53,10 @@ export function OwnerSummaryTable({
             userMap[uid] = { user_id: uid, primary_count: 0, secondary_count: 0, total: 0 };
           }
           const count = Number(r.contact_count ?? 0);
-          const role = (r.assignment_role ?? '').toUpperCase();
-          if (role === 'PRIMARY') {
+          const role = (r.assignment_role ?? "").toUpperCase();
+          if (role === "PRIMARY") {
             userMap[uid].primary_count = count;
-          } else if (role === 'SECONDARY') {
+          } else if (role === "SECONDARY") {
             userMap[uid].secondary_count = count;
           }
           userMap[uid].total = userMap[uid].primary_count + userMap[uid].secondary_count;
@@ -72,9 +69,7 @@ export function OwnerSummaryTable({
         setRows(filtered);
 
         // Resolve user names
-        const userIds = filtered
-          .map(r => r.user_id)
-          .filter((id): id is string => !!id);
+        const userIds = filtered.map((r) => r.user_id).filter((id): id is string => !!id);
         if (userIds.length > 0) {
           const namesResult = await getUserNames(userIds);
           if (namesResult.data) setUserNamesMap(namesResult.data);
@@ -92,11 +87,11 @@ export function OwnerSummaryTable({
     let unassigned: SummaryRow | null = null;
     const users: (SummaryRow & { name: string })[] = [];
 
-    rows.forEach(r => {
+    rows.forEach((r) => {
       if (!r.user_id) {
         unassigned = r;
       } else {
-        users.push({ ...r, name: userNamesMap[r.user_id] || 'Unknown' });
+        users.push({ ...r, name: userNamesMap[r.user_id] || "Unknown" });
       }
     });
 
@@ -104,33 +99,23 @@ export function OwnerSummaryTable({
     return { userRows: users, unassignedRow: unassigned as SummaryRow | null };
   }, [rows, userNamesMap]);
 
-  const isActive = (type: OwnerFilterState['type'], userId?: string) => {
+  const isActive = (type: OwnerFilterState["type"], userId?: string) => {
     if (!activeFilter) return false;
     if (activeFilter.type !== type) return false;
-    if (type === 'unassigned') return true;
+    if (type === "unassigned") return true;
     return activeFilter.userId === userId;
   };
 
-  const cellButton = (
-    count: number,
-    type: 'primary' | 'secondary' | 'unassigned',
-    userId?: string
-  ) => {
+  const cellButton = (count: number, type: "primary" | "secondary" | "unassigned", userId?: string) => {
     const active = isActive(type, userId);
-    if (count === 0 && type !== 'unassigned') {
+    if (count === 0 && type !== "unassigned") {
       return <span className="text-muted-foreground/40 tabular-nums">0</span>;
     }
     return (
       <button
-        onClick={() =>
-          active
-            ? onFilterChange(null)
-            : onFilterChange({ type, userId })
-        }
+        onClick={() => (active ? onFilterChange(null) : onFilterChange({ type, userId }))}
         className={`tabular-nums text-sm font-medium px-2 py-0.5 rounded transition-colors ${
-          active
-            ? 'bg-primary text-primary-foreground'
-            : 'hover:bg-muted cursor-pointer'
+          active ? "bg-primary text-primary-foreground" : "hover:bg-muted cursor-pointer"
         }`}
       >
         {count}
@@ -156,16 +141,9 @@ export function OwnerSummaryTable({
     <Card className="mb-4">
       <CardContent className="p-0">
         <div className="flex items-center justify-between px-3 py-2 border-b">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Owner Summary
-          </span>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Owner Summary</span>
           {activeFilter && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => onFilterChange(null)}
-            >
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => onFilterChange(null)}>
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
             </Button>
@@ -182,40 +160,30 @@ export function OwnerSummaryTable({
           </TableHeader>
           <TableBody>
             {/* Unassigned row */}
-            <TableRow className={`hover:bg-muted/50 ${isActive('unassigned') ? 'bg-primary/5' : ''}`}>
-              <TableCell className="py-1.5 text-sm font-medium text-destructive">
-                ⚠ Unassigned
-              </TableCell>
-              <TableCell className="py-1.5 text-center">
-                {cellButton(unassignedCount, 'unassigned')}
-              </TableCell>
+            <TableRow className={`hover:bg-muted/50 ${isActive("unassigned") ? "bg-primary/5" : ""}`}>
+              <TableCell className="py-1.5 text-sm font-medium text-destructive">⚠ Unassigned</TableCell>
+              <TableCell className="py-1.5 text-center">{cellButton(unassignedCount, "unassigned")}</TableCell>
               <TableCell className="py-1.5 text-center">
                 <span className="text-muted-foreground/40">—</span>
               </TableCell>
-              <TableCell className="py-1.5 text-center font-semibold tabular-nums text-sm">
-                {unassignedCount}
-              </TableCell>
+              <TableCell className="py-1.5 text-center font-semibold tabular-nums text-sm">{unassignedCount}</TableCell>
             </TableRow>
             {/* User rows */}
             {userRows.map((row) => (
               <TableRow
-                key={row.user_id}
+                key={row.crm_user_id}
                 className={`hover:bg-muted/50 ${
-                  isActive('primary', row.user_id!) || isActive('secondary', row.user_id!)
-                    ? 'bg-primary/5'
-                    : ''
+                  isActive("primary", row.crm_user_id!) || isActive("secondary", row.crm_user_id!) ? "bg-primary/5" : ""
                 }`}
               >
                 <TableCell className="py-1.5 text-sm">{row.name}</TableCell>
                 <TableCell className="py-1.5 text-center">
-                  {cellButton(row.primary_count, 'primary', row.user_id!)}
+                  {cellButton(row.primary_count, "primary", row.crm_user_id!)}
                 </TableCell>
                 <TableCell className="py-1.5 text-center">
-                  {cellButton(row.secondary_count, 'secondary', row.user_id!)}
+                  {cellButton(row.secondary_count, "secondary", row.crm_user_id!)}
                 </TableCell>
-                <TableCell className="py-1.5 text-center font-semibold tabular-nums text-sm">
-                  {row.total}
-                </TableCell>
+                <TableCell className="py-1.5 text-center font-semibold tabular-nums text-sm">{row.total}</TableCell>
               </TableRow>
             ))}
           </TableBody>
