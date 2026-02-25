@@ -171,17 +171,17 @@ export function OwnerSummaryTable({ activeFilter, onFilterChange }: OwnerSummary
             {/* User rows */}
             {userRows.map((row) => (
               <TableRow
-                key={row.crm_user_id}
+                key={row.user_id}
                 className={`hover:bg-muted/50 ${
-                  isActive("primary", row.crm_user_id!) || isActive("secondary", row.crm_user_id!) ? "bg-primary/5" : ""
+                  isActive("primary", row.user_id!) || isActive("secondary", row.user_id!) ? "bg-primary/5" : ""
                 }`}
               >
                 <TableCell className="py-1.5 text-sm">{row.name}</TableCell>
                 <TableCell className="py-1.5 text-center">
-                  {cellButton(row.primary_count, "primary", row.crm_user_id!)}
+                  {cellButton(row.primary_count, "primary", row.user_id!)}
                 </TableCell>
                 <TableCell className="py-1.5 text-center">
-                  {cellButton(row.secondary_count, "secondary", row.crm_user_id!)}
+                  {cellButton(row.secondary_count, "secondary", row.user_id!)}
                 </TableCell>
                 <TableCell className="py-1.5 text-center font-semibold tabular-nums text-sm">{row.total}</TableCell>
               </TableRow>
