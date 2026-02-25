@@ -63,7 +63,7 @@ export function TaskCommentsPanel({ taskId }: TaskCommentsPanelProps) {
       {comments.length > 0 && (
         <div ref={scrollRef} className="space-y-1.5 max-h-[240px] overflow-y-auto overscroll-contain pr-1">
           {comments.map((c) => {
-            const isMe = c.user_id === crmUserId;
+            const isMe = c.crm_user_id === crmUserId;
             return (
               <div key={c.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                 <div
