@@ -32,7 +32,7 @@ export interface TaskRecipient {
 export interface TaskComment {
   id: string;
   task_id: string;
-  user_id: string;
+  crm_user_id: string;
   comment: string;
   created_at: string;
   user_name?: string;
@@ -244,14 +244,14 @@ export async function getTaskComments(taskId: string): Promise<{
   try {
     const { data, error } = await supabase
       .from("task_comments")
-      .select("id, task_id, user_id, comment, created_at")
+      .select("id, task_id, crm_user_id, comment, created_at")
       .eq("task_id", taskId)
       .order("created_at", { ascending: true });
 
     if (error) return { data: null, error: error.message };
 
-    // Collect unique user_ids to fetch names
-    const userIds = [...new Set((data || []).map((r: any) => r.user_id).filter(Boolean))];
+    // Collect unique crm_user_ids to fetch names
+    const userIds = [...new Set((data || []).map((r: any) => r.crm_user_id).filter(Boolean))];
     let nameMap: Record<string, string> = {};
     if (userIds.length > 0) {
       const { data: users } = await supabase.from("crm_users").select("id, full_name").in("id", userIds);
@@ -263,10 +263,10 @@ export async function getTaskComments(taskId: string): Promise<{
     const mapped: TaskComment[] = (data || []).map((r: any) => ({
       id: r.id,
       task_id: r.task_id,
-      user_id: r.user_id,
+      crm_user_id: r.crm_user_id,
       comment: r.comment || "",
       created_at: r.created_at,
-      user_name: nameMap[r.user_id] || "Unknown",
+      user_name: nameMap[r.crm_user_id] || "Unknown",
     }));
 
     return { data: mapped, error: null };
@@ -291,7 +291,7 @@ export async function addTaskComment(
 
     const { error } = await supabase
       .from("task_comments")
-      .insert({ task_id: taskId, user_id: crmUserId, comment: comment });
+      .insert({ task_id: taskId, crm_user_id: crmUserId, comment: comment });
     if (error) return { error: error.message };
     return { error: null };
   } catch (err) {
