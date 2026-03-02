@@ -30,16 +30,9 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { createInteraction, InteractionType } from '@/services/interactions';
+import { createFollowupTask } from '@/services/teamTasks';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
-
-const INTERACTION_TO_FOLLOWUP: Record<string, string> = {
-  CALL: 'CALL',
-  EMAIL: 'EMAIL',
-  WHATSAPP: 'WHATSAPP',
-  MEETING: 'MEETING',
-  NOTE: 'OTHER',
-};
 
 interface LogInteractionDialogProps {
   contactId: string;
@@ -148,10 +141,26 @@ export function LogInteractionDialog({
         return;
       }
 
+      // Create follow-up task in tasks table with related_contact_id
+      if (needsFollowup && dueDate) {
+        const followupTitle = nextAction.trim() || `Follow up: ${interactionType} with ${contactName}`;
+        const taskResult = await createFollowupTask({
+          title: followupTitle,
+          notes: notes.trim() || null,
+          due_at: dueDate.toISOString(),
+          crmUserId,
+          related_contact_id: contactId,
+        });
+        if (taskResult.error) {
+          console.error('[Follow-up task creation failed]', taskResult.error);
+          // Don't block — interaction was already logged
+        }
+      }
+
       toast({
         title: 'Interaction Logged',
         description: needsFollowup
-          ? 'Interaction logged and follow-up created.'
+          ? 'Interaction logged and follow-up task created.'
           : 'Interaction logged successfully.',
       });
 
