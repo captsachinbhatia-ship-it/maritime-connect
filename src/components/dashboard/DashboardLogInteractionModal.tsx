@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, CalendarIcon, FileText, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Loader2, CalendarIcon, Search, Package } from "lucide-react";
 import { format } from "date-fns";
 import { useAssignedContacts } from "@/hooks/useAssignedContacts";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { createInteraction, InteractionType } from "@/services/interactions";
+import { createFollowupTask } from "@/services/teamTasks";
 import { useCrmUser } from "@/hooks/useCrmUser";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -33,6 +35,7 @@ interface DashboardLogInteractionModalProps {
 }
 
 export function DashboardLogInteractionModal({ open, onOpenChange, onSuccess }: DashboardLogInteractionModalProps) {
+  const navigate = useNavigate();
   const { crmUserId, loading: crmLoading } = useCrmUser();
   const { isAdmin } = useAuth();
 
@@ -198,9 +201,25 @@ export function DashboardLogInteractionModal({ open, onOpenChange, onSuccess }: 
         return;
       }
 
+      // Create follow-up task in tasks table
+      if (needsFollowup && dueDate) {
+        const followupTitle = nextAction.trim() || `Follow up: ${interactionType} with ${selectedContact.full_name}`;
+        const taskResult = await createFollowupTask({
+          title: followupTitle,
+          notes: notes.trim() || null,
+          due_at: dueDate.toISOString(),
+          crmUserId,
+          related_contact_id: selectedContact.id,
+        });
+        if (taskResult.error) {
+          console.error("[Follow-up task creation failed]", taskResult.error);
+          // Don't block — interaction was already logged
+        }
+      }
+
       toast({
         title: "Interaction Logged",
-        description: needsFollowup ? "Interaction logged and follow-up created." : "Interaction logged successfully.",
+        description: needsFollowup ? "Interaction logged and follow-up task created." : "Interaction logged successfully.",
       });
 
       resetForm();
@@ -356,12 +375,16 @@ export function DashboardLogInteractionModal({ open, onOpenChange, onSuccess }: 
               <Checkbox
                 id="dashboard-followup"
                 checked={needsFollowup}
+                disabled={!selectedContact}
                 onCheckedChange={(c) => setNeedsFollowup(c as boolean)}
               />
               <label htmlFor="dashboard-followup" className="text-sm font-medium leading-none cursor-pointer">
                 Set Follow-up Reminder
               </label>
             </div>
+            {!selectedContact && (
+              <p className="text-xs text-muted-foreground">Select a contact to set a follow-up.</p>
+            )}
             {needsFollowup && (
               <>
                 <div className="space-y-2">
@@ -406,6 +429,28 @@ export function DashboardLogInteractionModal({ open, onOpenChange, onSuccess }: 
               </>
             )}
           </div>
+
+          {/* New Cargo ENQ link — only when contact selected */}
+          {selectedContact && (
+            <div className="rounded-lg border border-dashed p-3 flex items-center gap-2 text-sm text-muted-foreground">
+              <Package className="h-4 w-4 shrink-0" />
+              <span>Need to create an enquiry?</span>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-primary"
+                onClick={() => {
+                  const params = new URLSearchParams({ contact_id: selectedContact.id });
+                  if (notes.trim()) params.set("prefill_notes", notes.trim());
+                  navigate(`/enquiries/new-cargo?${params.toString()}`);
+                  handleClose();
+                }}
+              >
+                New Cargo ENQ →
+              </Button>
+            </div>
+          )}
 
           {validationMessage && <p className="text-sm text-destructive">{validationMessage}</p>}
 
