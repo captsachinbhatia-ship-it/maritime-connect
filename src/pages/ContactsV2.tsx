@@ -47,7 +47,7 @@ import {
 import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { AssignContactModal } from '@/components/contacts/AssignContactModal';
-import { LogInteractionDialog } from '@/components/contacts/LogInteractionDialog';
+import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
 import { AddFollowupModal } from '@/components/contacts/AddFollowupModal';
 import { StageDropdown } from '@/components/contacts/StageDropdown';
 import { EditContactModal } from '@/components/contacts/EditContactModal';
@@ -1530,10 +1530,10 @@ export default function ContactsV2() {
         }}
       />
 
-      {/* Log Interaction Dialog */}
-      <LogInteractionDialog
-        open={interactionOpen}
-        onOpenChange={setInteractionOpen}
+      {/* Log Interaction Modal */}
+      <LogInteractionModal
+        isOpen={interactionOpen}
+        onClose={() => setInteractionOpen(false)}
         contactId={actionContactId}
         contactName={actionContactName}
         onSuccess={() => {

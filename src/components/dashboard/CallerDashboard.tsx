@@ -15,7 +15,7 @@ import { ModeIndicator } from './ModeIndicator';
 import { FollowupsDueWidget } from './FollowupsDueWidget';
 import { TeamTasksWidget } from './TeamTasksWidget';
 import { NotepadCard } from './NotepadCard';
-import { DashboardLogInteractionModal } from './DashboardLogInteractionModal';
+import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -116,10 +116,11 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         onClose={handleDrawerClose}
       />
 
-      {/* Dashboard Log Interaction Modal */}
-      <DashboardLogInteractionModal
-        open={logModalOpen}
-        onOpenChange={setLogModalOpen}
+      {/* Log Interaction Modal */}
+      <LogInteractionModal
+        isOpen={logModalOpen}
+        onClose={() => setLogModalOpen(false)}
+        onSuccess={() => setLogModalOpen(false)}
       />
     </div>
   );

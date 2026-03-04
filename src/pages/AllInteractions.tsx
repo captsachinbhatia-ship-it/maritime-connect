@@ -10,7 +10,7 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { MessageSquare, Phone, Mail, Video, StickyNote, ExternalLink, Plus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { DashboardLogInteractionModal } from '@/components/dashboard/DashboardLogInteractionModal';
+import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
 
 interface Interaction {
   id: string;
@@ -186,7 +186,7 @@ export default function AllInteractions() {
         </CardContent>
       </Card>
 
-      <DashboardLogInteractionModal open={logOpen} onOpenChange={setLogOpen} onSuccess={fetchData} />
+      <LogInteractionModal isOpen={logOpen} onClose={() => setLogOpen(false)} onSuccess={() => { setLogOpen(false); fetchData(); }} />
     </div>
   );
 }
