@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, addDays } from 'date-fns';
 import {
   Loader2, Anchor, Copy, Trash2, RotateCcw, ArrowUpDown, ExternalLink,
-  CalendarIcon, Fuel, Ship,
+  CalendarIcon, Fuel, Ship, Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,20 +18,38 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from '@/components/ui/dialog';
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { generateCargoSubject, generateVesselSubject, buildWhatsAppText } from '@/lib/enquirySubject';
-import { STATUS_COLORS } from '@/lib/enquiryConstants';
 
-const UNIT_OPTIONS = ['MT', 'CBM', 'BBLS', 'LOTS', 'UNITS'];
-const VESSEL_TYPES = ['VLCC', 'SUEZMAX', 'AFRAMAX', 'PANAMAX', 'SUPRAMAX', 'HANDYSIZE', 'HANDYMAX', 'MR TANKER', 'OTHER'];
+// ─── Constants ────────────────────────────────────────────────────────
+const UNIT_OPTIONS = ['MT', 'CBM', 'BBLS', 'LOTS'];
+const VESSEL_SIZE_OPTIONS = ['MR', 'LR1', 'LR2', 'AFRAMAX', 'SUEZMAX', 'VLCC'];
 const STATUS_OPTIONS = ['RECEIVED', 'SCREENING', 'IN_MARKET', 'OFFER_OUT', 'COUNTERING', 'SUBJECTS', 'FIXED', 'FAILED', 'CANCELLED', 'WITHDRAWN'];
+
+const STATUS_COLORS: Record<string, string> = {
+  RECEIVED: 'bg-muted text-muted-foreground',
+  SCREENING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  IN_MARKET: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300',
+  OFFER_OUT: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+  COUNTERING: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
+  SUBJECTS: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+  FIXED: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+  FAILED: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
+  CANCELLED: 'bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-400',
+  WITHDRAWN: 'bg-muted text-muted-foreground',
+  DELETED: 'bg-muted text-muted-foreground',
+};
 
 function fmtDate(d: Date) { return format(d, 'yyyy-MM-dd'); }
 
@@ -73,89 +91,83 @@ interface EnquiryRow {
   enquiry_mode: string | null;
   other_requirements: Record<string, unknown> | null;
   notes: string | null;
+  crm_users?: { full_name: string } | null;
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────
 export default function Enquiries() {
+  const [cargoModalOpen, setCargoModalOpen] = useState(false);
+  const [vesselModalOpen, setVesselModalOpen] = useState(false);
+  const [cargoRefresh, setCargoRefresh] = useState(0);
+  const [vesselRefresh, setVesselRefresh] = useState(0);
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Anchor className="h-6 w-6" />
-        <h1 className="text-2xl font-bold text-foreground">Enquiries</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Anchor className="h-6 w-6" />
+          <h1 className="text-2xl font-bold text-foreground">Enquiries</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setCargoModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> New Cargo Enquiry
+          </Button>
+          <Button onClick={() => setVesselModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> New Vessel Open
+          </Button>
+        </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CargoColumn />
-        <VesselColumn />
+
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+        <div className="pr-3">
+          <CargoTable key={`cargo-${cargoRefresh}`} refreshKey={cargoRefresh} />
+        </div>
+        <div className="pl-3 border-l border-border">
+          <VesselTable key={`vessel-${vesselRefresh}`} refreshKey={vesselRefresh} />
+        </div>
       </div>
+
+      {/* Modals */}
+      <CargoModal open={cargoModalOpen} onClose={() => setCargoModalOpen(false)} onCreated={() => setCargoRefresh(p => p + 1)} />
+      <VesselModal open={vesselModalOpen} onClose={() => setVesselModalOpen(false)} onCreated={() => setVesselRefresh(p => p + 1)} />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// CARGO COLUMN
+// CARGO MODAL
 // ═══════════════════════════════════════════════════════════════════════
-function CargoColumn() {
-  const navigate = useNavigate();
-  const [rows, setRows] = useState<EnquiryRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Form state
+function CargoModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [cargoType, setCargoType] = useState('');
   const [quantity, setQuantity] = useState('');
   const [quantityUnit, setQuantityUnit] = useState('MT');
-  const [loadingPort, setLoadingPort] = useState('');
-  const [dischargePort, setDischargePort] = useState('');
+  const [loadPort, setLoadPort] = useState('');
+  const [dischPort, setDischPort] = useState('');
   const [laycanFrom, setLaycanFrom] = useState('');
   const [laycanTo, setLaycanTo] = useState('');
   const [vesselSize, setVesselSize] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Filters
-  const [fCommodity, setFCommodity] = useState('');
-  const [fLoadArea, setFLoadArea] = useState('');
-  const [fDischargeArea, setFDischargeArea] = useState('');
-  const [fStatuses, setFStatuses] = useState<string[]>([]);
-  const [showArchived, setShowArchived] = useState(false);
-
-  // Sort
-  const [sortCol, setSortCol] = useState<string>('created_at');
-  const [sortAsc, setSortAsc] = useState(false);
-
-  // Delete confirm
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('enquiries')
-      .select('id, enquiry_number, cargo_type, loading_port, discharge_port, laycan_from, laycan_to, quantity, quantity_unit, vessel_type, vessel_name, status, subject, notes, created_by, created_at, deleted_at, enquiry_mode, other_requirements')
-      .in('enquiry_mode', ['SPOT', 'VOY', 'CVC', 'BB', 'CARGO_OPEN'])
-      .eq('is_draft', false)
-      .order('created_at', { ascending: false });
-    if (!error) setRows((data || []) as EnquiryRow[]);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
-
   const subject = useMemo(() => generateCargoSubject({
-    quantity, quantityUnit, cargoType, loadingPort, dischargePort, laycanFrom, laycanTo,
-  }), [cargoType, quantity, quantityUnit, loadingPort, dischargePort, laycanFrom, laycanTo]);
+    quantity, quantityUnit, cargoType, loadingPort: loadPort, dischargePort: dischPort, laycanFrom, laycanTo,
+  }), [cargoType, quantity, quantityUnit, loadPort, dischPort, laycanFrom, laycanTo]);
 
   const clearForm = () => {
     setCargoType(''); setQuantity(''); setQuantityUnit('MT');
-    setLoadingPort(''); setDischargePort('');
+    setLoadPort(''); setDischPort('');
     setLaycanFrom(''); setLaycanTo('');
     setVesselSize(''); setNotes('');
   };
 
   const handleSubmit = async () => {
     const missing: string[] = [];
-    if (!cargoType.trim()) missing.push('Cargo');
+    if (!cargoType.trim()) missing.push('Product / Cargo');
     if (!quantity.trim()) missing.push('Quantity');
-    if (!loadingPort.trim()) missing.push('Load Port');
-    if (!dischargePort.trim()) missing.push('Discharge Port');
+    if (!loadPort.trim()) missing.push('Load Port');
+    if (!dischPort.trim()) missing.push('Discharge Port');
     if (!laycanFrom) missing.push('Laycan From');
     if (!laycanTo) missing.push('Laycan To');
     if (missing.length) {
@@ -164,27 +176,316 @@ function CargoColumn() {
     }
     setSubmitting(true);
     try {
-      const subj = generateCargoSubject({ quantity, quantityUnit, cargoType, loadingPort, dischargePort, laycanFrom, laycanTo });
+      const subj = generateCargoSubject({ quantity, quantityUnit, cargoType, loadingPort: loadPort, dischargePort: dischPort, laycanFrom, laycanTo });
       const { error } = await supabase.rpc('rpc_create_enquiry_fast', {
         p_mode: 'SPOT', p_subject: subj,
         p_cargo_type: cargoType.trim(), p_quantity: Number(quantity), p_quantity_unit: quantityUnit,
-        p_lp: loadingPort.trim(), p_dp: dischargePort.trim(),
+        p_lp: loadPort.trim(), p_dp: dischPort.trim(),
         p_laycan_from: laycanFrom, p_laycan_to: laycanTo,
-        p_vessel_type: vesselSize.trim() || null, p_notes: notes.trim() || null,
+        p_vessel_type: vesselSize || null, p_notes: notes.trim() || null,
         p_is_draft: false,
       });
       if (error) {
         const msg = error.message.includes('CRM user mapping missing')
-          ? 'Your account is not linked to a CRM user. Please contact your admin.'
+          ? 'Your account is not linked to a CRM profile. Contact your admin.'
           : error.message;
         toast({ title: 'Error', description: msg, variant: 'destructive' });
         return;
       }
       toast({ title: 'Cargo enquiry created' });
       clearForm();
-      fetchData();
+      onCreated();
+      onClose();
     } finally { setSubmitting(false); }
   };
+
+  const handleClose = () => {
+    const hasData = cargoType || quantity || loadPort || dischPort || laycanFrom || laycanTo || notes;
+    if (hasData && !window.confirm('Discard unsaved changes?')) return;
+    clearForm();
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Fuel className="h-5 w-5" /> New Cargo Enquiry</DialogTitle>
+          <DialogDescription>Create a new cargo enquiry. All required fields are marked with *.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          {/* Product + Quantity */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Product / Cargo <span className="text-destructive">*</span></Label>
+              <Input value={cargoType} onChange={e => setCargoType(e.target.value)} placeholder="ULSD, Naphtha, Crude" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Quantity <span className="text-destructive">*</span></Label>
+              <div className="flex gap-2">
+                <Input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="30000" className="flex-1" />
+                <Select value={quantityUnit} onValueChange={setQuantityUnit}>
+                  <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                  <SelectContent>{UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Ports */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Load Port / Area <span className="text-destructive">*</span></Label>
+              <Input value={loadPort} onChange={e => setLoadPort(e.target.value)} placeholder="Ras Tanura, Jubail" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Discharge Port / Area <span className="text-destructive">*</span></Label>
+              <Input value={dischPort} onChange={e => setDischPort(e.target.value)} placeholder="Chiba, Rotterdam" />
+            </div>
+          </div>
+
+          {/* Laycan */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Laycan From <span className="text-destructive">*</span></Label>
+              <DatePickerField value={laycanFrom} onChange={setLaycanFrom} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Laycan To <span className="text-destructive">*</span></Label>
+              <DatePickerField value={laycanTo} onChange={setLaycanTo} />
+            </div>
+          </div>
+
+          {/* Optional */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Preferred Vessel Size</Label>
+              <Select value={vesselSize} onValueChange={setVesselSize}>
+                <SelectTrigger><SelectValue placeholder="Select size..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {VESSEL_SIZE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Notes</Label>
+              <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optional notes" className="min-h-[60px]" />
+            </div>
+          </div>
+
+          {/* Subject preview */}
+          <div className="rounded border bg-muted/50 px-3 py-2">
+            <span className="text-xs text-muted-foreground font-medium">Subject preview — auto-generated</span>
+            <p className="text-xs font-mono text-foreground mt-0.5">{subject}</p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={handleClose}>Cancel</Button>
+          <Button disabled={submitting} onClick={handleSubmit}>
+            {submitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+            Create Enquiry
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// VESSEL MODAL
+// ═══════════════════════════════════════════════════════════════════════
+function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const [vesselSizeClass, setVesselSizeClass] = useState('');
+  const [dwt, setDwt] = useState('');
+  const [vesselName, setVesselName] = useState('');
+  const [openPort, setOpenPort] = useState('');
+  const [openFrom, setOpenFrom] = useState('');
+  const [openTo, setOpenTo] = useState('');
+  const [tradingArea, setTradingArea] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Auto-set openTo when openFrom changes
+  useEffect(() => {
+    if (openFrom && !openTo) setOpenTo(fmtDate(addDays(new Date(openFrom), 7)));
+  }, [openFrom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const subject = useMemo(() => generateVesselSubject({
+    vesselName, vesselType: vesselSizeClass, openPort, laycanFrom: openFrom,
+  }), [vesselName, vesselSizeClass, openPort, openFrom]);
+
+  const clearForm = () => {
+    setVesselSizeClass(''); setDwt(''); setVesselName('');
+    setOpenPort(''); setOpenFrom(''); setOpenTo('');
+    setTradingArea(''); setNotes('');
+  };
+
+  const handleSubmit = async () => {
+    const missing: string[] = [];
+    if (!vesselSizeClass) missing.push('Vessel Size Class');
+    if (!openPort.trim()) missing.push('Open Port');
+    if (!openFrom) missing.push('Open Date From');
+    if (missing.length) {
+      toast({ title: 'Required fields missing', description: missing.join(', '), variant: 'destructive' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const subj = generateVesselSubject({ vesselName, vesselType: vesselSizeClass, openPort, laycanFrom: openFrom });
+      const { error } = await supabase.rpc('rpc_create_enquiry_fast', {
+        p_mode: 'TC', p_subject: subj,
+        p_vessel_name: vesselName.trim() || null,
+        p_vessel_type: vesselSizeClass,
+        p_lp: openPort.trim(),
+        p_dp: tradingArea.trim() || 'WORLDWIDE',
+        p_laycan_from: openFrom,
+        p_laycan_to: openTo || null,
+        p_notes: notes.trim() || null,
+        p_other_requirements: dwt ? { dwt: Number(dwt) } : null,
+        p_is_draft: false,
+      });
+      if (error) {
+        const msg = error.message.includes('CRM user mapping missing')
+          ? 'Your account is not linked to a CRM profile. Contact your admin.'
+          : error.message;
+        toast({ title: 'Error', description: msg, variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Vessel open created' });
+      clearForm();
+      onCreated();
+      onClose();
+    } finally { setSubmitting(false); }
+  };
+
+  const handleClose = () => {
+    const hasData = vesselSizeClass || vesselName || openPort || openFrom || notes;
+    if (hasData && !window.confirm('Discard unsaved changes?')) return;
+    clearForm();
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Ship className="h-5 w-5" /> New Vessel Open</DialogTitle>
+          <DialogDescription>Create a new vessel open position. Required fields marked with *.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          {/* Size + DWT */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Vessel Size Class <span className="text-destructive">*</span></Label>
+              <Select value={vesselSizeClass} onValueChange={setVesselSizeClass}>
+                <SelectTrigger><SelectValue placeholder="Select size..." /></SelectTrigger>
+                <SelectContent>{VESSEL_SIZE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">DWT / Capacity</Label>
+              <Input type="number" value={dwt} onChange={e => setDwt(e.target.value)} placeholder="47000" />
+            </div>
+          </div>
+
+          {/* Name + Port */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Vessel Name</Label>
+              <Input value={vesselName} onChange={e => setVesselName(e.target.value)} placeholder="MV PACIFIC STAR (optional)" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Open Port / Area <span className="text-destructive">*</span></Label>
+              <Input value={openPort} onChange={e => setOpenPort(e.target.value)} placeholder="Fujairah, Singapore" />
+            </div>
+          </div>
+
+          {/* Dates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Open Date From <span className="text-destructive">*</span></Label>
+              <DatePickerField value={openFrom} onChange={setOpenFrom} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Open Date To</Label>
+              <DatePickerField value={openTo} onChange={setOpenTo} />
+            </div>
+          </div>
+
+          {/* Trading area + Notes */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Trading Area / Limits</Label>
+              <Input value={tradingArea} onChange={e => setTradingArea(e.target.value)} placeholder="WORLDWIDE, EAST OF SUEZ" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Notes</Label>
+              <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optional" className="min-h-[60px]" />
+            </div>
+          </div>
+
+          {/* Subject preview */}
+          <div className="rounded border bg-muted/50 px-3 py-2">
+            <span className="text-xs text-muted-foreground font-medium">Subject preview — auto-generated</span>
+            <p className="text-xs font-mono text-foreground mt-0.5">{subject}</p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={handleClose}>Cancel</Button>
+          <Button disabled={submitting} onClick={handleSubmit}>
+            {submitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+            Create Vessel Open
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CARGO TABLE
+// ═══════════════════════════════════════════════════════════════════════
+function CargoTable({ refreshKey }: { refreshKey: number }) {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<EnquiryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filters
+  const [fProduct, setFProduct] = useState('');
+  const [fLoadArea, setFLoadArea] = useState('');
+  const [fDischArea, setFDischArea] = useState('');
+  const [fStatuses, setFStatuses] = useState<string[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
+
+  // Sort
+  const [sortCol, setSortCol] = useState<string>('laycan_from');
+  const [sortAsc, setSortAsc] = useState(true);
+
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('enquiries')
+      .select(`
+        id, enquiry_number, cargo_type, quantity, quantity_unit,
+        loading_port, discharge_port, laycan_from, laycan_to,
+        vessel_type, vessel_name, status, subject, notes, created_by, created_at, deleted_at, enquiry_mode, other_requirements,
+        crm_users!created_by (full_name)
+      `)
+      .in('enquiry_mode', ['SPOT', 'VOY', 'CVC', 'BB'])
+      .eq('is_draft', false)
+      .order('created_at', { ascending: false });
+    if (!error && data) setRows(data as unknown as EnquiryRow[]);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData, refreshKey]);
 
   const softDelete = async (id: string) => {
     await supabase.from('enquiries').update({ deleted_at: new Date().toISOString() }).eq('id', id);
@@ -200,7 +501,7 @@ function CargoColumn() {
   const copyWA = async (row: EnquiryRow) => {
     let subjectText = row.subject;
     if (!subjectText) {
-      const { data } = await supabase.from('enquiries').select('subject').eq('id', row.id).single();
+      const { data } = await supabase.from('enquiries').select('subject, vessel_type, notes').eq('id', row.id).single();
       subjectText = data?.subject || row.cargo_type || '';
     }
     await navigator.clipboard.writeText(buildWhatsAppText({
@@ -212,17 +513,15 @@ function CargoColumn() {
     toast({ title: 'Copied ✓' });
   };
 
-  // Filter + sort
   const filtered = useMemo(() => {
     let result = rows.filter(r => {
       if (!showArchived && r.deleted_at) return false;
-      if (fCommodity && !r.cargo_type?.toLowerCase().includes(fCommodity.toLowerCase())) return false;
+      if (fProduct && !r.cargo_type?.toLowerCase().includes(fProduct.toLowerCase())) return false;
       if (fLoadArea && !r.loading_port?.toLowerCase().includes(fLoadArea.toLowerCase())) return false;
-      if (fDischargeArea && !r.discharge_port?.toLowerCase().includes(fDischargeArea.toLowerCase())) return false;
+      if (fDischArea && !r.discharge_port?.toLowerCase().includes(fDischArea.toLowerCase())) return false;
       if (fStatuses.length && !fStatuses.includes(r.status)) return false;
       return true;
     });
-    // Sort: deleted_at rows last, then by chosen column
     result.sort((a, b) => {
       if (a.deleted_at && !b.deleted_at) return 1;
       if (!a.deleted_at && b.deleted_at) return -1;
@@ -235,7 +534,7 @@ function CargoColumn() {
       return sortAsc ? cmp : -cmp;
     });
     return result;
-  }, [rows, showArchived, fCommodity, fLoadArea, fDischargeArea, fStatuses, sortCol, sortAsc]);
+  }, [rows, showArchived, fProduct, fLoadArea, fDischArea, fStatuses, sortCol, sortAsc]);
 
   const toggleSort = (col: string) => {
     if (sortCol === col) setSortAsc(!sortAsc);
@@ -243,144 +542,91 @@ function CargoColumn() {
   };
 
   const SortHeader = ({ col, children }: { col: string; children: React.ReactNode }) => (
-    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort(col)}>
+    <TableHead className="cursor-pointer select-none whitespace-nowrap text-xs" onClick={() => toggleSort(col)}>
       <span className="inline-flex items-center gap-1">{children} <ArrowUpDown className="h-3 w-3 text-muted-foreground" /></span>
     </TableHead>
   );
 
+  const isDeleted = (r: EnquiryRow) => !!r.deleted_at;
+
   return (
-    <div className="space-y-4">
-      {/* ── Form ── */}
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <h2 className="text-base font-semibold flex items-center gap-2"><Fuel className="h-4 w-4" /> New Cargo Enquiry</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Cargo / Commodity <span className="text-destructive">*</span></Label>
-            <Input value={cargoType} onChange={e => setCargoType(e.target.value)} placeholder="COAL, IRON ORE" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Quantity <span className="text-destructive">*</span></Label>
-            <div className="flex gap-2">
-              <Input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="80000" className="flex-1" />
-              <Select value={quantityUnit} onValueChange={setQuantityUnit}>
-                <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                <SelectContent>{UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Load Port / Area <span className="text-destructive">*</span></Label>
-            <Input value={loadingPort} onChange={e => setLoadingPort(e.target.value)} placeholder="RBCT, RICHARDS BAY" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Discharge Port / Area <span className="text-destructive">*</span></Label>
-            <Input value={dischargePort} onChange={e => setDischargePort(e.target.value)} placeholder="KRISHNAPATNAM" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Laycan From <span className="text-destructive">*</span></Label>
-            <DatePickerField value={laycanFrom} onChange={setLaycanFrom} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Laycan To <span className="text-destructive">*</span></Label>
-            <DatePickerField value={laycanTo} onChange={setLaycanTo} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Vessel Size</Label>
-            <Input value={vesselSize} onChange={e => setVesselSize(e.target.value)} placeholder="PANAMAX, SUPRAMAX" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Notes</Label>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={1} placeholder="Optional" className="min-h-[36px]" />
-          </div>
-        </div>
-
-        {/* Subject preview */}
-        <div className="rounded border bg-sky-50 dark:bg-sky-950/30 px-3 py-2">
-          <span className="text-xs text-sky-700 dark:text-sky-300 font-medium">Subject preview</span>
-          <p className="text-xs font-mono text-foreground mt-0.5">{subject}</p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button size="sm" disabled={submitting} onClick={handleSubmit}>
-            {submitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-            Create Enquiry
-          </Button>
-          <Button size="sm" variant="ghost" onClick={clearForm}>Clear</Button>
-        </div>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold flex items-center gap-1.5"><Fuel className="h-4 w-4" /> Cargo Enquiries</h2>
+        <Badge variant="secondary" className="text-xs">{filtered.length}</Badge>
       </div>
 
-      {/* ── Filters ── */}
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
-        <Input value={fCommodity} onChange={e => setFCommodity(e.target.value)} placeholder="Commodity" className="w-28 h-8 text-xs" />
-        <Input value={fLoadArea} onChange={e => setFLoadArea(e.target.value)} placeholder="Load Area" className="w-28 h-8 text-xs" />
-        <Input value={fDischargeArea} onChange={e => setFDischargeArea(e.target.value)} placeholder="Discharge" className="w-28 h-8 text-xs" />
+        <Input value={fProduct} onChange={e => setFProduct(e.target.value)} placeholder="Product" className="w-24 h-7 text-xs" />
+        <Input value={fLoadArea} onChange={e => setFLoadArea(e.target.value)} placeholder="Load" className="w-20 h-7 text-xs" />
+        <Input value={fDischArea} onChange={e => setFDischArea(e.target.value)} placeholder="Disch" className="w-20 h-7 text-xs" />
         <Select value={fStatuses.length === 1 ? fStatuses[0] : 'all'} onValueChange={v => setFStatuses(v === 'all' ? [] : [v])}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-24 h-7 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="all">All</SelectItem>
             {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Checkbox checked={showArchived} onCheckedChange={v => setShowArchived(!!v)} />
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Checkbox checked={showArchived} onCheckedChange={v => setShowArchived(!!v)} className="h-3.5 w-3.5" />
           Archived
         </label>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       {loading ? (
-        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
       ) : (
-        <div className="rounded-lg border overflow-auto max-h-[60vh]">
+        <div className="rounded-lg border overflow-auto max-h-[65vh]">
           <Table>
             <TableHeader>
               <TableRow>
                 <SortHeader col="enquiry_number">ENQ #</SortHeader>
-                <SortHeader col="cargo_type">Commodity</SortHeader>
-                <SortHeader col="loading_port">Load</SortHeader>
-                <SortHeader col="discharge_port">Discharge</SortHeader>
-                <SortHeader col="laycan_from">Laycan</SortHeader>
+                <SortHeader col="cargo_type">Product</SortHeader>
                 <SortHeader col="quantity">Qty</SortHeader>
-                <SortHeader col="vessel_type">Vessel Req</SortHeader>
+                <SortHeader col="loading_port">Load</SortHeader>
+                <SortHeader col="discharge_port">Disch</SortHeader>
+                <SortHeader col="laycan_from">Laycan</SortHeader>
+                <SortHeader col="vessel_type">Vsl Size</SortHeader>
                 <SortHeader col="status">Status</SortHeader>
                 <SortHeader col="created_at">Date</SortHeader>
-                <TableHead className="w-20">Actions</TableHead>
+                <TableHead className="w-24 text-xs">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No cargo enquiries</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8 text-xs">No cargo enquiries</TableCell></TableRow>
               )}
               {filtered.map(row => (
-                <TableRow key={row.id} className={cn(row.deleted_at && 'opacity-40')}>
-                  <TableCell>
-                    <button className="text-primary hover:underline font-mono text-xs" onClick={() => navigate(`/enquiries/${row.id}`)}>
+                <TableRow
+                  key={row.id}
+                  className={cn(isDeleted(row) && 'bg-destructive/5')}
+                >
+                  <TableCell className={cn('text-xs', isDeleted(row) && 'line-through opacity-45')}>
+                    <button className="text-primary hover:underline font-mono" onClick={() => navigate(`/enquiries/${row.id}`)}>
                       {row.enquiry_number || '—'}
                     </button>
                   </TableCell>
-                  <TableCell className="text-xs">{row.cargo_type || '—'}</TableCell>
-                  <TableCell className="text-xs">{row.loading_port || '—'}</TableCell>
-                  <TableCell className="text-xs">{row.discharge_port || '—'}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{formatLaycanShort(row.laycan_from, row.laycan_to)}</TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{formatQty(row.quantity, row.quantity_unit)}</TableCell>
-                  <TableCell className="text-xs">{row.vessel_type || '—'}</TableCell>
+                  <TableCell className={cn('text-xs uppercase', isDeleted(row) && 'line-through opacity-45')}>{row.cargo_type || '—'}</TableCell>
+                  <TableCell className={cn('text-xs whitespace-nowrap', isDeleted(row) && 'line-through opacity-45')}>{formatQty(row.quantity, row.quantity_unit)}</TableCell>
+                  <TableCell className={cn('text-xs uppercase', isDeleted(row) && 'line-through opacity-45')}>{row.loading_port || '—'}</TableCell>
+                  <TableCell className={cn('text-xs uppercase', isDeleted(row) && 'line-through opacity-45')}>{row.discharge_port || '—'}</TableCell>
+                  <TableCell className={cn('text-xs whitespace-nowrap', isDeleted(row) && 'line-through opacity-45')}>{formatLaycanShort(row.laycan_from, row.laycan_to)}</TableCell>
+                  <TableCell className={cn('text-xs', isDeleted(row) && 'line-through opacity-45')}>{row.vessel_type || '—'}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={cn('text-[10px]', STATUS_COLORS[row.status] || '')}>{row.status}</Badge>
+                    <Badge variant="outline" className={cn('text-[10px]', isDeleted(row) ? STATUS_COLORS.DELETED : (STATUS_COLORS[row.status] || ''))}>
+                      {isDeleted(row) ? 'DELETED' : row.status}
+                    </Badge>
                   </TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">
+                  <TableCell className={cn('text-xs whitespace-nowrap', isDeleted(row) && 'line-through opacity-45')}>
                     {row.created_at ? format(new Date(row.created_at), 'dd MMM') : '—'}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5">
                       <button className="p-1 rounded hover:bg-muted" title="Copy WhatsApp" onClick={() => copyWA(row)}><Copy className="h-3.5 w-3.5" /></button>
                       <button className="p-1 rounded hover:bg-muted" title="Open" onClick={() => navigate(`/enquiries/${row.id}`)}><ExternalLink className="h-3.5 w-3.5" /></button>
-                      {row.deleted_at ? (
+                      {isDeleted(row) ? (
                         <button className="p-1 rounded hover:bg-muted text-green-600" title="Restore" onClick={() => restore(row.id)}><RotateCcw className="h-3.5 w-3.5" /></button>
                       ) : (
                         <button className="p-1 rounded hover:bg-muted text-destructive" title="Archive" onClick={() => setDeleteId(row.id)}><Trash2 className="h-3.5 w-3.5" /></button>
@@ -398,7 +644,7 @@ function CargoColumn() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Archive this enquiry?</AlertDialogTitle>
-            <AlertDialogDescription>The enquiry will be soft-deleted and can be restored later.</AlertDialogDescription>
+            <AlertDialogDescription>It will move to the bottom of the list and can be restored later.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -411,22 +657,12 @@ function CargoColumn() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// VESSEL COLUMN
+// VESSEL TABLE
 // ═══════════════════════════════════════════════════════════════════════
-function VesselColumn() {
+function VesselTable({ refreshKey }: { refreshKey: number }) {
   const navigate = useNavigate();
   const [rows, setRows] = useState<EnquiryRow[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Form
-  const [vesselName, setVesselName] = useState('');
-  const [vesselType, setVesselType] = useState('');
-  const [dwt, setDwt] = useState('');
-  const [openPort, setOpenPort] = useState('');
-  const [openFrom, setOpenFrom] = useState('');
-  const [openTo, setOpenTo] = useState('');
-  const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
   // Filters
   const [fVesselType, setFVesselType] = useState('all');
@@ -435,8 +671,8 @@ function VesselColumn() {
   const [showArchived, setShowArchived] = useState(false);
 
   // Sort
-  const [sortCol, setSortCol] = useState<string>('created_at');
-  const [sortAsc, setSortAsc] = useState(false);
+  const [sortCol, setSortCol] = useState<string>('laycan_from');
+  const [sortAsc, setSortAsc] = useState(true);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -444,63 +680,21 @@ function VesselColumn() {
     setLoading(true);
     const { data, error } = await supabase
       .from('enquiries')
-      .select('id, enquiry_number, vessel_name, vessel_type, loading_port, discharge_port, laycan_from, laycan_to, other_requirements, status, subject, notes, cargo_type, quantity, quantity_unit, created_by, created_at, deleted_at, enquiry_mode')
-      .in('enquiry_mode', ['TC', 'SNP', 'VESSEL_OPEN'])
+      .select(`
+        id, enquiry_number, vessel_name, vessel_type,
+        loading_port, discharge_port, laycan_from, laycan_to,
+        other_requirements, status, subject, notes, cargo_type, quantity, quantity_unit,
+        created_by, created_at, deleted_at, enquiry_mode,
+        crm_users!created_by (full_name)
+      `)
+      .in('enquiry_mode', ['TC', 'SNP'])
       .eq('is_draft', false)
       .order('created_at', { ascending: false });
-    if (!error) setRows((data || []) as EnquiryRow[]);
+    if (!error && data) setRows(data as unknown as EnquiryRow[]);
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Auto-set openTo
-  useEffect(() => {
-    if (openFrom && !openTo) setOpenTo(fmtDate(addDays(new Date(openFrom), 7)));
-  }, [openFrom]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const subject = useMemo(() => generateVesselSubject({
-    vesselName, vesselType, openPort, laycanFrom: openFrom,
-  }), [vesselName, vesselType, openPort, openFrom]);
-
-  const clearForm = () => {
-    setVesselName(''); setVesselType(''); setDwt('');
-    setOpenPort(''); setOpenFrom(''); setOpenTo(''); setNotes('');
-  };
-
-  const handleSubmit = async () => {
-    const missing: string[] = [];
-    if (!vesselType) missing.push('Vessel Type');
-    if (!openPort.trim()) missing.push('Open Port');
-    if (!openFrom) missing.push('Open Date From');
-    if (missing.length) {
-      toast({ title: 'Required fields missing', description: missing.join(', '), variant: 'destructive' });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const subj = generateVesselSubject({ vesselName, vesselType, openPort, laycanFrom: openFrom });
-      const { error } = await supabase.rpc('rpc_create_enquiry_fast', {
-        p_mode: 'TC', p_subject: subj,
-        p_vessel_name: vesselName.trim() || null, p_vessel_type: vesselType,
-        p_lp: openPort.trim(), p_dp: 'WORLDWIDE',
-        p_laycan_from: openFrom, p_laycan_to: openTo || null,
-        p_notes: notes.trim() || null,
-        p_other_requirements: dwt ? { dwt: Number(dwt) } : null,
-        p_is_draft: false,
-      });
-      if (error) {
-        const msg = error.message.includes('CRM user mapping missing')
-          ? 'Your account is not linked to a CRM user. Please contact your admin.'
-          : error.message;
-        toast({ title: 'Error', description: msg, variant: 'destructive' });
-        return;
-      }
-      toast({ title: 'Vessel open created' });
-      clearForm();
-      fetchData();
-    } finally { setSubmitting(false); }
-  };
+  useEffect(() => { fetchData(); }, [fetchData, refreshKey]);
 
   const softDelete = async (id: string) => {
     await supabase.from('enquiries').update({ deleted_at: new Date().toISOString() }).eq('id', id);
@@ -516,15 +710,14 @@ function VesselColumn() {
   const copyWA = async (row: EnquiryRow) => {
     let subjectText = row.subject;
     if (!subjectText) {
-      const { data } = await supabase.from('enquiries').select('subject').eq('id', row.id).single();
+      const { data } = await supabase.from('enquiries').select('subject, notes').eq('id', row.id).single();
       subjectText = data?.subject || row.vessel_name || '';
     }
-    await navigator.clipboard.writeText(buildWhatsAppText({
-      enquiry_number: row.enquiry_number,
-      subject: subjectText,
-      vessel_type: row.vessel_type,
-      notes: row.notes,
-    }));
+    const lines = [row.enquiry_number];
+    if (subjectText) lines.push(subjectText);
+    if (row.vessel_type) lines.push(row.vessel_type.toUpperCase());
+    lines.push('PLS REVERT');
+    await navigator.clipboard.writeText(lines.join('\n'));
     toast({ title: 'Copied ✓' });
   };
 
@@ -555,139 +748,95 @@ function VesselColumn() {
   };
 
   const SortHeader = ({ col, children }: { col: string; children: React.ReactNode }) => (
-    <TableHead className="cursor-pointer select-none whitespace-nowrap" onClick={() => toggleSort(col)}>
+    <TableHead className="cursor-pointer select-none whitespace-nowrap text-xs" onClick={() => toggleSort(col)}>
       <span className="inline-flex items-center gap-1">{children} <ArrowUpDown className="h-3 w-3 text-muted-foreground" /></span>
     </TableHead>
   );
 
+  const isDeleted = (r: EnquiryRow) => !!r.deleted_at;
+
   return (
-    <div className="space-y-4">
-      {/* ── Form ── */}
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <h2 className="text-base font-semibold flex items-center gap-2"><Ship className="h-4 w-4" /> New Vessel Open</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Vessel Name</Label>
-            <Input value={vesselName} onChange={e => setVesselName(e.target.value)} placeholder="MV PACIFIC STAR" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Vessel Type <span className="text-destructive">*</span></Label>
-            <Select value={vesselType} onValueChange={setVesselType}>
-              <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
-              <SelectContent>{VESSEL_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">DWT</Label>
-            <Input type="number" value={dwt} onChange={e => setDwt(e.target.value)} placeholder="47000" />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Open Port / Area <span className="text-destructive">*</span></Label>
-            <Input value={openPort} onChange={e => setOpenPort(e.target.value)} placeholder="SINGAPORE" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Open Date From <span className="text-destructive">*</span></Label>
-            <DatePickerField value={openFrom} onChange={setOpenFrom} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Open Date To</Label>
-            <DatePickerField value={openTo} onChange={setOpenTo} />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Notes / Trading Limits</Label>
-          <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={1} placeholder="Optional" className="min-h-[36px]" />
-        </div>
-
-        <div className="rounded border bg-indigo-50 dark:bg-indigo-950/30 px-3 py-2">
-          <span className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">Subject preview</span>
-          <p className="text-xs font-mono text-foreground mt-0.5">{subject}</p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button size="sm" disabled={submitting} onClick={handleSubmit}>
-            {submitting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-            Create Vessel Open
-          </Button>
-          <Button size="sm" variant="ghost" onClick={clearForm}>Clear</Button>
-        </div>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold flex items-center gap-1.5"><Ship className="h-4 w-4" /> Vessel Opens</h2>
+        <Badge variant="secondary" className="text-xs">{filtered.length}</Badge>
       </div>
 
-      {/* ── Filters ── */}
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <Select value={fVesselType} onValueChange={setFVesselType}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SelectTrigger className="w-24 h-7 text-xs"><SelectValue placeholder="Size" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {VESSEL_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            <SelectItem value="all">All Sizes</SelectItem>
+            {VESSEL_SIZE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Input value={fOpenPort} onChange={e => setFOpenPort(e.target.value)} placeholder="Open Port" className="w-28 h-8 text-xs" />
+        <Input value={fOpenPort} onChange={e => setFOpenPort(e.target.value)} placeholder="Open Port" className="w-24 h-7 text-xs" />
         <Select value={fStatuses.length === 1 ? fStatuses[0] : 'all'} onValueChange={v => setFStatuses(v === 'all' ? [] : [v])}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-24 h-7 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="all">All</SelectItem>
             {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Checkbox checked={showArchived} onCheckedChange={v => setShowArchived(!!v)} />
+        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+          <Checkbox checked={showArchived} onCheckedChange={v => setShowArchived(!!v)} className="h-3.5 w-3.5" />
           Archived
         </label>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       {loading ? (
-        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+        <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
       ) : (
-        <div className="rounded-lg border overflow-auto max-h-[60vh]">
+        <div className="rounded-lg border overflow-auto max-h-[65vh]">
           <Table>
             <TableHeader>
               <TableRow>
                 <SortHeader col="enquiry_number">ENQ #</SortHeader>
                 <SortHeader col="vessel_name">Vessel</SortHeader>
-                <SortHeader col="vessel_type">Type</SortHeader>
-                <TableHead>DWT</TableHead>
+                <SortHeader col="vessel_type">Size</SortHeader>
+                <TableHead className="text-xs">DWT</TableHead>
                 <SortHeader col="loading_port">Open Port</SortHeader>
                 <SortHeader col="laycan_from">Open Date</SortHeader>
+                <SortHeader col="discharge_port">Trading</SortHeader>
                 <SortHeader col="status">Status</SortHeader>
                 <SortHeader col="created_at">Date</SortHeader>
-                <TableHead className="w-20">Actions</TableHead>
+                <TableHead className="w-24 text-xs">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No vessel opens</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8 text-xs">No vessel opens</TableCell></TableRow>
               )}
               {filtered.map(row => {
                 const dwtVal = (row.other_requirements as Record<string, unknown>)?.dwt;
                 return (
-                  <TableRow key={row.id} className={cn(row.deleted_at && 'opacity-40')}>
-                    <TableCell>
-                      <button className="text-primary hover:underline font-mono text-xs" onClick={() => navigate(`/enquiries/${row.id}`)}>
+                  <TableRow key={row.id} className={cn(isDeleted(row) && 'bg-destructive/5')}>
+                    <TableCell className={cn('text-xs', isDeleted(row) && 'line-through opacity-45')}>
+                      <button className="text-primary hover:underline font-mono" onClick={() => navigate(`/enquiries/${row.id}`)}>
                         {row.enquiry_number || '—'}
                       </button>
                     </TableCell>
-                    <TableCell className="text-xs">{row.vessel_name || 'TBN'}</TableCell>
-                    <TableCell className="text-xs">{row.vessel_type || '—'}</TableCell>
-                    <TableCell className="text-xs">{dwtVal != null ? String(dwtVal) : '—'}</TableCell>
-                    <TableCell className="text-xs">{row.loading_port || '—'}</TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">{formatLaycanShort(row.laycan_from, row.laycan_to)}</TableCell>
+                    <TableCell className={cn('text-xs', isDeleted(row) && 'line-through opacity-45')}>{row.vessel_name || 'TBN'}</TableCell>
+                    <TableCell className={cn('text-xs', isDeleted(row) && 'line-through opacity-45')}>{row.vessel_type || '—'}</TableCell>
+                    <TableCell className={cn('text-xs', isDeleted(row) && 'line-through opacity-45')}>{dwtVal != null ? String(dwtVal) : '—'}</TableCell>
+                    <TableCell className={cn('text-xs uppercase', isDeleted(row) && 'line-through opacity-45')}>{row.loading_port || '—'}</TableCell>
+                    <TableCell className={cn('text-xs whitespace-nowrap', isDeleted(row) && 'line-through opacity-45')}>{formatLaycanShort(row.laycan_from, null)}</TableCell>
+                    <TableCell className={cn('text-xs uppercase', isDeleted(row) && 'line-through opacity-45')}>{row.discharge_port || '—'}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={cn('text-[10px]', STATUS_COLORS[row.status] || '')}>{row.status}</Badge>
+                      <Badge variant="outline" className={cn('text-[10px]', isDeleted(row) ? STATUS_COLORS.DELETED : (STATUS_COLORS[row.status] || ''))}>
+                        {isDeleted(row) ? 'DELETED' : row.status}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
+                    <TableCell className={cn('text-xs whitespace-nowrap', isDeleted(row) && 'line-through opacity-45')}>
                       {row.created_at ? format(new Date(row.created_at), 'dd MMM') : '—'}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-0.5">
                         <button className="p-1 rounded hover:bg-muted" title="Copy WhatsApp" onClick={() => copyWA(row)}><Copy className="h-3.5 w-3.5" /></button>
                         <button className="p-1 rounded hover:bg-muted" title="Open" onClick={() => navigate(`/enquiries/${row.id}`)}><ExternalLink className="h-3.5 w-3.5" /></button>
-                        {row.deleted_at ? (
+                        {isDeleted(row) ? (
                           <button className="p-1 rounded hover:bg-muted text-green-600" title="Restore" onClick={() => restore(row.id)}><RotateCcw className="h-3.5 w-3.5" /></button>
                         ) : (
                           <button className="p-1 rounded hover:bg-muted text-destructive" title="Archive" onClick={() => setDeleteId(row.id)}><Trash2 className="h-3.5 w-3.5" /></button>
@@ -705,8 +854,8 @@ function VesselColumn() {
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive this enquiry?</AlertDialogTitle>
-            <AlertDialogDescription>The enquiry will be soft-deleted and can be restored later.</AlertDialogDescription>
+            <AlertDialogTitle>Archive this vessel open?</AlertDialogTitle>
+            <AlertDialogDescription>It will move to the bottom and can be restored later.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
