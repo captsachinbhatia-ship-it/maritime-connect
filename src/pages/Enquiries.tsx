@@ -104,27 +104,23 @@ export default function Enquiries() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Anchor className="h-6 w-6" />
-          <h1 className="text-2xl font-bold text-foreground">Enquiries</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setCargoModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> New Cargo Enquiry
-          </Button>
-          <Button onClick={() => setVesselModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> New Vessel Open
-          </Button>
-        </div>
+      <div className="flex items-center gap-2">
+        <Anchor className="h-6 w-6" />
+        <h1 className="text-2xl font-bold text-foreground">Enquiries</h1>
       </div>
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-        <div className="pr-3">
+        <div className="pr-3 flex flex-col gap-4">
+          <Button onClick={() => setCargoModalOpen(true)} className="w-fit">
+            <Plus className="h-4 w-4 mr-1" /> New Cargo Enquiry
+          </Button>
           <CargoTable key={`cargo-${cargoRefresh}`} refreshKey={cargoRefresh} />
         </div>
-        <div className="pl-3 border-l border-border">
+        <div className="pl-3 border-l border-border flex flex-col gap-4">
+          <Button onClick={() => setVesselModalOpen(true)} className="w-fit">
+            <Plus className="h-4 w-4 mr-1" /> New Vessel Open
+          </Button>
           <VesselTable key={`vessel-${vesselRefresh}`} refreshKey={vesselRefresh} />
         </div>
       </div>
@@ -182,7 +178,7 @@ function CargoModal({ open, onClose, onCreated }: { open: boolean; onClose: () =
         p_cargo_type: cargoType.trim(), p_quantity: Number(quantity), p_quantity_unit: quantityUnit,
         p_lp: loadPort.trim(), p_dp: dischPort.trim(),
         p_laycan_from: laycanFrom, p_laycan_to: laycanTo,
-        p_vessel_type: vesselSize || null, p_notes: notes.trim() || null,
+        p_vessel_type: vesselSize && vesselSize !== 'NONE' ? vesselSize : null, p_notes: notes.trim() || null,
         p_is_draft: false,
       });
       if (error) {
@@ -264,7 +260,7 @@ function CargoModal({ open, onClose, onCreated }: { open: boolean; onClose: () =
               <Select value={vesselSize} onValueChange={setVesselSize}>
                 <SelectTrigger><SelectValue placeholder="Select size..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="NONE">None</SelectItem>
                   {VESSEL_SIZE_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
