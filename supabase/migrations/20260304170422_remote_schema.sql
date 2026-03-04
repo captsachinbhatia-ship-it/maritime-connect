@@ -1,3 +1,30 @@
+-- REQUIRED FOR DEFAULTS / POLICIES
+-- SAFE STUB: does not reference tables (replay-safe for supabase db pull)
+create or replace function public.current_crm_user_id()
+returns uuid
+language sql
+stable
+security definer
+as $$
+  select null::uuid
+$$;
+-- REPLAY-SAFE STUBS (needed during shadow replay)
+-- These will be replaced later by real definitions if present in the migration set.
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+as $$
+  select false
+$$;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+revoke all on function public.current_crm_user_id() from public;
+grant execute on function public.current_crm_user_id() to authenticated;
+
 create extension if not exists "pg_cron" with schema "pg_catalog";
 
 drop extension if exists "pg_net";
