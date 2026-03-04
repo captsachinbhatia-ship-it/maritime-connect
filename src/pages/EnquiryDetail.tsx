@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import {
   Loader2, ArrowLeft, Save, Send, Check, X,
   MessageSquarePlus, FileText, Clock, User, Anchor, Package,
-  List,
+  List, Copy,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ import {
   TANKER_STATUSES, STATUS_COLORS, PRIORITY_COLORS, QUOTE_STATUS_COLORS,
   MODE_COLORS, MODE_LABELS, deriveDisplayMode,
 } from '@/lib/enquiryConstants';
+import { buildWhatsAppText } from '@/lib/enquirySubject';
 
 const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   NOTE_ADDED: <MessageSquarePlus className="h-4 w-4" />,
@@ -228,12 +229,27 @@ export default function EnquiryDetailPage() {
             </div>
           </div>
         </div>
-        {!readOnly && (
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {enquiry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await navigator.clipboard.writeText(buildWhatsAppText(enquiry));
+                toast({ title: 'Copied to clipboard ✓' });
+              }}
+            >
+              <Copy className="mr-1.5 h-4 w-4" />
+              Copy WhatsApp Text
+            </Button>
+          )}
+          {!readOnly && (
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}

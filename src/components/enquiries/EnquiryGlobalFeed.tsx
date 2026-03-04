@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import {
-  Loader2, Filter, Ship, Package, MapPin, Calendar, User, Building2, ChevronDown,
+  Loader2, Filter, Ship, Package, MapPin, Calendar, User, Building2, ChevronDown, Copy,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   TANKER_STATUSES, STATUS_COLORS, PRIORITY_COLORS, MODE_COLORS, MODE_LABELS,
   deriveDisplayMode, formatLaycan,
 } from '@/lib/enquiryConstants';
+import { buildWhatsAppText } from '@/lib/enquirySubject';
 
 const PAGE_SIZE = 20;
 
@@ -166,7 +167,7 @@ export function EnquiryGlobalFeed({ tab }: Props) {
               onClick={() => navigate(`/enquiries/${row.enquiry_id}`)}
             >
               <CardContent className="p-4">
-                {/* Row 1: Number, mode, status, priority */}
+                {/* Row 1: Number, mode, status, priority, copy */}
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className="font-mono text-sm font-semibold">{row.enquiry_number}</span>
                   <Badge variant="outline" className={MODE_COLORS[mode]}>
@@ -180,6 +181,22 @@ export function EnquiryGlobalFeed({ tab }: Props) {
                       {row.priority}
                     </Badge>
                   )}
+                  <button
+                    className="ml-auto p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    title="Copy WhatsApp text"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await navigator.clipboard.writeText(buildWhatsAppText({
+                        enquiry_number: row.enquiry_number,
+                        subject: row.subject,
+                        vessel_type: row.vessel_type,
+                        notes: null,
+                      }));
+                      toast({ title: 'Copied to clipboard ✓' });
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
                 </div>
 
                 {/* Row 2: Subject */}
