@@ -15,7 +15,9 @@ import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
 import ContactsV2 from "./pages/ContactsV2";
 import Enquiries from "./pages/Enquiries";
-import CreateEnquiry from "./pages/CreateEnquiry";
+import EnquiryTypePicker from "./pages/EnquiryTypePicker";
+import NewCargoEnquiry from "./pages/NewCargoEnquiry";
+import NewVesselEnquiry from "./pages/NewVesselEnquiry";
 import EnquiryDetail from "./pages/EnquiryDetail";
 import Reporting from "./pages/Reporting";
 import MyFollowups from "./pages/MyFollowups";
@@ -70,7 +72,9 @@ const App = () => {
                 <Route path="admin/summary" element={<AdminSummary />} />
                 <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
-                <Route path="enquiries/new" element={<CreateEnquiry />} />
+                <Route path="enquiries/new" element={<EnquiryTypePicker />} />
+                <Route path="enquiries/new-cargo" element={<NewCargoEnquiry />} />
+                <Route path="enquiries/new-vessel" element={<NewVesselEnquiry />} />
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
                 <Route path="reporting" element={<Reporting />} />
                 <Route path="interactions" element={<AllInteractions />} />
