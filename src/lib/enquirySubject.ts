@@ -38,7 +38,7 @@ export function generateCargoSubject({
       laycan = `${fDay} ${fMon}`;
     }
   }
-  return `${qty}${unit} ${cargo} EX ${lp} TO ${dp}\nLAYCAN ${laycan}`;
+  return `${qty}${unit} ${cargo} EX ${lp} TO ${dp} / LAYCAN ${laycan}`;
 }
 
 export function generateVesselSubject({
@@ -60,7 +60,7 @@ export function generateVesselSubject({
     const d = new Date(laycanFrom);
     date = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
   }
-  return `${name}${type ? ' / ' + type : ''}\nOPEN ${port} ${date}`;
+  return `${name}${type ? ' / ' + type : ''} / OPEN ${port} ${date}`;
 }
 
 export function buildWhatsAppText(enq: {
