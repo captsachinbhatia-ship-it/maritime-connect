@@ -487,6 +487,24 @@ export function LogInteractionModal({
             )}
           </div>
 
+          {/* Enquiry CTA */}
+          <div className="rounded-lg border border-dashed p-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <FileText className="h-4 w-4 shrink-0" />
+            <span>Need to create an enquiry?</span>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-primary"
+              onClick={() => {
+                handleClose();
+                navigate('/enquiries');
+              }}
+            >
+              Go to Enquiries →
+            </Button>
+          </div>
+
           {validationMessage && <p className="text-sm text-destructive">{validationMessage}</p>}
 
           <div className="flex justify-end gap-3 pt-2">
