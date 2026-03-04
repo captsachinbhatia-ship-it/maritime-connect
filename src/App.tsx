@@ -25,6 +25,7 @@ import AdminSummary from "./pages/AdminSummary";
 import BulkImport from "./pages/BulkImport";
 import AllInteractions from "./pages/AllInteractions";
 import AllFollowups from "./pages/AllFollowups";
+import Documents from "./pages/Documents";
 
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
@@ -73,6 +74,7 @@ const App = () => {
                 <Route path="enquiries/new-cargo" element={<Navigate to="/enquiries" replace />} />
                 <Route path="enquiries/new-vessel" element={<Navigate to="/enquiries" replace />} />
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
+                <Route path="documents" element={<Documents />} />
                 <Route path="reporting" element={<Reporting />} />
                 <Route path="interactions" element={<AllInteractions />} />
                 <Route path="follow-ups" element={<AllFollowups />} />
