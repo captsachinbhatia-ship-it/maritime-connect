@@ -8,7 +8,7 @@ import { CalendarClock, Check, ExternalLink, Plus } from 'lucide-react';
 import { format, isPast, isToday } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/hooks/use-toast';
-import { DashboardLogInteractionModal } from '@/components/dashboard/DashboardLogInteractionModal';
+import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
 
 interface FollowupRow {
   id: string;
@@ -167,7 +167,7 @@ export default function AllFollowups() {
         ))}
       </Tabs>
 
-      <DashboardLogInteractionModal open={logOpen} onOpenChange={setLogOpen} onSuccess={fetchData} />
+      <LogInteractionModal isOpen={logOpen} onClose={() => setLogOpen(false)} onSuccess={() => { setLogOpen(false); fetchData(); }} />
     </div>
   );
 }
