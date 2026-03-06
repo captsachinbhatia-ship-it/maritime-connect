@@ -12,7 +12,7 @@ export interface CrmUser {
   updated_at: string;
 }
 
-export const CRM_ROLES = ['ShipBroker', 'Desk Manager', 'Operations', 'Accounts Executive'] as const;
+export const CRM_ROLES = ['Admin', 'ShipBroker', 'Desk Manager', 'Operations', 'Accounts Executive'] as const;
 export type CrmRole = typeof CRM_ROLES[number];
 
 export async function listCrmUsers(options?: { includeInactive?: boolean }): Promise<{
