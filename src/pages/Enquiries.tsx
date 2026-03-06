@@ -34,7 +34,7 @@ import { generateCargoSubject, generateVesselSubject, buildWhatsAppText } from '
 
 // ─── Constants ────────────────────────────────────────────────────────
 const UNIT_OPTIONS = ['MT', 'CBM', 'BBLS', 'LOTS'];
-const VESSEL_SIZE_OPTIONS = ['MR', 'LR1', 'LR2', 'AFRAMAX', 'SUEZMAX', 'VLCC'];
+import { VESSEL_SIZE_OPTIONS } from '@/lib/vesselSizes';
 const STATUS_OPTIONS = ['RECEIVED', 'SCREENING', 'IN_MARKET', 'OFFER_OUT', 'COUNTERING', 'SUBJECTS', 'FIXED', 'FAILED', 'CANCELLED', 'WITHDRAWN'];
 
 const STATUS_COLORS: Record<string, string> = {

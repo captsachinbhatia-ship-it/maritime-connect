@@ -26,6 +26,7 @@ import BulkImport from "./pages/BulkImport";
 import AllInteractions from "./pages/AllInteractions";
 import AllFollowups from "./pages/AllFollowups";
 import Documents from "./pages/Documents";
+import { AdminRoute } from "./components/AdminRoute";
 
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
@@ -75,7 +76,9 @@ const App = () => {
                 <Route path="enquiries/new-vessel" element={<Navigate to="/enquiries" replace />} />
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
                 <Route path="documents" element={<Documents />} />
-                <Route path="reporting" element={<Reporting />} />
+                <Route element={<AdminRoute />}>
+                  <Route path="reporting" element={<Reporting />} />
+                </Route>
                 <Route path="interactions" element={<AllInteractions />} />
                 <Route path="follow-ups" element={<AllFollowups />} />
                 <Route path="bulk-import" element={<Navigate to="/contacts/bulk-import" replace />} />
