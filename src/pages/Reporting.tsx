@@ -347,7 +347,7 @@ function ReportB({ isAdmin: admin }: { isAdmin: boolean }) {
               <SelectValue placeholder="All owners" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All owners</SelectItem>
+              <SelectItem value="all">All owners</SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.full_name}
