@@ -39,7 +39,6 @@ const navItems = [
   { title: 'My Follow-ups', url: '/followups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Documents', url: '/documents', icon: FolderOpen },
-  { title: 'Reporting', url: '/reporting', icon: BarChart3 },
 ];
 
 const adminNavItems = [
@@ -92,6 +91,29 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Admin-only: Reporting */}
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Analytics</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/reporting')}>
+                    <NavLink
+                      to="/reporting"
+                      className="flex items-center gap-3"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      <span>Reporting</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Admin-only navigation */}
         {isAdmin && (

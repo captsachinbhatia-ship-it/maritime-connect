@@ -48,7 +48,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   ENQUIRY_ATTACHMENT: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300',
 };
 
-const VESSEL_SIZE_OPTIONS = ['MR', 'LR1', 'LR2', 'AFRAMAX', 'SUEZMAX', 'VLCC'];
+import { VESSEL_SIZE_OPTIONS } from '@/lib/vesselSizes';
 const SOURCE_OPTIONS = ['Email', 'Meeting', 'Broker Note', 'Other'];
 
 function getCategoryLabel(val: string) {
