@@ -9,7 +9,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { MessageSquare, Phone, Mail, Video, StickyNote, PlusCircle, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
-import { formatDistanceToNow } from 'date-fns';
 
 interface RecentInteraction {
   id: string;
