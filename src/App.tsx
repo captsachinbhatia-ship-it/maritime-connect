@@ -64,7 +64,7 @@ const App = () => {
                 <Route path="contacts-v2" element={<ContactsV2 />} />
                 <Route path="contacts-old" element={<Contacts />} />
                 <Route path="contacts/bulk-import" element={<BulkImport />} />
-                <Route path="followups" element={<MyFollowups />} />
+                <Route path="followups" element={<Navigate to="/follow-ups" replace />} />
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="admin-users" element={<AdminUsers />} />
                 <Route path="admin/daily-work-done" element={<DailyWorkDone />} />

@@ -36,7 +36,6 @@ const navItems = [
   { title: 'Contacts', url: '/contacts', icon: Users },
   { title: 'Interactions', url: '/interactions', icon: Activity },
   { title: 'Follow-ups', url: '/follow-ups', icon: CalendarClock },
-  { title: 'My Follow-ups', url: '/followups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Documents', url: '/documents', icon: FolderOpen },
 ];
