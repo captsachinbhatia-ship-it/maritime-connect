@@ -6,8 +6,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
-import { MessageSquare, Phone, Mail, Video, StickyNote, Plus, ExternalLink } from 'lucide-react';
+import { MessageSquare, Phone, Mail, Video, StickyNote, PlusCircle, ExternalLink } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
 
 interface RecentInteraction {
   id: string;
@@ -54,6 +55,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
   
   const [interactions, setInteractions] = useState<RecentInteraction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [logModalOpen, setLogModalOpen] = useState(false);
 
   const effectiveUserId = crmUserIdProp === undefined ? currentCrmUserId : crmUserIdProp;
 
@@ -132,6 +134,10 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
                 {interactions.length} total
               </Badge>
             )}
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setLogModalOpen(true)}>
+              <PlusCircle className="h-3.5 w-3.5" />
+              Log Interaction
+            </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handlePopout} title="Open all interactions">
               <ExternalLink className="h-3.5 w-3.5" />
             </Button>
@@ -208,6 +214,12 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
           </div>
         )}
       </CardContent>
+
+      <LogInteractionModal
+        isOpen={logModalOpen}
+        onClose={() => setLogModalOpen(false)}
+        onSuccess={() => setLogModalOpen(false)}
+      />
     </Card>
   );
 }
