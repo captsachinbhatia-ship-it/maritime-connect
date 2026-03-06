@@ -166,7 +166,7 @@ function ReportA({ isAdmin: admin }: { isAdmin: boolean }) {
     const { data: rows, error: err } = await supabase.rpc("rpc_report_a_activity_summary", {
       p_start: start,
       p_end: end,
-      p_user_id: selectedUser === "all" ? null : selectedUser,
+      p_user_id: userId === "all" || !userId ? null : userId,
     });
     if (err) setError(err.message);
     else setData(rows || []);
@@ -314,8 +314,8 @@ function ReportB({ isAdmin: admin }: { isAdmin: boolean }) {
     setLoading(true);
     setError(null);
     const { data: rows, error: err } = await supabase.rpc("rpc_report_b_coverage", {
-      p_owner_id: ownerId || null,
-      p_stage: stage || null,
+      p_owner_id: ownerId === "all" || !ownerId ? null : ownerId,
+      p_stage: stage === "all" || !stage ? null : stage,
       p_company_id: null,
     });
     if (err) setError(err.message);
@@ -347,7 +347,7 @@ function ReportB({ isAdmin: admin }: { isAdmin: boolean }) {
               <SelectValue placeholder="All owners" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All owners</SelectItem>
+              <SelectItem value="all">All owners</SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.full_name}
@@ -361,7 +361,7 @@ function ReportB({ isAdmin: admin }: { isAdmin: boolean }) {
             <SelectValue placeholder="All stages" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All stages</SelectItem>
+            <SelectItem value="all">All stages</SelectItem>
             <SelectItem value="COLD_CALLING">Cold Calling</SelectItem>
             <SelectItem value="ASPIRATION">Aspiration</SelectItem>
             <SelectItem value="ACHIEVEMENT">Achievement</SelectItem>
@@ -637,9 +637,9 @@ function ReportD({ isAdmin: admin }: { isAdmin: boolean }) {
     setLoading(true);
     setError(null);
     const { data: rows, error: err } = await supabase.rpc("rpc_report_d_gap_list", {
-      p_owner_id: ownerId || null,
-      p_bucket: bucket || null,
-      p_stage: stage || null,
+      p_owner_id: ownerId === "all" || !ownerId ? null : ownerId,
+      p_bucket: bucket === "all" || !bucket ? null : bucket,
+      p_stage: stage === "all" || !stage ? null : stage,
       p_company_id: null,
     });
     if (err) setError(err.message);
@@ -676,7 +676,7 @@ function ReportD({ isAdmin: admin }: { isAdmin: boolean }) {
               <SelectValue placeholder="All owners" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All owners</SelectItem>
+              <SelectItem value="all">All owners</SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.full_name}
@@ -690,7 +690,7 @@ function ReportD({ isAdmin: admin }: { isAdmin: boolean }) {
             <SelectValue placeholder="All buckets" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All buckets</SelectItem>
+            <SelectItem value="all">All buckets</SelectItem>
             <SelectItem value="0-30">0–30 days</SelectItem>
             <SelectItem value="31-60">31–60 days</SelectItem>
             <SelectItem value="61-90">61–90 days</SelectItem>
@@ -703,7 +703,7 @@ function ReportD({ isAdmin: admin }: { isAdmin: boolean }) {
             <SelectValue placeholder="All stages" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All stages</SelectItem>
+            <SelectItem value="all">All stages</SelectItem>
             <SelectItem value="COLD_CALLING">Cold Calling</SelectItem>
             <SelectItem value="ASPIRATION">Aspiration</SelectItem>
             <SelectItem value="ACHIEVEMENT">Achievement</SelectItem>
@@ -715,7 +715,7 @@ function ReportD({ isAdmin: admin }: { isAdmin: boolean }) {
             <SelectValue placeholder="All (tasks)" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All (tasks)</SelectItem>
+            <SelectItem value="all">All (tasks)</SelectItem>
             <SelectItem value="yes">Has open task</SelectItem>
             <SelectItem value="no">No open task</SelectItem>
           </SelectContent>
