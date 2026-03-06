@@ -166,7 +166,7 @@ function ReportA({ isAdmin: admin }: { isAdmin: boolean }) {
     const { data: rows, error: err } = await supabase.rpc("rpc_report_a_activity_summary", {
       p_start: start,
       p_end: end,
-      p_user_id: userId || null,
+      p_user_id: selectedUser === "all" ? null : selectedUser,
     });
     if (err) setError(err.message);
     else setData(rows || []);
