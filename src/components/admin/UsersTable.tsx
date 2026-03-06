@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { UserX, UserCheck, Loader2 } from 'lucide-react';
 import { CrmUser, updateCrmUser, CRM_ROLES } from '@/services/users';
+import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/hooks/use-toast';
 
 interface UsersTableProps {
@@ -78,6 +79,24 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
   };
 
   const handleRoleChange = async (user: CrmUser, newRole: string) => {
+    // Last-Admin safeguard
+    if (user.role === 'Admin' && newRole !== 'Admin') {
+      const { data: adminList } = await supabase
+        .from('crm_users')
+        .select('id')
+        .eq('role', 'Admin')
+        .eq('active', true);
+
+      if (!adminList || adminList.length <= 1) {
+        toast({
+          title: 'Cannot remove last Admin',
+          description: 'Promote another user to Admin first.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setUpdatingUserId(user.id);
     const { error } = await updateCrmUser(user.id, { role: newRole });
     setUpdatingUserId(null);
@@ -100,6 +119,8 @@ export function UsersTable({ users, isLoading, onRefresh }: UsersTableProps) {
 
   const getRoleBadgeVariant = (role: string | null) => {
     switch (role) {
+      case 'Admin':
+        return 'default';
       case 'ShipBroker':
         return 'default';
       case 'Desk Manager':
