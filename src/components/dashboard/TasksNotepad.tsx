@@ -152,39 +152,106 @@ function NotepadEditor({ crmUserId }: { crmUserId: string }) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderAt, setReminderAt] = useState<string | null>(null);
+  const [showAlert, setShowAlert] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Default: tomorrow 9:00 AM local
+  const getDefaultReminder = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d.toISOString().slice(0, 16);
+  };
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const { data } = await getNotepad(crmUserId);
+      const { data, reminderAt: ra } = await getNotepad(crmUserId);
       setContent(data);
+      if (ra) {
+        setReminderEnabled(true);
+        setReminderAt(ra.slice(0, 16));
+        // Check if reminder is due (past or within 10 min)
+        const diff = new Date(ra).getTime() - Date.now();
+        if (diff <= 10 * 60 * 1000) setShowAlert(true);
+      }
       setLoading(false);
     };
     load();
   }, [crmUserId]);
 
-  const handleChange = (value: string) => {
-    setContent(value);
-    // Autosave after 1s
+  const triggerSave = (newContent: string, newReminderAt: string | null) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       setSaving(true);
-      await saveNotepad(crmUserId, value);
+      await saveNotepad(crmUserId, newContent, newReminderAt);
       setSaving(false);
     }, 1000);
+  };
+
+  const handleChange = (value: string) => {
+    setContent(value);
+    triggerSave(value, reminderEnabled ? reminderAt : null);
+  };
+
+  const handleReminderToggle = (checked: boolean) => {
+    setReminderEnabled(checked);
+    const ra = checked ? (reminderAt || getDefaultReminder()) : null;
+    if (checked && !reminderAt) setReminderAt(getDefaultReminder());
+    triggerSave(content, ra);
+  };
+
+  const handleReminderChange = (val: string) => {
+    setReminderAt(val);
+    triggerSave(content, val || null);
+  };
+
+  const dismissReminder = async () => {
+    setShowAlert(false);
+    setReminderEnabled(false);
+    setReminderAt(null);
+    setSaving(true);
+    await saveNotepad(crmUserId, content, null);
+    setSaving(false);
   };
 
   if (loading) return <Skeleton className="h-[200px] w-full" />;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
+      {showAlert && reminderAt && (
+        <div className="flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+          <span>⏰ Reminder: {format(new Date(reminderAt), 'dd MMM yyyy, HH:mm')}</span>
+          <button onClick={dismissReminder} className="ml-2 text-amber-600 hover:text-amber-900 dark:hover:text-amber-100 font-bold leading-none">×</button>
+        </div>
+      )}
       <Textarea
         value={content}
         onChange={(e) => handleChange(e.target.value)}
         placeholder="Quick notes, reminders..."
-        className="min-h-[200px] text-sm resize-none"
+        className="min-h-[180px] text-sm resize-none"
       />
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="notepad-reminder"
+          checked={reminderEnabled}
+          onCheckedChange={(c) => handleReminderToggle(c === true)}
+          className="h-3.5 w-3.5"
+        />
+        <label htmlFor="notepad-reminder" className="text-[11px] text-muted-foreground cursor-pointer select-none">
+          Set reminder
+        </label>
+        {reminderEnabled && (
+          <input
+            type="datetime-local"
+            value={reminderAt || ''}
+            onChange={(e) => handleReminderChange(e.target.value)}
+            className="ml-auto h-6 rounded border border-input bg-background px-1.5 text-[11px] text-foreground"
+          />
+        )}
+      </div>
       <p className="text-[10px] text-muted-foreground text-right">
         {saving ? 'Saving...' : 'Auto-saved'}
       </p>
