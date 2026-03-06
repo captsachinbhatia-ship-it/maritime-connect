@@ -442,7 +442,7 @@ export default function AllFollowups() {
         {(['mine', 'team'] as const).map((tab) => (
           <TabsContent key={tab} value={tab} className="mt-4 space-y-4">
             <Tabs value={dueFilter} onValueChange={(v) => setDueFilter(v as DueFilter)}>
-              <TabsList variant="outline">
+              <TabsList>
                 <TabsTrigger value="overdue">
                   Overdue
                   {buckets.overdue.length > 0 && (
