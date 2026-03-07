@@ -31,6 +31,7 @@ export function EnquiriesSummary({ crmUserId, isPersonal = false }: EnquiriesSum
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showNewEnquiry, setShowNewEnquiry] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const effectiveUserId = isPersonal ? crmUser?.id ?? null : crmUserId ?? null;
 
@@ -100,7 +101,7 @@ export function EnquiriesSummary({ crmUserId, isPersonal = false }: EnquiriesSum
     };
 
     fetchCounts();
-  }, [effectiveUserId]);
+  }, [effectiveUserId, refreshKey]);
 
   const handleClick = (filter: 'generated_today' | 'generated_7d' | 'closed_today' | 'closed_7d') => {
     navigate(`/enquiries?kpi=${filter}`);
@@ -116,9 +117,7 @@ export function EnquiriesSummary({ crmUserId, isPersonal = false }: EnquiriesSum
   const handleEnquiryCreated = () => {
     setShowNewEnquiry(false);
     window.dispatchEvent(new Event('dashboard:refresh'));
-    // Re-fetch counts
-    setLoading(true);
-    setCounts(null);
+    setRefreshKey(k => k + 1);
   };
 
   return (
