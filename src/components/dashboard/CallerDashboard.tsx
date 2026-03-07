@@ -27,7 +27,7 @@ interface CallerDashboardProps {
 export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [logModalOpen, setLogModalOpen] = useState(false);
+  
 
   const handleContactClick = (contact: ContactWithCompany) => {
     setSelectedContact(contact);
