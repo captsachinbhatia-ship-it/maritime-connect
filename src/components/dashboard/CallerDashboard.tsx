@@ -16,7 +16,9 @@ import { FollowupsDueWidget } from './FollowupsDueWidget';
 import { TeamTasksWidget } from './TeamTasksWidget';
 import { NotepadCard } from './NotepadCard';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
+import { Separator } from '@/components/ui/separator';
 import { ContactWithCompany } from '@/types';
+import { Briefcase, BarChart3 } from 'lucide-react';
 
 
 interface CallerDashboardProps {
