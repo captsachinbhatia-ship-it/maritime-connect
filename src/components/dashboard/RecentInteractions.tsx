@@ -134,7 +134,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
                 {interactions.length} total
               </Badge>
             )}
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setLogModalOpen(true)}>
+            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => setLogModalOpen(true)}>
               <PlusCircle className="h-3.5 w-3.5" />
               Log Interaction
             </Button>
