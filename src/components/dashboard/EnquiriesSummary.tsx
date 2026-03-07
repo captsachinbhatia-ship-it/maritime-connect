@@ -131,7 +131,7 @@ export function EnquiriesSummary({ crmUserId, isPersonal = false }: EnquiriesSum
               </div>
               <CardTitle className="text-base">Enquiries Overview</CardTitle>
             </div>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowNewEnquiry(true)}>
+            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => setShowNewEnquiry(true)}>
               <PlusCircle className="h-3.5 w-3.5" />
               New Enquiry
             </Button>

@@ -15,11 +15,9 @@ import { ModeIndicator } from './ModeIndicator';
 import { FollowupsDueWidget } from './FollowupsDueWidget';
 import { TeamTasksWidget } from './TeamTasksWidget';
 import { NotepadCard } from './NotepadCard';
-import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Plus } from 'lucide-react';
+
 
 interface CallerDashboardProps {
   isAdmin: boolean;
@@ -29,7 +27,7 @@ interface CallerDashboardProps {
 export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [logModalOpen, setLogModalOpen] = useState(false);
+  
 
   const handleContactClick = (contact: ContactWithCompany) => {
     setSelectedContact(contact);
@@ -54,9 +52,6 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" onClick={() => setLogModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Log Interaction
-          </Button>
           {isAdmin && <ModeIndicator isCEO={isCEO} />}
         </div>
       </div>
@@ -116,12 +111,6 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         onClose={handleDrawerClose}
       />
 
-      {/* Log Interaction Modal */}
-      <LogInteractionModal
-        isOpen={logModalOpen}
-        onClose={() => setLogModalOpen(false)}
-        onSuccess={() => setLogModalOpen(false)}
-      />
     </div>
   );
 }
