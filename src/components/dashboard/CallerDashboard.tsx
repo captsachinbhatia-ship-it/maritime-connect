@@ -16,7 +16,9 @@ import { FollowupsDueWidget } from './FollowupsDueWidget';
 import { TeamTasksWidget } from './TeamTasksWidget';
 import { NotepadCard } from './NotepadCard';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
+import { Separator } from '@/components/ui/separator';
 import { ContactWithCompany } from '@/types';
+import { Briefcase, BarChart3 } from 'lucide-react';
 
 
 interface CallerDashboardProps {
@@ -56,51 +58,71 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
         </div>
       </div>
 
-      {/* Row 1: Tasks (8/12) + Notepad (4/12) */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-8">
-          <TeamTasksWidget />
+      {/* ═══════════ ACTION ZONE ═══════════ */}
+      <div className="space-y-5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <Briefcase className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Action Zone</h2>
+            <p className="text-xs text-muted-foreground">Your daily working desk</p>
+          </div>
         </div>
-        <div className="lg:col-span-4">
-          <NotepadCard />
+
+        {/* Row 1: Tasks + Notepad */}
+        <div className="grid gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            <TeamTasksWidget />
+          </div>
+          <div className="lg:col-span-4">
+            <NotepadCard />
+          </div>
+        </div>
+
+        {/* Row 2: Recent Interactions + Follow-ups Due */}
+        <div className="grid gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            <RecentInteractions />
+          </div>
+          <div className="lg:col-span-4">
+            <FollowupsDueWidget />
+          </div>
+        </div>
+
+        {/* Row 3: Enquiries + Daily Report */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <EnquiriesSummary isPersonal />
+          <DailyReport />
         </div>
       </div>
 
-      {/* Row 2: Recent Interactions (8/12) + Follow-ups Due (4/12) */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        <div className="lg:col-span-8">
-          <RecentInteractions />
-        </div>
-        <div className="lg:col-span-4">
-          <FollowupsDueWidget />
-        </div>
+      {/* ═══════════ DIVIDER ═══════════ */}
+      <div className="relative py-2">
+        <Separator className="bg-border/60" />
       </div>
 
-      {/* Row 3: Enquiries Overview */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <EnquiriesSummary isPersonal />
-        <DailyReport />
+      {/* ═══════════ PERFORMANCE MONITORING ═══════════ */}
+      <div className="space-y-5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/60">
+            <BarChart3 className="h-4 w-4 text-accent-foreground" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Performance Monitoring</h2>
+            <p className="text-xs text-muted-foreground">KPIs, health metrics &amp; analytics</p>
+          </div>
+        </div>
+
+        <ExecutiveSnapshot />
+        <ContactHealthSnapshot />
+        <DashboardLineChart isPersonal />
+        <ActivityMatrix />
+        <UserVsTeamComparison isCEO={isCEO} isAdmin={isAdmin} />
+        <TouchTargets onContactClick={handleContactClick} isAdmin={isAdmin} />
+        <MyWorkToday onContactClick={handleContactClick} />
+        <RecentCompanies />
       </div>
-
-      {/* Row 4: KPI tiles + Analytics */}
-      <ExecutiveSnapshot />
-      <ContactHealthSnapshot />
-      <DashboardLineChart isPersonal />
-
-      {/* Activity Matrix — full width */}
-      <ActivityMatrix />
-
-      {/* CEO: User vs Team Comparison */}
-      <UserVsTeamComparison isCEO={isCEO} isAdmin={isAdmin} />
-
-      {/* Touch Targets — full width */}
-      <TouchTargets onContactClick={handleContactClick} isAdmin={isAdmin} />
-
-      {/* Stale Contacts */}
-      <MyWorkToday onContactClick={handleContactClick} />
-
-      {/* Recent Companies */}
-      <RecentCompanies />
 
       {/* Contact Details Drawer */}
       <ContactDetailsDrawer
