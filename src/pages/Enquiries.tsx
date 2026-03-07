@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { CargoEnquiryModal } from '@/components/enquiries/CargoEnquiryModal';
 import { useNavigate } from 'react-router-dom';
 import { format, addDays } from 'date-fns';
 import {
