@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { FileText, AlertCircle } from 'lucide-react';
+import { FileText, AlertCircle, PlusCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
+import { CargoEnquiryModal } from '@/components/enquiries/CargoEnquiryModal';
 
 interface EnquiriesSummaryProps {
   /** null = company-wide (CEO), string = specific user */
@@ -28,6 +30,7 @@ export function EnquiriesSummary({ crmUserId, isPersonal = false }: EnquiriesSum
   const [counts, setCounts] = useState<KPICounts | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showNewEnquiry, setShowNewEnquiry] = useState(false);
 
   const effectiveUserId = isPersonal ? crmUser?.id ?? null : crmUserId ?? null;
 
@@ -110,42 +113,64 @@ export function EnquiriesSummary({ crmUserId, isPersonal = false }: EnquiriesSum
     { label: 'Closed (7 Days)', value: counts?.closed7d ?? 0, filter: 'closed_7d' as const },
   ];
 
+  const handleEnquiryCreated = () => {
+    setShowNewEnquiry(false);
+    window.dispatchEvent(new Event('dashboard:refresh'));
+    // Re-fetch counts
+    setLoading(true);
+    setCounts(null);
+  };
+
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <FileText className="h-4.5 w-4.5 text-primary" />
-          </div>
-          <CardTitle className="text-base">Enquiries Overview</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 space-y-4">
-        {error ? (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-xs">{error}</AlertDescription>
-          </Alert>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {kpiItems.map((item) => (
-              <div key={item.label} className="rounded-lg border p-2.5">
-                <p className="text-[11px] text-muted-foreground leading-tight">{item.label}</p>
-                {loading ? (
-                  <div className="mt-1 h-6 w-10 animate-pulse rounded bg-muted" />
-                ) : (
-                  <p
-                    className="text-lg font-bold tabular-nums cursor-pointer text-primary hover:underline leading-tight mt-0.5"
-                    onClick={() => handleClick(item.filter)}
-                  >
-                    {item.value}
-                  </p>
-                )}
+    <>
+      <Card className="flex flex-col">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                <FileText className="h-4.5 w-4.5 text-primary" />
               </div>
-            ))}
+              <CardTitle className="text-base">Enquiries Overview</CardTitle>
+            </div>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setShowNewEnquiry(true)}>
+              <PlusCircle className="h-3.5 w-3.5" />
+              New Enquiry
+            </Button>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="flex-1 space-y-4">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">{error}</AlertDescription>
+            </Alert>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {kpiItems.map((item) => (
+                <div key={item.label} className="rounded-lg border p-2.5">
+                  <p className="text-[11px] text-muted-foreground leading-tight">{item.label}</p>
+                  {loading ? (
+                    <div className="mt-1 h-6 w-10 animate-pulse rounded bg-muted" />
+                  ) : (
+                    <p
+                      className="text-lg font-bold tabular-nums cursor-pointer text-primary hover:underline leading-tight mt-0.5"
+                      onClick={() => handleClick(item.filter)}
+                    >
+                      {item.value}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <CargoEnquiryModal
+        open={showNewEnquiry}
+        onClose={() => setShowNewEnquiry(false)}
+        onCreated={handleEnquiryCreated}
+      />
+    </>
   );
 }

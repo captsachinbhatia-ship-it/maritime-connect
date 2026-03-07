@@ -126,7 +126,7 @@ export default function Enquiries() {
       </div>
 
       {/* Modals */}
-      <CargoModal open={cargoModalOpen} onClose={() => setCargoModalOpen(false)} onCreated={() => setCargoRefresh(p => p + 1)} />
+      <CargoEnquiryModal open={cargoModalOpen} onClose={() => setCargoModalOpen(false)} onCreated={() => setCargoRefresh(p => p + 1)} />
       <VesselModal open={vesselModalOpen} onClose={() => setVesselModalOpen(false)} onCreated={() => setVesselRefresh(p => p + 1)} />
     </div>
   );
