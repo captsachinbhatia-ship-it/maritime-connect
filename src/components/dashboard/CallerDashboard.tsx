@@ -17,7 +17,7 @@ import { TeamTasksWidget } from './TeamTasksWidget';
 import { NotepadCard } from './NotepadCard';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { ContactWithCompany } from '@/types';
-import { Button } from '@/components/ui/button';
+
 
 interface CallerDashboardProps {
   isAdmin: boolean;
