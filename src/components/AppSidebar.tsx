@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   UserCog,
   Activity,
+  FolderOpen,
 } from 'lucide-react';
 import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
@@ -35,9 +36,8 @@ const navItems = [
   { title: 'Contacts', url: '/contacts', icon: Users },
   { title: 'Interactions', url: '/interactions', icon: Activity },
   { title: 'Follow-ups', url: '/follow-ups', icon: CalendarClock },
-  { title: 'My Follow-ups', url: '/followups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
-  { title: 'Reporting', url: '/reporting', icon: BarChart3 },
+  { title: 'Documents', url: '/documents', icon: FolderOpen },
 ];
 
 const adminNavItems = [
@@ -90,6 +90,29 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Admin-only: Reporting */}
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Analytics</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/reporting')}>
+                    <NavLink
+                      to="/reporting"
+                      className="flex items-center gap-3"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      <span>Reporting</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Admin-only navigation */}
         {isAdmin && (

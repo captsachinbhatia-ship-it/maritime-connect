@@ -15,7 +15,6 @@ import Companies from "./pages/Companies";
 import Contacts from "./pages/Contacts";
 import ContactsV2 from "./pages/ContactsV2";
 import Enquiries from "./pages/Enquiries";
-import CreateEnquiry from "./pages/CreateEnquiry";
 import EnquiryDetail from "./pages/EnquiryDetail";
 import Reporting from "./pages/Reporting";
 import MyFollowups from "./pages/MyFollowups";
@@ -26,6 +25,8 @@ import AdminSummary from "./pages/AdminSummary";
 import BulkImport from "./pages/BulkImport";
 import AllInteractions from "./pages/AllInteractions";
 import AllFollowups from "./pages/AllFollowups";
+import Documents from "./pages/Documents";
+import { AdminRoute } from "./components/AdminRoute";
 
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
@@ -63,16 +64,21 @@ const App = () => {
                 <Route path="contacts-v2" element={<ContactsV2 />} />
                 <Route path="contacts-old" element={<Contacts />} />
                 <Route path="contacts/bulk-import" element={<BulkImport />} />
-                <Route path="followups" element={<MyFollowups />} />
+                <Route path="followups" element={<Navigate to="/follow-ups" replace />} />
                 <Route path="followups-oversight" element={<FollowupsOversight />} />
                 <Route path="admin-users" element={<AdminUsers />} />
                 <Route path="admin/daily-work-done" element={<DailyWorkDone />} />
                 <Route path="admin/summary" element={<AdminSummary />} />
                 <Route path="unassigned-contacts" element={<Navigate to="/contacts" replace />} />
                 <Route path="enquiries" element={<Enquiries />} />
-                <Route path="enquiries/new" element={<CreateEnquiry />} />
+                <Route path="enquiries/new" element={<Navigate to="/enquiries" replace />} />
+                <Route path="enquiries/new-cargo" element={<Navigate to="/enquiries" replace />} />
+                <Route path="enquiries/new-vessel" element={<Navigate to="/enquiries" replace />} />
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
-                <Route path="reporting" element={<Reporting />} />
+                <Route path="documents" element={<Documents />} />
+                <Route element={<AdminRoute />}>
+                  <Route path="reporting" element={<Reporting />} />
+                </Route>
                 <Route path="interactions" element={<AllInteractions />} />
                 <Route path="follow-ups" element={<AllFollowups />} />
                 <Route path="bulk-import" element={<Navigate to="/contacts/bulk-import" replace />} />

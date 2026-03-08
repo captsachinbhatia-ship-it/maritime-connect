@@ -1,22 +1,37 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { CalendarClock, Check, Clock, ExternalLink } from 'lucide-react';
-import { formatDistanceToNow, format, isToday, isPast } from 'date-fns';
-import { markFollowupComplete, type FollowupWithContact, type FollowupDueFilter } from '@/services/followups';
+import { CalendarClock, Check, ExternalLink, User, Unlink } from 'lucide-react';
+import { format, isPast, isToday } from 'date-fns';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { upsertTaskUserState } from '@/services/teamTasks';
+
+type FollowupDueFilter = 'overdue' | 'today' | 'next7days';
+
+interface TaskFollowup {
+  id: string;
+  title: string;
+  notes: string | null;
+  due_at: string;
+  related_contact_id: string | null;
+  related_enquiry_id: string | null;
+  contact_name: string | null;
+  company_name: string | null;
+}
 
 export function FollowupsDueWidget() {
+  const navigate = useNavigate();
   const { crmUserId } = useCrmUser();
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState<FollowupDueFilter>('overdue');
-  const [allItems, setAllItems] = useState<FollowupWithContact[]>([]);
+  const [allItems, setAllItems] = useState<TaskFollowup[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
@@ -27,47 +42,81 @@ export function FollowupsDueWidget() {
     }
     setLoading(true);
     try {
+      // Query tasks table for follow-ups (tasks with due_at set)
       let query = supabase
-        .from('v_followup_queue_all_v2')
-        .select('*')
-        .order('next_follow_up_at', { ascending: true });
+        .from('tasks')
+        .select('id, title, notes, due_at, related_contact_id, related_enquiry_id, assigned_to_crm_user_id')
+        .not('due_at', 'is', null)
+        .order('due_at', { ascending: true });
 
+      // Scope to current user (non-admin)
       if (!isAdmin && crmUserId) {
-        query = query.eq('user_id', crmUserId);
+        query = query.eq('assigned_to_crm_user_id', crmUserId);
       }
 
       const { data, error } = await query;
 
       if (error) {
-        console.error('v_followup_queue_all_v2 error:', error.message);
+        console.error('Tasks follow-up fetch error:', error.message);
         setAllItems([]);
         setLoading(false);
         return;
       }
 
-      setAllItems((data || []).map((r: any) => ({
-        id: r.id,
-        contact_id: r.contact_id,
-        assignment_id: r.assignment_id || null,
-        interaction_id: null,
-        followup_type: r.followup_type || 'OTHER',
-        followup_reason: r.followup_reason || r.reason || '',
-        notes: r.notes || null,
-        due_at: r.next_follow_up_at || '',
-        status: r.status || 'OPEN',
-        completed_at: null,
-        created_at: r.created_at || '',
-        created_by: null,
-        recurrence_enabled: null,
-        recurrence_frequency: null,
-        recurrence_interval: null,
-        recurrence_end_date: null,
-        recurrence_count: null,
-        contact_name: r.contact_name || 'Unknown',
-        company_name: r.company_name || null,
-      })));
+      // Filter out completed tasks client-side (exclude DONE/CLOSED statuses via task_user_state)
+      // For now, all tasks from tasks table without a completed marker are shown
+      const taskRows = data || [];
+
+      // Fetch contact names for linked tasks
+      const contactIds = [...new Set(taskRows.map((t: any) => t.related_contact_id).filter(Boolean))];
+      let contactMap: Record<string, { name: string; company: string | null }> = {};
+
+      if (contactIds.length > 0) {
+        const { data: contacts } = await supabase
+          .from('contacts')
+          .select('id, full_name, companies(company_name)')
+          .in('id', contactIds);
+
+        (contacts || []).forEach((c: any) => {
+          contactMap[c.id] = {
+            name: c.full_name || 'Unknown',
+            company: c.companies?.company_name || null,
+          };
+        });
+      }
+
+      // Also fetch user's task_user_state to exclude DONE tasks
+      let doneTaskIds = new Set<string>();
+      if (crmUserId && taskRows.length > 0) {
+        const taskIds = taskRows.map((t: any) => t.id);
+        const { data: states } = await supabase
+          .from('task_user_state')
+          .select('task_id, status')
+          .eq('crm_user_id', crmUserId)
+          .in('task_id', taskIds)
+          .eq('status', 'DONE');
+
+        (states || []).forEach((s: any) => {
+          doneTaskIds.add(s.task_id);
+        });
+      }
+
+      const mapped: TaskFollowup[] = taskRows
+        .filter((t: any) => !doneTaskIds.has(t.id))
+        .map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          notes: t.notes,
+          due_at: t.due_at,
+          related_contact_id: t.related_contact_id || null,
+          related_enquiry_id: t.related_enquiry_id || null,
+          contact_name: t.related_contact_id ? contactMap[t.related_contact_id]?.name || 'Unknown' : null,
+          company_name: t.related_contact_id ? contactMap[t.related_contact_id]?.company || null : null,
+        }));
+
+      setAllItems(mapped);
     } catch (err) {
-      console.error('Failed to fetch followups:', err);
+      console.error('Failed to fetch task follow-ups:', err);
       setAllItems([]);
     } finally {
       setLoading(false);
@@ -78,7 +127,7 @@ export function FollowupsDueWidget() {
     fetchAll();
   }, [fetchAll]);
 
-  // Listen for dashboard refresh events (fired after logging an interaction)
+  // Listen for dashboard refresh events
   useEffect(() => {
     const handler = () => fetchAll();
     window.addEventListener('dashboard:refresh', handler);
@@ -104,6 +153,7 @@ export function FollowupsDueWidget() {
       return d >= startOfTomorrow && d < startOfDayPlus7;
     }),
   };
+
   const data = buckets[tab] || [];
   const counts = {
     overdue: buckets.overdue.length,
@@ -111,8 +161,13 @@ export function FollowupsDueWidget() {
     next7days: buckets.next7days.length,
   };
 
+  // Separate linked vs unlinked
+  const linkedItems = data.filter(f => f.related_contact_id);
+  const unlinkedItems = data.filter(f => !f.related_contact_id);
+
   const handleComplete = async (id: string) => {
-    const { error } = await markFollowupComplete(id);
+    if (!crmUserId) return;
+    const { error } = await upsertTaskUserState(id, crmUserId, { status: 'DONE' });
     if (error) {
       toast({ title: 'Error', description: error, variant: 'destructive' });
     } else {
@@ -125,9 +180,56 @@ export function FollowupsDueWidget() {
     window.open('/follow-ups', '_blank', 'noopener,noreferrer');
   };
 
-  const handleRowOpen = (contactId: string) => {
-    window.open(`/contacts?contact=${contactId}&tab=followups`, '_blank', 'noopener,noreferrer');
+  const handleOpenContact = (contactId: string) => {
+    navigate(`/contacts?contact=${contactId}&tab=followups`);
   };
+
+  const handleOpenEnquiry = (enquiryId: string) => {
+    navigate(`/enquiries/${enquiryId}`);
+  };
+
+  const renderRow = (f: TaskFollowup) => (
+    <div key={f.id} className="flex items-center gap-2 rounded-lg border p-2">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {f.contact_name || f.title}
+        </p>
+        <p className="truncate text-[11px] text-muted-foreground">{f.title}</p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <Badge
+            variant={isPast(new Date(f.due_at)) && !isToday(new Date(f.due_at)) ? 'destructive' : 'outline'}
+            className="text-[10px] py-0 h-4"
+          >
+            {format(new Date(f.due_at), 'dd MMM')}
+          </Badge>
+          {f.company_name && (
+            <Badge variant="secondary" className="text-[10px] py-0 h-4">{f.company_name}</Badge>
+          )}
+          {!f.related_contact_id && (
+            <Badge variant="outline" className="text-[10px] py-0 h-4 text-muted-foreground">
+              <Unlink className="h-2.5 w-2.5 mr-0.5" />
+              Unlinked
+            </Badge>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleComplete(f.id)} title="Mark done">
+          <Check className="h-3.5 w-3.5" />
+        </Button>
+        {f.related_contact_id && (
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleOpenContact(f.related_contact_id!)} title="Open contact">
+            <User className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {f.related_enquiry_id && (
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleOpenEnquiry(f.related_enquiry_id!)} title="Open enquiry">
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <Card className="flex flex-col">
@@ -156,7 +258,7 @@ export function FollowupsDueWidget() {
             </TabsTrigger>
           </TabsList>
 
-          {['overdue', 'today', 'next7days'].map((t) => (
+          {(['overdue', 'today', 'next7days'] as const).map((t) => (
             <TabsContent key={t} value={t} className="mt-2">
               {loading ? (
                 <div className="space-y-2">
@@ -167,29 +269,12 @@ export function FollowupsDueWidget() {
                   {t === 'overdue' ? 'No overdue follow-ups 🎉' : 'Nothing due'}
                 </p>
               ) : (
-                <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
-                  {data.map((f) => (
-                    <div key={f.id} className="flex items-center gap-2 rounded-lg border p-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{f.contact_name || 'Unknown'}</p>
-                        <p className="truncate text-[11px] text-muted-foreground">{f.followup_reason}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <Badge variant={isPast(new Date(f.due_at)) && !isToday(new Date(f.due_at)) ? 'destructive' : 'outline'} className="text-[10px] py-0 h-4">
-                            {format(new Date(f.due_at), 'dd MMM')}
-                          </Badge>
-                          <Badge variant="secondary" className="text-[10px] py-0 h-4">{f.followup_type}</Badge>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleComplete(f.id)} title="Mark done">
-                          <Check className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleRowOpen(f.contact_id)} title="Open contact follow-ups">
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1">
+                  {linkedItems.map(renderRow)}
+                  {unlinkedItems.length > 0 && linkedItems.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide pt-2 pb-1 px-1">Unlinked</p>
+                  )}
+                  {unlinkedItems.map(renderRow)}
                 </div>
               )}
             </TabsContent>

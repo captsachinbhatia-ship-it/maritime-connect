@@ -23,7 +23,7 @@ import { getAssignmentsByContact, getContactOwners, ContactAssignment, ContactOw
 import { getInteractionsByContact, getUserNames, ContactInteraction, InteractionFilters } from '@/services/interactions';
 import { getFollowupsByContact, ContactFollowup } from '@/services/followups';
 import { getNudgeStatus, NudgeStatus } from '@/services/nudgeStatus';
-import { LogInteractionDialog } from './LogInteractionDialog';
+import { LogInteractionModal } from './LogInteractionModal';
 import { InteractionTimeline } from './InteractionTimeline';
 import { InteractionsFilters, InteractionsFiltersState } from './InteractionsFilters';
 import { FollowupsTab } from './FollowupsTab';
@@ -1098,13 +1098,13 @@ export function ContactDetailsDrawer({
           </ScrollArea>
         </Tabs>
 
-        {/* Log Interaction Dialog */}
+        {/* Log Interaction Modal */}
         {contact && (
-          <LogInteractionDialog
+          <LogInteractionModal
+            isOpen={isAddInteractionOpen}
+            onClose={() => setIsAddInteractionOpen(false)}
             contactId={contact.id}
             contactName={contact.full_name || 'Unknown'}
-            open={isAddInteractionOpen}
-            onOpenChange={setIsAddInteractionOpen}
             onSuccess={loadInteractions}
           />
         )}

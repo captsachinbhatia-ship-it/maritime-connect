@@ -185,6 +185,52 @@ export async function createTeamTask(input: {
   }
 }
 
+/* ─── Create follow-up task (linked to contact / enquiry) ─── */
+
+export async function createFollowupTask(input: {
+  title: string;
+  notes?: string | null;
+  due_at: string;
+  crmUserId: string;
+  related_contact_id: string;
+  related_enquiry_id?: string | null;
+}): Promise<{ data: { id: string } | null; error: string | null }> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      return { data: null, error: "Session expired. Please login again." };
+    }
+
+    const insertRow: Record<string, unknown> = {
+      title: input.title,
+      notes: input.notes || null,
+      due_at: input.due_at,
+      priority: "MED" as TaskPriority,
+      is_broadcast: false,
+      created_by_crm_user_id: input.crmUserId,
+      assigned_to_crm_user_id: input.crmUserId,
+      related_contact_id: input.related_contact_id,
+    };
+
+    if (input.related_enquiry_id) {
+      insertRow.related_enquiry_id = input.related_enquiry_id;
+    }
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert(insertRow)
+      .select("id")
+      .single();
+
+    if (error) return { data: null, error: error.message };
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Failed to create follow-up task" };
+  }
+}
+
 /* ─── Update task (admin or creator) ─── */
 
 export async function updateTeamTask(
