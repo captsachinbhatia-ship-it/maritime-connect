@@ -1,24 +1,11 @@
-import { useState } from 'react';
-import { ContactHealthSnapshot } from './ContactHealthSnapshot';
-import { DashboardLineChart } from './DashboardLineChart';
-import { ActivityMatrix } from './ActivityMatrix';
-import { TouchTargets } from './TouchTargets';
-import { ExecutiveSnapshot } from './ExecutiveSnapshot';
-
-import { RecentCompanies } from './RecentCompanies';
 import { RecentInteractions } from './RecentInteractions';
 import { EnquiriesSummary } from './EnquiriesSummary';
 import { DailyReport } from './DailyReport';
-import { MyWorkToday } from './MyWorkToday';
-import { UserVsTeamComparison } from './UserVsTeamComparison';
 import { ModeIndicator } from './ModeIndicator';
 import { FollowupsDueWidget } from './FollowupsDueWidget';
 import { TeamTasksWidget } from './TeamTasksWidget';
 import { NotepadCard } from './NotepadCard';
-import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
-import { Separator } from '@/components/ui/separator';
-import { ContactWithCompany } from '@/types';
-import { Briefcase, BarChart3 } from 'lucide-react';
+import { Briefcase } from 'lucide-react';
 
 
 interface CallerDashboardProps {
@@ -27,20 +14,6 @@ interface CallerDashboardProps {
 }
 
 export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
-  const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  
-
-  const handleContactClick = (contact: ContactWithCompany) => {
-    setSelectedContact(contact);
-    setDrawerOpen(true);
-  };
-
-  const handleDrawerClose = () => {
-    setDrawerOpen(false);
-    setSelectedContact(null);
-  };
-
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       {/* Header */}
@@ -96,42 +69,6 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
           <DailyReport />
         </div>
       </div>
-
-      {/* ═══════════ DIVIDER ═══════════ */}
-      <div className="relative py-2">
-        <Separator className="bg-border/60" />
-      </div>
-
-      {/* ═══════════ PERFORMANCE MONITORING ═══════════ */}
-      <div className="space-y-5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/60">
-            <BarChart3 className="h-4 w-4 text-accent-foreground" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-foreground">Performance Monitoring</h2>
-            <p className="text-xs text-muted-foreground">KPIs, health metrics &amp; analytics</p>
-          </div>
-        </div>
-
-        <ExecutiveSnapshot />
-        <ContactHealthSnapshot />
-        <DashboardLineChart isPersonal />
-        <ActivityMatrix />
-        <UserVsTeamComparison isCEO={isCEO} isAdmin={isAdmin} />
-        <TouchTargets onContactClick={handleContactClick} isAdmin={isAdmin} />
-        <MyWorkToday onContactClick={handleContactClick} />
-        <RecentCompanies />
-      </div>
-
-      {/* Contact Details Drawer */}
-      <ContactDetailsDrawer
-        contact={selectedContact}
-        companyName={null}
-        currentStage={null}
-        isOpen={drawerOpen}
-        onClose={handleDrawerClose}
-      />
 
     </div>
   );
