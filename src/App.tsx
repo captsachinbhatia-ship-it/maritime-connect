@@ -26,6 +26,7 @@ import BulkImport from "./pages/BulkImport";
 import AllInteractions from "./pages/AllInteractions";
 import AllFollowups from "./pages/AllFollowups";
 import Documents from "./pages/Documents";
+import Performance from "./pages/Performance";
 import { AdminRoute } from "./components/AdminRoute";
 
 import CompleteProfile from "./pages/CompleteProfile";
@@ -76,6 +77,7 @@ const App = () => {
                 <Route path="enquiries/new-vessel" element={<Navigate to="/enquiries" replace />} />
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
                 <Route path="documents" element={<Documents />} />
+                <Route path="performance" element={<Performance />} />
                 <Route element={<AdminRoute />}>
                   <Route path="reporting" element={<Reporting />} />
                 </Route>

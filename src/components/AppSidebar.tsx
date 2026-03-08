@@ -1,9 +1,9 @@
 import { useLocation } from 'react-router-dom';
 import { 
-  LayoutDashboard, 
-  Building2, 
-  Users, 
-  FileText, 
+  LayoutDashboard,
+  Building2,
+  Users,
+  FileText,
   BarChart3,
   LogOut,
   CalendarClock,
@@ -11,6 +11,7 @@ import {
   UserCog,
   Activity,
   FolderOpen,
+  TrendingUp,
 } from 'lucide-react';
 import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
@@ -38,6 +39,7 @@ const navItems = [
   { title: 'Follow-ups', url: '/follow-ups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Documents', url: '/documents', icon: FolderOpen },
+  { title: 'Performance', url: '/performance', icon: TrendingUp },
 ];
 
 const adminNavItems = [
