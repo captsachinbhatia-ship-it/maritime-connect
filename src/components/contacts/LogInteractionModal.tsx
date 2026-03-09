@@ -309,7 +309,7 @@ export function LogInteractionModal({
                 <PopoverContent className="w-[400px] p-0 z-[60] bg-popover pointer-events-auto" align="start" side="bottom" avoidCollisions={false}>
                   <Command shouldFilter={true}>
                     <CommandInput placeholder="Type to search..." />
-                    <CommandList className="max-h-[300px] overflow-y-auto pointer-events-auto">
+                    <CommandList className="max-h-[300px] overflow-y-auto overflow-x-hidden overscroll-contain pointer-events-auto">
                       <CommandEmpty>{contactsLoading ? 'Loading contacts...' : 'No contacts found.'}</CommandEmpty>
                       <CommandGroup>
                         {contacts.map((c) => (
@@ -405,7 +405,7 @@ export function LogInteractionModal({
                 <PopoverContent className="w-[400px] p-0 z-[60] bg-popover pointer-events-auto" align="start" side="bottom" avoidCollisions={false}>
                   <Command shouldFilter={true}>
                     <CommandInput placeholder="Search enquiries..." />
-                    <CommandList className="max-h-[250px] overflow-y-auto pointer-events-auto">
+                    <CommandList className="max-h-[250px] overflow-y-auto overflow-x-hidden overscroll-contain pointer-events-auto">
                       <CommandEmpty>No enquiries found for this contact.</CommandEmpty>
                       <CommandGroup>
                         {enquiries.map((enq) => (
