@@ -156,7 +156,7 @@ export async function createTeamTask(input: {
       .from("tasks")
       .insert({
         title: input.title,
-        notes: input.notes || null,
+        notes: input.notes || '',
         due_at: input.due_at || null,
         priority: input.priority,
         is_broadcast: input.is_broadcast,
@@ -205,7 +205,7 @@ export async function createFollowupTask(input: {
 
     const insertRow: Record<string, unknown> = {
       title: input.title,
-      notes: input.notes || null,
+      notes: input.notes || '',
       due_at: input.due_at,
       priority: "MED" as TaskPriority,
       is_broadcast: false,
