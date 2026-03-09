@@ -27,6 +27,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+import { useCrmUser } from '@/hooks/useCrmUser';
 import { RecurrenceFrequency } from '@/services/followups';
 
 interface CompanyFollowupDialogProps {
@@ -52,6 +53,7 @@ export function CompanyFollowupDialog({
   onOpenChange,
   onSuccess,
 }: CompanyFollowupDialogProps) {
+  const { crmUserId } = useCrmUser();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +95,11 @@ export function CompanyFollowupDialog({
       return;
     }
 
+    if (!crmUserId) {
+      setError('Unable to identify current user. Please refresh and try again.');
+      return;
+    }
+
     const [hours, minutes] = dueTime.split(':').map(Number);
     const dueAt = setMinutes(setHours(dueDate, hours), minutes);
 
@@ -107,6 +114,7 @@ export function CompanyFollowupDialog({
         notes: notes.trim() || null,
         due_at: dueAt.toISOString(),
         status: 'OPEN',
+        created_by: crmUserId,
       };
 
       if (isRecurring) {
