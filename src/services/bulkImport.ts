@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { previewWriteGuard } from '@/lib/previewGuard';
 
 export interface StagingRow {
   id: string;
@@ -41,12 +42,6 @@ export interface ValidationResult {
   duplicate_rows: number;
 }
 
-export interface ImportResult {
-  imported_count: number;
-  skipped_count: number;
-  failed_count: number;
-}
-
 export interface ImportValidatedResult {
   imported_count: number;
   skipped_duplicate_count: number;
@@ -72,6 +67,8 @@ export async function insertStagingRows(
   crmUserId: string,
   rows: ParsedCsvRow[]
 ): Promise<{ count: number; error: string | null }> {
+  const guardError = previewWriteGuard();
+  if (guardError) return { count: 0, error: guardError };
   const payload = rows.map((row) => ({
     batch_id: batchId,
     imported_by_crm_user_id: crmUserId,
@@ -122,20 +119,6 @@ export async function validateImportBatch(
   console.log('[BulkImport] validate_import_batch response:', { data, error });
   if (error) return { data: null, error: error.message };
   return { data: data as ValidationResult, error: null };
-}
-
-// Import validated rows via RPC (legacy)
-export async function importValidatedBatch(
-  batchId: string,
-  skipDuplicates: boolean
-): Promise<{ data: ImportResult | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('import_validated_batch', {
-    p_batch_id: batchId,
-    skip_duplicates: skipDuplicates,
-  });
-
-  if (error) return { data: null, error: error.message };
-  return { data: data as ImportResult, error: null };
 }
 
 // Import validated rows via RPC — returns raw RPC response

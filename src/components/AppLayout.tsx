@@ -1,11 +1,11 @@
-import { Outlet } from 'react-router-dom';
-import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/AppSidebar';
-import { NotificationCenter } from '@/components/notifications/NotificationCenter';
-import { EnquiryNotificationBell } from '@/components/notifications/EnquiryNotificationBell';
- import { PreviewBanner } from '@/components/PreviewBanner';
- import { useAuth } from '@/contexts/AuthContext';
-import { useEnquiryPopup } from '@/hooks/useEnquiryPopup';
+import { Outlet } from "react-router-dom";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/AppSidebar";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { EnquiryNotificationBell } from "@/components/notifications/EnquiryNotificationBell";
+import { PreviewBanner } from "@/components/PreviewBanner";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEnquiryPopup } from "@/hooks/useEnquiryPopup";
 
 export function AppLayout() {
   const { isPreviewMode } = useAuth();
@@ -13,7 +13,9 @@ export function AppLayout() {
 
   return (
     <SidebarProvider>
-      <div className={`flex min-h-screen w-full ${isPreviewMode ? 'pt-9' : ''}`}>
+      <div
+        className={`flex min-h-screen w-full ${isPreviewMode ? "pt-9" : ""}`}
+      >
         <PreviewBanner />
         <AppSidebar />
         <main className="flex-1 overflow-auto">

@@ -1,0 +1,28 @@
+-- =============================================================================
+-- MIGRATION 0001: Baseline placeholder
+-- =============================================================================
+-- This file marks the point at which migrations began being tracked in version
+-- control. All schema that existed before this commit was applied directly via
+-- the Supabase dashboard and is NOT re-applied here.
+--
+-- To capture the full baseline DDL, run:
+--   supabase db dump --schema public > supabase/migrations/0001_baseline_dump.sql
+-- (requires Supabase CLI linked to this project)
+--
+-- Tables confirmed to exist at baseline:
+--   contacts, companies, contact_assignments, contact_phones,
+--   contact_import_staging, crm_users, interactions, followups,
+--   enquiries, team_tasks, user_tasks, user_notepad, notifications,
+--   nudge_status, stage_requests
+--
+-- Views confirmed to exist at baseline:
+--   contacts_with_primary_phone, v_contacts_last_interaction
+--
+-- RPCs confirmed to exist at baseline:
+--   link_google_user_to_crm_user, current_crm_user_id, is_admin,
+--   is_ceo_mode, import_validated_contacts, validate_import_batch,
+--   import_validated_batch (legacy), change_contact_stage
+-- =============================================================================
+
+-- No SQL to execute. This is a documentation-only baseline marker.
+SELECT 'baseline marker — no schema changes applied' AS migration_status;

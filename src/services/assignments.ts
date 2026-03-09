@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { previewWriteGuard } from '@/lib/previewGuard';
 
 export type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
 export type AssignmentRole = 'primary' | 'secondary';
@@ -90,21 +91,28 @@ export async function upsertOwners(params: {
   primary_owner_id: string;
   secondary_owner_id?: string | null;
   stage?: AssignmentStage;
+  /** Pass crm_users.id from useCrmUser() to avoid an extra DB round-trip. */
+  assigned_by_crm_user_id?: string | null;
 }): Promise<{ data: boolean | null; error: string | null }> {
+  const guardError = previewWriteGuard();
+  if (guardError) return { data: null, error: guardError };
+
   const { contact_id, primary_owner_id, secondary_owner_id } = params;
   const now = new Date().toISOString();
 
   try {
-    // Resolve current user for assigned_by
-    const { data: { user } } = await supabase.auth.getUser();
-    let assignedByCrmUserId: string | null = null;
-    if (user) {
-      const { data: profile } = await supabase
-        .from('crm_users')
-        .select('id')
-        .eq('auth_user_id', user.id)
-        .maybeSingle();
-      assignedByCrmUserId = profile?.id || null;
+    // Use caller-provided crm user id; fall back to DB lookup only if not provided.
+    let assignedByCrmUserId: string | null = params.assigned_by_crm_user_id ?? null;
+    if (!assignedByCrmUserId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('crm_users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+        assignedByCrmUserId = profile?.id || null;
+      }
     }
 
     // Determine stage: use provided, or preserve existing, or default
@@ -184,19 +192,24 @@ export async function addAssignment(params: {
   assigned_to_crm_user_id: string;
   assignment_role: AssignmentRole;
   stage: AssignmentStage;
+  /** Pass crm_users.id from useCrmUser() to avoid an extra DB round-trip. */
+  assigned_by_crm_user_id?: string | null;
 }): Promise<{ data: boolean | null; error: string | null }> {
   const now = new Date().toISOString();
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    let assignedByCrmUserId: string | null = null;
-    if (user) {
-      const { data: profile } = await supabase
-        .from('crm_users')
-        .select('id')
-        .eq('auth_user_id', user.id)
-        .maybeSingle();
-      assignedByCrmUserId = profile?.id || null;
+    // Use caller-provided crm user id; fall back to DB lookup only if not provided.
+    let assignedByCrmUserId: string | null = params.assigned_by_crm_user_id ?? null;
+    if (!assignedByCrmUserId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('crm_users')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
+        assignedByCrmUserId = profile?.id || null;
+      }
     }
 
     // Close existing ACTIVE assignment of the SAME role for this contact

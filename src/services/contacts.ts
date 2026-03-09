@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient';
+import { previewWriteGuard } from '@/lib/previewGuard';
 import type { Contact, ContactWithCompany, CreateContactPayload, ContactFilters, ContactAssignment } from '@/types';
 
 export type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
@@ -199,6 +200,9 @@ export async function createContact(
   data: Contact | null;
   error: string | null;
 }> {
+  const guardError = previewWriteGuard();
+  if (guardError) return { data: null, error: guardError };
+
   try {
     // First get the current user's CRM ID
     const { data: crmUser } = await supabase
