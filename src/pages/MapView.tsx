@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
@@ -14,21 +13,35 @@ import { EnquiryTable } from '@/components/map/EnquiryTable';
 import { VesselTable } from '@/components/map/VesselTable';
 import { PdaGrid } from '@/components/map/PdaGrid';
 import { MapEnquiry, Region, REGION_LABELS } from '@/types/maritime';
+import { TankerEnquiry } from '@/types/tanker';
+import { matchTankerVessels } from '@/lib/tankerMatchEngine';
 
 const REGIONS: Region[] = ['ALL', 'ME', 'SA', 'FE', 'EU', 'AM', 'AF'];
 
 export default function MapView() {
-  const { vessels, enquiries, ports, loading } = useMapData();
+  const { vessels, enquiries, ports, tankerVessels, tankerEnquiries, loading } = useMapData();
   const [regionFilter, setRegionFilter] = useState<Region>('ALL');
   const [showVessels, setShowVessels] = useState(true);
   const [showEnquiries, setShowEnquiries] = useState(true);
   const [showPorts, setShowPorts] = useState(true);
-  const [matchEnquiry, setMatchEnquiry] = useState<MapEnquiry | null>(null);
 
+  // Generic matching
+  const [matchEnquiry, setMatchEnquiry] = useState<MapEnquiry | null>(null);
   const matchResults = useCargoMatch(vessels, matchEnquiry);
+
+  // Tanker matching
+  const [tankerMatchEnquiry, setTankerMatchEnquiry] = useState<TankerEnquiry | null>(null);
+  const tankerMatchResults = useMemo(() => {
+    if (!tankerMatchEnquiry) return [];
+    return matchTankerVessels(tankerVessels, tankerMatchEnquiry);
+  }, [tankerVessels, tankerMatchEnquiry]);
 
   const handleFindVessels = (enquiry: MapEnquiry) => {
     setMatchEnquiry(enquiry);
+  };
+
+  const handleFindTankerVessels = (enquiry: TankerEnquiry) => {
+    setTankerMatchEnquiry(enquiry);
   };
 
   if (loading) {
@@ -47,6 +60,7 @@ export default function MapView() {
           <h1 className="text-2xl font-bold text-foreground">Maritime Map</h1>
           <p className="text-sm text-muted-foreground">
             {vessels.length} vessels · {enquiries.length} enquiries · {ports.length} ports
+            {tankerVessels.length > 0 && ` · ${tankerVessels.length} tankers · ${tankerEnquiries.length} tanker enquiries`}
           </p>
         </div>
       </div>
@@ -59,6 +73,9 @@ export default function MapView() {
           <TabsTrigger value="enquiries" className="gap-1.5">
             <TableProperties className="h-3.5 w-3.5" /> Enquiries
           </TabsTrigger>
+          <TabsTrigger value="tanker-enquiries" className="gap-1.5">
+            <Ship className="h-3.5 w-3.5" /> Tanker Enquiries
+          </TabsTrigger>
           <TabsTrigger value="vessels" className="gap-1.5">
             <Ship className="h-3.5 w-3.5" /> Vessel Openings
           </TabsTrigger>
@@ -69,9 +86,7 @@ export default function MapView() {
 
         {/* World Map Tab */}
         <TabsContent value="map" className="space-y-3">
-          {/* Controls */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Region pills */}
             <div className="flex flex-wrap gap-1.5">
               {REGIONS.map(r => (
                 <Button
@@ -85,10 +100,7 @@ export default function MapView() {
                 </Button>
               ))}
             </div>
-
             <div className="h-6 w-px bg-border" />
-
-            {/* Layer toggles */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
                 <Switch id="show-vessels" checked={showVessels} onCheckedChange={setShowVessels} className="h-4 w-7" />
@@ -122,19 +134,23 @@ export default function MapView() {
             onFindVessels={handleFindVessels}
           />
 
-          {/* Legend */}
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Vessel Opening</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" /> Open Enquiry</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Pending Enquiry</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" /> Fixed Enquiry</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Pending</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" /> Fixed</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-blue-500" style={{ width: 8, height: 8 }} /> Port / PDA</span>
           </div>
         </TabsContent>
 
-        {/* Enquiries Tab */}
+        {/* Generic Enquiries Tab */}
         <TabsContent value="enquiries">
           <EnquiryTable enquiries={enquiries} onFindVessels={handleFindVessels} />
+        </TabsContent>
+
+        {/* Tanker Enquiries Tab */}
+        <TabsContent value="tanker-enquiries">
+          <TankerEnquiryTable enquiries={tankerEnquiries} onFindVessels={handleFindTankerVessels} />
         </TabsContent>
 
         {/* Vessels Tab */}
@@ -148,13 +164,113 @@ export default function MapView() {
         </TabsContent>
       </Tabs>
 
-      {/* Matching Panel */}
+      {/* Generic Matching Panel */}
       <MatchingPanel
+        mode="generic"
         enquiry={matchEnquiry}
         results={matchResults}
         open={!!matchEnquiry}
         onClose={() => setMatchEnquiry(null)}
       />
+
+      {/* Tanker Matching Panel (with TCE) */}
+      <MatchingPanel
+        mode="tanker"
+        enquiry={tankerMatchEnquiry}
+        results={tankerMatchResults}
+        open={!!tankerMatchEnquiry}
+        onClose={() => setTankerMatchEnquiry(null)}
+      />
+    </div>
+  );
+}
+
+// ─── Tanker Enquiry Table (inline) ──────────────────────────────────
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+function TankerEnquiryTable({ enquiries, onFindVessels }: { enquiries: TankerEnquiry[]; onFindVessels: (e: TankerEnquiry) => void }) {
+  const [catFilter, setCatFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const filtered = enquiries.filter(e => {
+    if (catFilter !== 'all' && e.cargo_category !== catFilter) return false;
+    if (statusFilter !== 'all' && e.status !== statusFilter) return false;
+    return true;
+  });
+
+  const statusColor = (s: string | null) =>
+    s === 'fixed' ? 'bg-blue-500' : s === 'on_subs' ? 'bg-amber-500' : 'bg-green-500';
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-3">
+        <Select value={catFilter} onValueChange={setCatFilter}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Category" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            <SelectItem value="Crude">Crude</SelectItem>
+            <SelectItem value="CPP">CPP</SelectItem>
+            <SelectItem value="DPP">DPP</SelectItem>
+            <SelectItem value="Chemical">Chemical</SelectItem>
+            <SelectItem value="LPG">LPG</SelectItem>
+            <SelectItem value="LNG">LNG</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="open">Open</SelectItem>
+            <SelectItem value="on_subs">On Subs</SelectItem>
+            <SelectItem value="fixed">Fixed</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Ref</TableHead>
+              <TableHead>Charterer</TableHead>
+              <TableHead>Cargo</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Qty (MT)</TableHead>
+              <TableHead>Load</TableHead>
+              <TableHead>Discharge</TableHead>
+              <TableHead>Laycan</TableHead>
+              <TableHead>Freight</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No tanker enquiries found</TableCell></TableRow>
+            ) : filtered.map(e => (
+              <TableRow key={e.id}>
+                <TableCell className="font-medium text-xs">{e.ref_no}</TableCell>
+                <TableCell className="text-xs">{e.charterer}</TableCell>
+                <TableCell className="text-xs">{e.cargo_grade}</TableCell>
+                <TableCell><Badge variant="outline" className="text-[9px]">{e.cargo_category}</Badge></TableCell>
+                <TableCell className="text-xs">{e.quantity_mt?.toLocaleString()}</TableCell>
+                <TableCell className="text-xs">{e.load_port}</TableCell>
+                <TableCell className="text-xs">{e.disch_port}</TableCell>
+                <TableCell className="text-xs">{e.laycan_from} — {e.laycan_to}</TableCell>
+                <TableCell className="text-xs">{e.freight_indication}</TableCell>
+                <TableCell><Badge className={`text-[10px] text-white ${statusColor(e.status)}`}>{e.status}</Badge></TableCell>
+                <TableCell>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => onFindVessels(e)}>
+                    Find Vessels
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
