@@ -5,6 +5,17 @@ import type { Topology } from 'topojson-specification';
 import { Vessel, MapEnquiry, PortPda } from '@/types/maritime';
 import { MarkerPopup } from './MarkerPopup';
 
+// Region → center [lng, lat] + zoom scale
+const REGION_ZOOM: Record<string, { center: [number, number]; scale: number }> = {
+  ALL: { center: [30, 15], scale: 1 },
+  ME:  { center: [52, 24], scale: 4 },
+  SA:  { center: [105, 5], scale: 4 },
+  FE:  { center: [125, 32], scale: 3.5 },
+  EU:  { center: [10, 50], scale: 4 },
+  AM:  { center: [-80, 25], scale: 3 },
+  AF:  { center: [20, 5], scale: 3 },
+};
+
 interface WorldMapProps {
   vessels: Vessel[];
   enquiries: MapEnquiry[];
@@ -40,33 +51,50 @@ export function WorldMap({
       .catch(err => console.error('Failed to load world atlas:', err));
   }, []);
 
-  // Render map when data is ready
+  // Render map
   useEffect(() => {
     if (!svgRef.current || !containerRef.current || !topoData) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
+    setPopup(null);
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight || 500;
-
     svg.attr('width', width).attr('height', height);
 
+    // Region-based projection
+    const rz = REGION_ZOOM[regionFilter] || REGION_ZOOM.ALL;
+    const baseScale = width / 5.5;
+
     const projection = d3.geoNaturalEarth1()
-      .scale(width / 5.5)
+      .scale(baseScale * rz.scale)
+      .center(rz.center)
       .translate([width / 2, height / 2]);
 
     const path = d3.geoPath().projection(projection);
 
+    // --- Zoom behaviour ---
+    const g = svg.append('g');
+
+    const zoom = d3.zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.5, 12])
+      .on('zoom', (event) => {
+        g.attr('transform', event.transform);
+        setPopup(null);
+      });
+
+    svg.call(zoom);
+
     // Background
-    svg.append('rect')
-      .attr('width', width)
-      .attr('height', height)
+    g.append('rect')
+      .attr('width', width * 4).attr('height', height * 4)
+      .attr('x', -width * 1.5).attr('y', -height * 1.5)
       .attr('fill', '#0c2236');
 
     // Land
     const countries = feature(topoData as Topology, (topoData as any).objects.countries) as any;
-    svg.append('g')
+    g.append('g')
       .selectAll('path')
       .data(countries.features)
       .join('path')
@@ -90,9 +118,9 @@ export function WorldMap({
 
         const color = enq.status === 'fixed' ? '#3b82f6' : enq.status === 'pending' ? '#f59e0b' : '#22c55e';
         const midX = (src[0] + dst[0]) / 2;
-        const midY = (src[1] + dst[1]) / 2 - 30;
+        const midY = (src[1] + dst[1]) / 2 - Math.abs(src[0] - dst[0]) * 0.15;
 
-        svg.append('path')
+        g.append('path')
           .attr('d', `M ${src[0]},${src[1]} Q ${midX},${midY} ${dst[0]},${dst[1]}`)
           .attr('fill', 'none')
           .attr('stroke', color)
@@ -101,17 +129,24 @@ export function WorldMap({
           .attr('opacity', 0.7)
           .style('cursor', 'pointer')
           .on('click', (event: MouseEvent) => {
-            setPopup({ type: 'enquiry', data: enq, x: event.offsetX, y: event.offsetY });
+            const [x, y] = d3.pointer(event, svgRef.current);
+            setPopup({ type: 'enquiry', data: enq, x, y });
           });
 
         // Load port dot
-        svg.append('circle')
+        g.append('circle')
           .attr('cx', src[0]).attr('cy', src[1]).attr('r', 4)
           .attr('fill', color).attr('opacity', 0.9)
           .style('cursor', 'pointer')
           .on('click', (event: MouseEvent) => {
-            setPopup({ type: 'enquiry', data: enq, x: event.offsetX, y: event.offsetY });
+            const [x, y] = d3.pointer(event, svgRef.current);
+            setPopup({ type: 'enquiry', data: enq, x, y });
           });
+
+        // Disch port dot
+        g.append('circle')
+          .attr('cx', dst[0]).attr('cy', dst[1]).attr('r', 3)
+          .attr('fill', color).attr('opacity', 0.6);
       });
     }
 
@@ -123,21 +158,22 @@ export function WorldMap({
         if (!pos) return;
 
         // Pulse ring
-        svg.append('circle')
-          .attr('cx', pos[0]).attr('cy', pos[1]).attr('r', 8)
+        g.append('circle')
+          .attr('cx', pos[0]).attr('cy', pos[1]).attr('r', 10)
           .attr('fill', 'none')
           .attr('stroke', '#f59e0b')
           .attr('stroke-width', 1)
-          .attr('opacity', 0.4);
+          .attr('opacity', 0.3);
 
         // Main dot
-        svg.append('circle')
+        g.append('circle')
           .attr('cx', pos[0]).attr('cy', pos[1]).attr('r', 5)
           .attr('fill', '#f59e0b')
           .attr('opacity', 0.9)
           .style('cursor', 'pointer')
           .on('click', (event: MouseEvent) => {
-            setPopup({ type: 'vessel', data: vessel, x: event.offsetX, y: event.offsetY });
+            const [x, y] = d3.pointer(event, svgRef.current);
+            setPopup({ type: 'vessel', data: vessel, x, y });
           });
       });
     }
@@ -149,7 +185,7 @@ export function WorldMap({
         const pos = projection([port.lng!, port.lat!]);
         if (!pos) return;
 
-        svg.append('rect')
+        g.append('rect')
           .attr('x', pos[0] - 4).attr('y', pos[1] - 4)
           .attr('width', 8).attr('height', 8)
           .attr('fill', '#3b82f6')
@@ -157,7 +193,8 @@ export function WorldMap({
           .attr('rx', 1)
           .style('cursor', 'pointer')
           .on('click', (event: MouseEvent) => {
-            setPopup({ type: 'port', data: port, x: event.offsetX, y: event.offsetY });
+            const [x, y] = d3.pointer(event, svgRef.current);
+            setPopup({ type: 'port', data: port, x, y });
           });
       });
     }
