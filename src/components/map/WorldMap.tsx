@@ -105,11 +105,15 @@ export function WorldMap({
 
     const filterRegion = (r: string | null) => regionFilter === 'ALL' || r === regionFilter;
 
-    // Enquiry arcs
+    // Enquiry arcs — size-proportional markers + port labels
     if (showEnquiries) {
       const filteredEnq = enquiries.filter(e =>
         filterRegion(e.load_region) || filterRegion(e.disch_region)
       );
+
+      // Find max qty for scaling
+      const maxQty = Math.max(...filteredEnq.map(e => e.qty_mt || 0), 1);
+
       filteredEnq.forEach(enq => {
         if (enq.load_lat == null || enq.load_lng == null || enq.disch_lat == null || enq.disch_lng == null) return;
         const src = projection([enq.load_lng, enq.load_lat]);
@@ -120,11 +124,16 @@ export function WorldMap({
         const midX = (src[0] + dst[0]) / 2;
         const midY = (src[1] + dst[1]) / 2 - Math.abs(src[0] - dst[0]) * 0.15;
 
+        // Size based on quantity (min 4, max 12)
+        const qtyRatio = (enq.qty_mt || 0) / maxQty;
+        const dotSize = 4 + qtyRatio * 8;
+
+        // Arc
         g.append('path')
           .attr('d', `M ${src[0]},${src[1]} Q ${midX},${midY} ${dst[0]},${dst[1]}`)
           .attr('fill', 'none')
           .attr('stroke', color)
-          .attr('stroke-width', 1.5)
+          .attr('stroke-width', 1 + qtyRatio * 2)
           .attr('stroke-dasharray', '6,3')
           .attr('opacity', 0.7)
           .style('cursor', 'pointer')
@@ -133,7 +142,15 @@ export function WorldMap({
             setPopup({ type: 'enquiry', data: enq, x, y });
           });
 
-        // Load port dot
+        // Load port marker (sized by qty)
+        g.append('circle')
+          .attr('cx', src[0]).attr('cy', src[1]).attr('r', dotSize)
+          .attr('fill', color).attr('opacity', 0.25)
+          .style('cursor', 'pointer')
+          .on('click', (event: MouseEvent) => {
+            const [x, y] = d3.pointer(event, svgRef.current);
+            setPopup({ type: 'enquiry', data: enq, x, y });
+          });
         g.append('circle')
           .attr('cx', src[0]).attr('cy', src[1]).attr('r', 4)
           .attr('fill', color).attr('opacity', 0.9)
@@ -143,10 +160,42 @@ export function WorldMap({
             setPopup({ type: 'enquiry', data: enq, x, y });
           });
 
-        // Disch port dot
+        // Discharge port dot
         g.append('circle')
           .attr('cx', dst[0]).attr('cy', dst[1]).attr('r', 3)
           .attr('fill', color).attr('opacity', 0.6);
+
+        // Load port label (only when zoomed into region)
+        if (regionFilter !== 'ALL' && enq.load_port) {
+          g.append('text')
+            .attr('x', src[0] + dotSize + 3).attr('y', src[1] + 3)
+            .attr('fill', '#94a3b8')
+            .attr('font-size', '9px')
+            .attr('font-family', 'system-ui, sans-serif')
+            .text(enq.load_port.split(',')[0]);
+        }
+
+        // Discharge port label (only when zoomed)
+        if (regionFilter !== 'ALL' && enq.disch_port) {
+          g.append('text')
+            .attr('x', dst[0] + 6).attr('y', dst[1] + 3)
+            .attr('fill', '#64748b')
+            .attr('font-size', '8px')
+            .attr('font-family', 'system-ui, sans-serif')
+            .text(enq.disch_port.split(',')[0]);
+        }
+
+        // Cargo label on arc midpoint (when zoomed)
+        if (regionFilter !== 'ALL' && enq.cargo) {
+          g.append('text')
+            .attr('x', midX).attr('y', midY - 5)
+            .attr('fill', color)
+            .attr('font-size', '8px')
+            .attr('font-family', 'system-ui, sans-serif')
+            .attr('text-anchor', 'middle')
+            .attr('opacity', 0.8)
+            .text(`${enq.cargo}${enq.qty_mt ? ' ' + (enq.qty_mt / 1000).toFixed(0) + 'k' : ''}`);
+        }
       });
     }
 

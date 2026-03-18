@@ -123,6 +123,9 @@ export default function MapView() {
             </div>
           </div>
 
+          {/* Enquiry summary stats */}
+          <EnquirySummaryBar enquiries={enquiries} regionFilter={regionFilter} />
+
           <WorldMap
             vessels={vessels}
             enquiries={enquiries}
@@ -271,6 +274,107 @@ function TankerEnquiryTable({ enquiries, onFindVessels }: { enquiries: TankerEnq
           </TableBody>
         </Table>
       </div>
+    </div>
+  );
+}
+
+// ─── Enquiry Summary Bar ────────────────────────────────────────────
+import { Card, CardContent } from '@/components/ui/card';
+import { REGION_LABELS as RL } from '@/types/maritime';
+
+function EnquirySummaryBar({ enquiries, regionFilter }: { enquiries: MapEnquiry[]; regionFilter: string }) {
+  const filtered = regionFilter === 'ALL'
+    ? enquiries
+    : enquiries.filter(e => e.load_region === regionFilter || e.disch_region === regionFilter);
+
+  const open = filtered.filter(e => e.status === 'open').length;
+  const pending = filtered.filter(e => e.status === 'pending').length;
+  const fixed = filtered.filter(e => e.status === 'fixed').length;
+  const total = filtered.length;
+  const plottable = filtered.filter(e => e.load_lat != null && e.disch_lat != null).length;
+
+  // Count by load region
+  const byRegion: Record<string, number> = {};
+  filtered.forEach(e => {
+    const r = e.load_region || 'Unknown';
+    byRegion[r] = (byRegion[r] || 0) + 1;
+  });
+
+  // Top load/discharge ports
+  const loadPorts: Record<string, number> = {};
+  const dischPorts: Record<string, number> = {};
+  filtered.forEach(e => {
+    if (e.load_port) loadPorts[e.load_port] = (loadPorts[e.load_port] || 0) + 1;
+    if (e.disch_port) dischPorts[e.disch_port] = (dischPorts[e.disch_port] || 0) + 1;
+  });
+  const topLoad = Object.entries(loadPorts).sort(([, a], [, b]) => b - a).slice(0, 3);
+  const topDisch = Object.entries(dischPorts).sort(([, a], [, b]) => b - a).slice(0, 3);
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Totals */}
+      <Card className="bg-card/50">
+        <CardContent className="p-3">
+          <p className="text-[11px] text-muted-foreground font-medium">Enquiries</p>
+          <div className="flex items-baseline gap-2 mt-1">
+            <span className="text-xl font-bold">{total}</span>
+            <span className="text-[10px] text-muted-foreground">({plottable} on map)</span>
+          </div>
+          <div className="flex gap-2 mt-1.5 text-[10px]">
+            <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-green-500" /> {open} open</span>
+            <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> {pending} pending</span>
+            <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> {fixed} fixed</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* By region */}
+      <Card className="bg-card/50">
+        <CardContent className="p-3">
+          <p className="text-[11px] text-muted-foreground font-medium">By Load Region</p>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+            {Object.entries(byRegion).sort(([, a], [, b]) => b - a).map(([r, count]) => (
+              <span key={r} className="text-[10px]">
+                <span className="font-medium">{RL[r] || r}</span>: {count}
+              </span>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top load ports */}
+      <Card className="bg-card/50">
+        <CardContent className="p-3">
+          <p className="text-[11px] text-muted-foreground font-medium">Top Load Ports</p>
+          <div className="space-y-0.5 mt-1.5">
+            {topLoad.length === 0 ? (
+              <span className="text-[10px] text-muted-foreground">No data</span>
+            ) : topLoad.map(([port, count]) => (
+              <div key={port} className="flex justify-between text-[10px]">
+                <span className="truncate max-w-[120px]">{port}</span>
+                <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{count}</Badge>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top discharge ports */}
+      <Card className="bg-card/50">
+        <CardContent className="p-3">
+          <p className="text-[11px] text-muted-foreground font-medium">Top Discharge Ports</p>
+          <div className="space-y-0.5 mt-1.5">
+            {topDisch.length === 0 ? (
+              <span className="text-[10px] text-muted-foreground">No data</span>
+            ) : topDisch.map(([port, count]) => (
+              <div key={port} className="flex justify-between text-[10px]">
+                <span className="truncate max-w-[120px]">{port}</span>
+                <Badge variant="secondary" className="text-[9px] h-4 px-1.5">{count}</Badge>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
