@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { format, addDays } from 'date-fns';
 import {
   Loader2, Anchor, Copy, Trash2, RotateCcw, ArrowUpDown, ExternalLink,
-  CalendarIcon, Fuel, Ship, Plus,
+  CalendarIcon, Fuel, Ship, Plus, Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Calendar } from '@/components/ui/calendar';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
@@ -138,6 +139,12 @@ export default function Enquiries() {
 // ═══════════════════════════════════════════════════════════════════════
 // VESSEL MODAL
 // ═══════════════════════════════════════════════════════════════════════
+interface VesselContactOption {
+  id: string;
+  full_name: string;
+  company_name?: string | null;
+}
+
 function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const [vesselSizeClass, setVesselSizeClass] = useState('');
   const [dwt, setDwt] = useState('');
@@ -148,6 +155,43 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
   const [tradingArea, setTradingArea] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Contact selector (Owners & Brokers only)
+  const [contacts, setContacts] = useState<VesselContactOption[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState('');
+  const [selectedContactName, setSelectedContactName] = useState('');
+  const [selectedCompanyName, setSelectedCompanyName] = useState('');
+
+  const fetchContacts = useCallback(async () => {
+    setContactsLoading(true);
+    try {
+      const { data } = await supabase
+        .from('contacts')
+        .select('id, full_name, companies!inner(company_name, company_type)')
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .in('companies.company_type', ['Owner', 'Broker'])
+        .order('full_name')
+        .limit(500);
+      setContacts(
+        (data || []).map((c: any) => ({
+          id: c.id,
+          full_name: c.full_name || 'Unknown',
+          company_name: c.companies?.company_name || null,
+        }))
+      );
+    } catch (err) {
+      console.error('[VesselModal] contacts fetch failed:', err);
+    } finally {
+      setContactsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) fetchContacts();
+  }, [open, fetchContacts]);
 
   // Auto-set openTo when openFrom changes
   useEffect(() => {
@@ -162,6 +206,7 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
     setVesselSizeClass(''); setDwt(''); setVesselName('');
     setOpenPort(''); setOpenFrom(''); setOpenTo('');
     setTradingArea(''); setNotes('');
+    setSelectedContactId(''); setSelectedContactName(''); setSelectedCompanyName('');
   };
 
   const handleSubmit = async () => {
@@ -176,7 +221,7 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
     setSubmitting(true);
     try {
       const subj = generateVesselSubject({ vesselName, vesselType: vesselSizeClass, openPort, laycanFrom: openFrom });
-      const { error } = await supabase.rpc('rpc_create_enquiry_fast', {
+      const { data: rpcData, error } = await supabase.rpc('rpc_create_enquiry_fast', {
         p_mode: 'TC', p_subject: subj,
         p_vessel_name: vesselName.trim() || null,
         p_vessel_type: vesselSizeClass,
@@ -195,6 +240,21 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
         toast({ title: 'Error', description: msg, variant: 'destructive' });
         return;
       }
+
+      // Link contact to the newly created vessel open
+      if (rpcData && selectedContactId) {
+        const enquiryId = typeof rpcData === 'string' ? rpcData : (rpcData as any)?.enquiry_id;
+        if (enquiryId) {
+          await supabase
+            .from('enquiries')
+            .update({
+              contact_id: selectedContactId,
+              source_contact_id: selectedContactId,
+            })
+            .eq('id', enquiryId);
+        }
+      }
+
       toast({ title: 'Vessel open created' });
       clearForm();
       onCreated();
@@ -203,7 +263,7 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
   };
 
   const handleClose = () => {
-    const hasData = vesselSizeClass || vesselName || openPort || openFrom || notes;
+    const hasData = vesselSizeClass || vesselName || openPort || openFrom || notes || selectedContactId;
     if (hasData && !window.confirm('Discard unsaved changes?')) return;
     clearForm();
     onClose();
@@ -218,6 +278,60 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
         </DialogHeader>
 
         <div className="space-y-3 py-2">
+          {/* Contact selector (Owners & Brokers) */}
+          <div className="space-y-1">
+            <Label className="text-xs">Contact (Owner / Broker)</Label>
+            <Popover open={contactPopoverOpen} onOpenChange={setContactPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal text-xs h-9">
+                  {selectedContactName ? (
+                    <span className="truncate">
+                      {selectedContactName}
+                      {selectedCompanyName && (
+                        <span className="text-muted-foreground ml-1">({selectedCompanyName})</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Search owners & brokers...</span>
+                  )}
+                  <Search className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0 z-[60] bg-popover pointer-events-auto" align="start" side="bottom" avoidCollisions={false}>
+                <Command shouldFilter={true}>
+                  <CommandInput placeholder="Type to search..." />
+                  <CommandList className="max-h-[200px] overflow-y-auto overflow-x-hidden overscroll-contain pointer-events-auto">
+                    <CommandEmpty>{contactsLoading ? 'Loading...' : 'No contacts found.'}</CommandEmpty>
+                    <CommandGroup>
+                      {contacts.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={`${c.full_name} ${c.company_name || ''}`}
+                          onSelect={() => {
+                            setSelectedContactId(c.id);
+                            setSelectedContactName(c.full_name);
+                            setSelectedCompanyName(c.company_name || '');
+                            setContactPopoverOpen(false);
+                          }}
+                        >
+                          <span className="truncate">{c.full_name}</span>
+                          {c.company_name && <span className="ml-2 text-xs text-muted-foreground truncate">{c.company_name}</span>}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {selectedCompanyName && (
+            <div className="rounded border bg-muted/30 px-3 py-1.5">
+              <span className="text-[11px] text-muted-foreground">Company: </span>
+              <span className="text-xs font-medium text-foreground">{selectedCompanyName}</span>
+            </div>
+          )}
+
           {/* Size + DWT */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">

@@ -81,15 +81,16 @@ export function CargoEnquiryModal({ open, onClose, onCreated }: CargoEnquiryModa
     quantity, quantityUnit, cargoType, loadingPort: loadPort, dischargePort: dischPort, laycanFrom, laycanTo,
   }), [cargoType, quantity, quantityUnit, loadPort, dischPort, laycanFrom, laycanTo]);
 
-  // Fetch contacts when modal opens
+  // Fetch contacts from Charterer and Broker companies only
   const fetchContacts = useCallback(async () => {
     setContactsLoading(true);
     try {
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, full_name, companies(company_name)')
+        .select('id, full_name, companies!inner(company_name, company_type)')
         .eq('is_active', true)
         .eq('is_deleted', false)
+        .in('companies.company_type', ['Charterer', 'Broker'])
         .order('full_name')
         .limit(500);
 
