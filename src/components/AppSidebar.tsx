@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom';
-import { 
+import {
   LayoutDashboard,
   Building2,
   Users,
@@ -12,6 +12,7 @@ import {
   Activity,
   FolderOpen,
   TrendingUp,
+  Globe,
 } from 'lucide-react';
 import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
@@ -40,6 +41,7 @@ const navItems = [
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Documents', url: '/documents', icon: FolderOpen },
   { title: 'Performance', url: '/performance', icon: TrendingUp },
+  { title: 'Map View', url: '/map', icon: Globe },
 ];
 
 const adminNavItems = [

@@ -27,6 +27,7 @@ import AllInteractions from "./pages/AllInteractions";
 import AllFollowups from "./pages/AllFollowups";
 import Documents from "./pages/Documents";
 import Performance from "./pages/Performance";
+import MapView from "./pages/MapView";
 import { AdminRoute } from "./components/AdminRoute";
 
 import CompleteProfile from "./pages/CompleteProfile";
@@ -78,6 +79,7 @@ const App = () => {
                 <Route path="enquiries/:id" element={<EnquiryDetail />} />
                 <Route path="documents" element={<Documents />} />
                 <Route path="performance" element={<Performance />} />
+                <Route path="map" element={<MapView />} />
                 <Route element={<AdminRoute />}>
                   <Route path="reporting" element={<Reporting />} />
                 </Route>
