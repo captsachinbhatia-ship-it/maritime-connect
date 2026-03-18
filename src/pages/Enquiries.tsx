@@ -167,7 +167,8 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
   const fetchContacts = useCallback(async () => {
     setContactsLoading(true);
     try {
-      const { data } = await supabase
+      // Contacts with Owner/Broker companies
+      const { data: filtered } = await supabase
         .from('contacts')
         .select('id, full_name, companies!inner(company_name, company_type)')
         .eq('is_active', true)
@@ -175,12 +176,34 @@ function VesselModal({ open, onClose, onCreated }: { open: boolean; onClose: () 
         .in('companies.company_type', ['Owner', 'Broker'])
         .order('full_name')
         .limit(500);
-      setContacts(
-        (data || []).map((c: any) => ({
+
+      // Contacts without a company
+      const { data: noCompany } = await supabase
+        .from('contacts')
+        .select('id, full_name')
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .is('company_id', null)
+        .order('full_name')
+        .limit(200);
+
+      const all = [
+        ...(filtered || []).map((c: any) => ({
           id: c.id,
           full_name: c.full_name || 'Unknown',
           company_name: c.companies?.company_name || null,
-        }))
+        })),
+        ...(noCompany || []).map((c: any) => ({
+          id: c.id,
+          full_name: c.full_name || 'Unknown',
+          company_name: null,
+        })),
+      ];
+
+      const seen = new Set<string>();
+      setContacts(
+        all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
+           .sort((a, b) => a.full_name.localeCompare(b.full_name))
       );
     } catch (err) {
       console.error('[VesselModal] contacts fetch failed:', err);

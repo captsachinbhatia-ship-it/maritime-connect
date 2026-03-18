@@ -81,11 +81,12 @@ export function CargoEnquiryModal({ open, onClose, onCreated }: CargoEnquiryModa
     quantity, quantityUnit, cargoType, loadingPort: loadPort, dischargePort: dischPort, laycanFrom, laycanTo,
   }), [cargoType, quantity, quantityUnit, loadPort, dischPort, laycanFrom, laycanTo]);
 
-  // Fetch contacts from Charterer and Broker companies only
+  // Fetch contacts from Charterer/Broker companies + contacts without a company
   const fetchContacts = useCallback(async () => {
     setContactsLoading(true);
     try {
-      const { data, error } = await supabase
+      // Contacts with Charterer/Broker companies
+      const { data: filtered } = await supabase
         .from('contacts')
         .select('id, full_name, companies!inner(company_name, company_type)')
         .eq('is_active', true)
@@ -94,17 +95,34 @@ export function CargoEnquiryModal({ open, onClose, onCreated }: CargoEnquiryModa
         .order('full_name')
         .limit(500);
 
-      if (error) {
-        console.error('[CargoEnquiryModal] contacts fetch error:', error);
-        return;
-      }
+      // Contacts without a company
+      const { data: noCompany } = await supabase
+        .from('contacts')
+        .select('id, full_name')
+        .eq('is_active', true)
+        .eq('is_deleted', false)
+        .is('company_id', null)
+        .order('full_name')
+        .limit(200);
 
-      setContacts(
-        (data || []).map((c: any) => ({
+      const all = [
+        ...(filtered || []).map((c: any) => ({
           id: c.id,
           full_name: c.full_name || 'Unknown',
           company_name: c.companies?.company_name || null,
-        }))
+        })),
+        ...(noCompany || []).map((c: any) => ({
+          id: c.id,
+          full_name: c.full_name || 'Unknown',
+          company_name: null,
+        })),
+      ];
+
+      // Deduplicate by id and sort
+      const seen = new Set<string>();
+      setContacts(
+        all.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
+           .sort((a, b) => a.full_name.localeCompare(b.full_name))
       );
     } catch (err) {
       console.error('[CargoEnquiryModal] contacts fetch failed:', err);
