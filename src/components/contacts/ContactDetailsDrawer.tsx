@@ -1081,7 +1081,7 @@ export function ContactDetailsDrawer({
                   </Button>
                 </div>
               ) : (
-                <InteractionTimeline interactions={interactions} />
+                <InteractionTimeline interactions={interactions} onRefresh={loadInteractions} />
               )}
             </TabsContent>
 

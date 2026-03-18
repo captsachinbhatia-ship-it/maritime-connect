@@ -10,11 +10,17 @@ import {
   User,
   ChevronDown,
   ChevronUp,
+  Pencil,
+  MessageCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ContactInteraction } from '@/services/interactions';
 import { extractKeywordChips } from '@/lib/interactionKeywords';
+import { InteractionComments } from './InteractionComments';
+import { LogInteractionModal, EditInteractionData } from './LogInteractionModal';
+import { useCrmUser } from '@/hooks/useCrmUser';
+import { useAuth } from '@/contexts/AuthContext';
 
 const INTERACTION_ICONS: Record<string, React.ReactNode> = {
   CALL: <PhoneCall className="h-4 w-4" />,
@@ -67,10 +73,24 @@ function getTimeGroupLabel(dateStr: string): string {
 
 interface InteractionTimelineProps {
   interactions: ContactInteraction[];
+  onRefresh?: () => void;
 }
 
-function InteractionCard({ interaction }: { interaction: ContactInteraction }) {
+function InteractionCard({
+  interaction,
+  onRefresh,
+}: {
+  interaction: ContactInteraction;
+  onRefresh?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [commentCount, setCommentCount] = useState(interaction.comment_count || 0);
+  const { crmUserId } = useCrmUser();
+  const { isAdmin } = useAuth();
+
+  const canEdit = crmUserId === interaction.user_id || isAdmin;
 
   const subject = interaction.subject || interaction.summary || null;
   const notes = interaction.notes || null;
@@ -79,132 +99,187 @@ function InteractionCard({ interaction }: { interaction: ContactInteraction }) {
 
   const hasExpandableContent = (notes && notes.length > 100) || (subject && notes);
 
-  return (
-    <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-accent/30">
-      <div className="flex items-start gap-3">
-        {/* Icon */}
-        <div
-          className={`shrink-0 rounded-full p-2 ${
-            INTERACTION_COLORS[interaction.interaction_type] || INTERACTION_COLORS.NOTE
-          }`}
-        >
-          {INTERACTION_ICONS[interaction.interaction_type] || (
-            <FileEdit className="h-4 w-4" />
-          )}
-        </div>
+  const editData: EditInteractionData = {
+    id: interaction.id,
+    contact_id: interaction.contact_id,
+    interaction_type: interaction.interaction_type,
+    subject: interaction.subject,
+    notes: interaction.notes,
+    outcome: interaction.outcome,
+  };
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Title row */}
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <span className="text-sm font-medium text-foreground truncate">
-              {interaction.interaction_type.replace('_', ' ')}
-            </span>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-muted-foreground">
-                {format(new Date(interaction.interaction_at), 'HH:mm')}
+  return (
+    <>
+      <div className="rounded-lg border bg-card p-4 transition-colors hover:bg-accent/30">
+        <div className="flex items-start gap-3">
+          {/* Icon */}
+          <div
+            className={`shrink-0 rounded-full p-2 ${
+              INTERACTION_COLORS[interaction.interaction_type] || INTERACTION_COLORS.NOTE
+            }`}
+          >
+            {INTERACTION_ICONS[interaction.interaction_type] || (
+              <FileEdit className="h-4 w-4" />
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            {/* Title row */}
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-sm font-medium text-foreground truncate">
+                {interaction.interaction_type.replace('_', ' ')}
               </span>
-              {hasExpandableContent && (
+              <div className="flex items-center gap-1 shrink-0">
+                {canEdit && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setEditModalOpen(true)}
+                    title="Edit interaction"
+                  >
+                    <Pencil className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => setExpanded(!expanded)}
+                  className="h-6 p-0 px-1 gap-0.5"
+                  onClick={() => setShowComments(!showComments)}
+                  title="Comments"
                 >
-                  {expanded ? (
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5" />
+                  <MessageCircle className="h-3 w-3 text-muted-foreground" />
+                  {commentCount > 0 && (
+                    <span className="text-[10px] text-muted-foreground">{commentCount}</span>
                   )}
                 </Button>
-              )}
+                <span className="text-xs text-muted-foreground">
+                  {format(new Date(interaction.interaction_at), 'HH:mm')}
+                </span>
+                {hasExpandableContent && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setExpanded(!expanded)}
+                  >
+                    {expanded ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Subject line */}
-          {subject && (
-            <p className={`text-sm text-foreground/90 ${expanded ? '' : 'line-clamp-1'}`}>
-              {subject}
-            </p>
-          )}
+            {/* Subject line */}
+            {subject && (
+              <p className={`text-sm text-foreground/90 ${expanded ? '' : 'line-clamp-1'}`}>
+                {subject}
+              </p>
+            )}
 
-          {/* Notes preview */}
-          {notes && (
-            <p
-              className={`text-sm text-muted-foreground mt-1 ${
-                expanded ? 'whitespace-pre-wrap' : 'line-clamp-2'
-              }`}
-            >
-              {notes}
-            </p>
-          )}
-
-          {/* Expand/collapse text link */}
-          {hasExpandableContent && !expanded && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="text-xs text-primary hover:underline mt-0.5"
-            >
-              View more
-            </button>
-          )}
-
-          {/* Meta badges row */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs mt-2">
-            {interaction.outcome && (
-              <span
-                className={`font-medium ${
-                  OUTCOME_STYLES[interaction.outcome] || 'text-muted-foreground'
+            {/* Notes preview */}
+            {notes && (
+              <p
+                className={`text-sm text-muted-foreground mt-1 ${
+                  expanded ? 'whitespace-pre-wrap' : 'line-clamp-2'
                 }`}
               >
-                {OUTCOME_ICONS[interaction.outcome] || '•'}{' '}
-                {interaction.outcome.replace(/_/g, ' ')}
-              </span>
+                {notes}
+              </p>
             )}
-            <span className="text-muted-foreground flex items-center gap-1">
-              <User className="h-3 w-3" />
-              {interaction.creator_full_name ||
-                interaction.creator_email ||
-                'System'}
-            </span>
-          </div>
 
-          {/* Keyword chips */}
-          {chips.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {chips.map((chip) => (
-                <Badge
-                  key={chip}
-                  variant="outline"
-                  className="h-5 px-1.5 text-[10px] font-semibold border-amber-500 text-amber-600 dark:text-amber-400"
+            {/* Expand/collapse text link */}
+            {hasExpandableContent && !expanded && (
+              <button
+                onClick={() => setExpanded(true)}
+                className="text-xs text-primary hover:underline mt-0.5"
+              >
+                View more
+              </button>
+            )}
+
+            {/* Meta badges row */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs mt-2">
+              {interaction.outcome && (
+                <span
+                  className={`font-medium ${
+                    OUTCOME_STYLES[interaction.outcome] || 'text-muted-foreground'
+                  }`}
                 >
-                  {chip}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {/* Next action */}
-          {interaction.next_action && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 pt-2 border-t">
-              <Clock className="h-3 w-3 shrink-0" />
-              <span>
-                🔔 Follow-up: {interaction.next_action}
-                {interaction.next_action_date && (
-                  <span className="ml-1 font-medium">
-                    ({format(new Date(interaction.next_action_date), 'MMM d')})
-                  </span>
-                )}
+                  {OUTCOME_ICONS[interaction.outcome] || '•'}{' '}
+                  {interaction.outcome.replace(/_/g, ' ')}
+                </span>
+              )}
+              <span className="text-muted-foreground flex items-center gap-1">
+                <User className="h-3 w-3" />
+                {interaction.creator_full_name ||
+                  interaction.creator_email ||
+                  'System'}
               </span>
             </div>
-          )}
+
+            {/* Keyword chips */}
+            {chips.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {chips.map((chip) => (
+                  <Badge
+                    key={chip}
+                    variant="outline"
+                    className="h-5 px-1.5 text-[10px] font-semibold border-amber-500 text-amber-600 dark:text-amber-400"
+                  >
+                    {chip}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Next action */}
+            {interaction.next_action && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 pt-2 border-t">
+                <Clock className="h-3 w-3 shrink-0" />
+                <span>
+                  Follow-up: {interaction.next_action}
+                  {interaction.next_action_date && (
+                    <span className="ml-1 font-medium">
+                      ({format(new Date(interaction.next_action_date), 'MMM d')})
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+
+            {/* Comments section */}
+            {showComments && (
+              <InteractionComments
+                interactionId={interaction.id}
+                contactId={interaction.contact_id}
+                onCommentCountChange={setCommentCount}
+              />
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Edit modal */}
+      <LogInteractionModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        onSuccess={() => {
+          setEditModalOpen(false);
+          onRefresh?.();
+        }}
+        contactId={interaction.contact_id}
+        editData={editData}
+      />
+    </>
   );
 }
 
-export function InteractionTimeline({ interactions }: InteractionTimelineProps) {
+export function InteractionTimeline({ interactions, onRefresh }: InteractionTimelineProps) {
   // Group interactions by time label
   const groupedInteractions = useMemo(() => {
     const groups: { label: string; items: ContactInteraction[] }[] = [];
@@ -239,7 +314,7 @@ export function InteractionTimeline({ interactions }: InteractionTimelineProps) 
           </h4>
           <div className="space-y-3">
             {group.items.map((interaction) => (
-              <InteractionCard key={interaction.id} interaction={interaction} />
+              <InteractionCard key={interaction.id} interaction={interaction} onRefresh={onRefresh} />
             ))}
           </div>
         </div>

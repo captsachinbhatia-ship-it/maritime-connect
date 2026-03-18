@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
-import { MessageSquare, Phone, Mail, Video, StickyNote, PlusCircle, ExternalLink } from 'lucide-react';
+import { MessageSquare, Phone, Mail, Video, StickyNote, PlusCircle, ExternalLink, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
 
@@ -21,6 +21,7 @@ interface RecentInteraction {
   notes: string | null;
   outcome: string | null;
   creator_name: string | null;
+  comment_count: number;
 }
 
 const typeIcons: Record<string, typeof Phone> = {
@@ -93,6 +94,7 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
         notes: r.notes || null,
         outcome: r.outcome || null,
         creator_name: r.creator_full_name || r.creator_name || null,
+        comment_count: r.comment_count || 0,
       })));
     } catch (error) {
       console.error('Failed to fetch recent interactions:', error);
@@ -205,6 +207,12 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
                           {chip}
                         </Badge>
                       ))}
+                      {interaction.comment_count > 0 && (
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                          <MessageCircle className="h-2.5 w-2.5" />
+                          {interaction.comment_count}
+                        </span>
+                      )}
                       {interaction.creator_name && (
                         <span className="text-[10px] text-muted-foreground">
                           by {interaction.creator_name}

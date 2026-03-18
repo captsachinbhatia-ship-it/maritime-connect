@@ -8,13 +8,18 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabaseClient';
-import { MessageSquare, Phone, Mail, Video, StickyNote, ExternalLink, Plus } from 'lucide-react';
+import { MessageSquare, Phone, Mail, Video, StickyNote, ExternalLink, Plus, Pencil, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
+import { LogInteractionModal, EditInteractionData } from '@/components/contacts/LogInteractionModal';
+import { InteractionComments } from '@/components/contacts/InteractionComments';
+import { useCrmUser } from '@/hooks/useCrmUser';
+import { useAuth } from '@/contexts/AuthContext';
+import { InteractionType } from '@/services/interactions';
 
 interface Interaction {
   id: string;
   contact_id: string;
+  user_id: string;
   contact_name: string;
   company_name: string | null;
   interaction_type: string;
@@ -23,6 +28,7 @@ interface Interaction {
   notes: string | null;
   outcome: string | null;
   creator_full_name: string | null;
+  comment_count: number;
 }
 
 const typeIcons: Record<string, typeof Phone> = {
@@ -35,6 +41,10 @@ export default function AllInteractions() {
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [logOpen, setLogOpen] = useState(false);
+  const [editData, setEditData] = useState<EditInteractionData | null>(null);
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const { crmUserId } = useCrmUser();
+  const { isAdmin } = useAuth();
 
   // Filters
   const [search, setSearch] = useState('');
@@ -71,6 +81,7 @@ export default function AllInteractions() {
       setInteractions((data || []).map((r: any) => ({
         id: r.id,
         contact_id: r.contact_id,
+        user_id: r.user_id || '',
         contact_name: r.contact_name || r.full_name || 'Unknown',
         company_name: r.company_name || null,
         interaction_type: r.interaction_type,
@@ -79,6 +90,7 @@ export default function AllInteractions() {
         notes: r.notes || null,
         outcome: r.outcome || null,
         creator_full_name: r.creator_full_name || r.creator_name || null,
+        comment_count: r.comment_count || 0,
       })));
     } finally {
       setLoading(false);
@@ -157,30 +169,78 @@ export default function AllInteractions() {
             <div className="space-y-2">
               {interactions.map((ix) => {
                 const Icon = typeIcons[ix.interaction_type] || MessageSquare;
+                const canEdit = crmUserId === ix.user_id || isAdmin;
+                const isCommentsOpen = expandedComments.has(ix.id);
                 return (
-                  <div key={ix.id} className="flex items-start gap-3 rounded-lg border p-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted mt-0.5">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{ix.contact_name}</p>
-                        {ix.company_name && (
-                          <span className="text-xs text-muted-foreground">— {ix.company_name}</span>
-                        )}
-                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => openContact(ix.contact_id)} title="Open contact">
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
+                  <div key={ix.id} className="rounded-lg border p-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted mt-0.5">
+                        <Icon className="h-4 w-4 text-muted-foreground" />
                       </div>
-                      {ix.subject && <p className="text-xs text-foreground/80 mt-0.5">{ix.subject}</p>}
-                      {ix.notes && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ix.notes}</p>}
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <Badge variant="secondary" className="text-[10px] py-0 h-4">{ix.interaction_type}</Badge>
-                        {ix.outcome && <Badge variant="outline" className="text-[10px] py-0 h-4">{ix.outcome}</Badge>}
-                        {ix.creator_full_name && <span className="text-[10px] text-muted-foreground">by {ix.creator_full_name}</span>}
-                        <span className="text-[10px] text-muted-foreground ml-auto">
-                          {formatDistanceToNow(new Date(ix.interaction_at), { addSuffix: true })}
-                        </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">{ix.contact_name}</p>
+                          {ix.company_name && (
+                            <span className="text-xs text-muted-foreground">— {ix.company_name}</span>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => openContact(ix.contact_id)} title="Open contact">
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
+                          <div className="ml-auto flex items-center gap-1">
+                            {canEdit && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => setEditData({
+                                  id: ix.id,
+                                  contact_id: ix.contact_id,
+                                  interaction_type: ix.interaction_type as InteractionType,
+                                  subject: ix.subject,
+                                  notes: ix.notes,
+                                  outcome: ix.outcome,
+                                })}
+                                title="Edit interaction"
+                              >
+                                <Pencil className="h-3 w-3 text-muted-foreground" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-1.5 gap-0.5"
+                              onClick={() => {
+                                setExpandedComments(prev => {
+                                  const next = new Set(prev);
+                                  next.has(ix.id) ? next.delete(ix.id) : next.add(ix.id);
+                                  return next;
+                                });
+                              }}
+                              title="Comments"
+                            >
+                              <MessageCircle className="h-3 w-3 text-muted-foreground" />
+                              {ix.comment_count > 0 && (
+                                <span className="text-[10px] text-muted-foreground">{ix.comment_count}</span>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                        {ix.subject && <p className="text-xs text-foreground/80 mt-0.5">{ix.subject}</p>}
+                        {ix.notes && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ix.notes}</p>}
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <Badge variant="secondary" className="text-[10px] py-0 h-4">{ix.interaction_type}</Badge>
+                          {ix.outcome && <Badge variant="outline" className="text-[10px] py-0 h-4">{ix.outcome}</Badge>}
+                          {ix.creator_full_name && <span className="text-[10px] text-muted-foreground">by {ix.creator_full_name}</span>}
+                          <span className="text-[10px] text-muted-foreground ml-auto">
+                            {formatDistanceToNow(new Date(ix.interaction_at), { addSuffix: true })}
+                          </span>
+                        </div>
+                        {isCommentsOpen && (
+                          <InteractionComments
+                            interactionId={ix.id}
+                            contactId={ix.contact_id}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -192,6 +252,15 @@ export default function AllInteractions() {
       </Card>
 
       <LogInteractionModal isOpen={logOpen} onClose={() => setLogOpen(false)} onSuccess={() => { setLogOpen(false); fetchData(); }} />
+
+      {/* Edit modal */}
+      <LogInteractionModal
+        isOpen={!!editData}
+        onClose={() => setEditData(null)}
+        onSuccess={() => { setEditData(null); fetchData(); }}
+        contactId={editData?.contact_id}
+        editData={editData}
+      />
     </div>
   );
 }

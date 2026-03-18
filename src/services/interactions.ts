@@ -6,6 +6,7 @@ export type InteractionType = 'COLD_CALL' | 'CALL' | 'EMAIL_SENT' | 'WHATSAPP_SE
 export interface ContactInteraction {
   id: string;
   contact_id: string;
+  user_id: string;
   interaction_at: string;
   interaction_type: InteractionType;
   outcome: string | null;
@@ -16,6 +17,7 @@ export interface ContactInteraction {
   next_action_date: string | null;
   creator_full_name: string | null;
   creator_email: string | null;
+  comment_count?: number;
 }
 
 export interface InteractionFilters {
@@ -196,3 +198,55 @@ export async function createInteraction(payload: CreateInteractionPayload): Prom
 
 // Alias for backward compatibility
 export const getCreatorNames = getUserNames;
+
+export interface UpdateInteractionPayload {
+  interaction_type?: InteractionType;
+  outcome?: string | null;
+  subject?: string | null;
+  notes?: string;
+}
+
+export async function updateInteraction(
+  interactionId: string,
+  payload: UpdateInteractionPayload
+): Promise<{ error: string | null }> {
+  try {
+    const updateRow: Record<string, unknown> = {};
+
+    if (payload.interaction_type !== undefined) {
+      if (!ALLOWED_INTERACTION_TYPES.has(payload.interaction_type)) {
+        return { error: `Invalid interaction type: "${payload.interaction_type}"` };
+      }
+      updateRow.interaction_type = payload.interaction_type;
+    }
+    if (payload.outcome !== undefined) updateRow.outcome = payload.outcome;
+    if (payload.notes !== undefined) updateRow.notes = payload.notes;
+    if (payload.subject !== undefined) {
+      // Subject lives in meta.subject — merge with existing meta
+      const { data: existing } = await supabase
+        .from('contact_interactions')
+        .select('meta')
+        .eq('id', interactionId)
+        .single();
+      const meta = (existing?.meta as Record<string, unknown>) || { source: 'app' };
+      meta.subject = payload.subject;
+      updateRow.meta = meta;
+    }
+
+    if (Object.keys(updateRow).length === 0) {
+      return { error: null };
+    }
+
+    updateRow.updated_at = new Date().toISOString();
+
+    const { error } = await supabase
+      .from('contact_interactions')
+      .update(updateRow)
+      .eq('id', interactionId);
+
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to update interaction' };
+  }
+}

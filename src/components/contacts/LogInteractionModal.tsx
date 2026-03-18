@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
-import { createInteraction, InteractionType } from '@/services/interactions';
+import { createInteraction, updateInteraction, InteractionType } from '@/services/interactions';
 import { createFollowupTask } from '@/services/teamTasks';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +37,15 @@ interface EnquiryOption {
   discharge_port: string | null;
 }
 
+export interface EditInteractionData {
+  id: string;
+  contact_id: string;
+  interaction_type: InteractionType;
+  subject: string | null;
+  notes: string | null;
+  outcome: string | null;
+}
+
 export interface LogInteractionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -46,6 +55,8 @@ export interface LogInteractionModalProps {
   contactName?: string;
   /** Pre-fill the enquiry selector */
   preselectedEnquiryId?: string;
+  /** If provided, modal enters edit mode */
+  editData?: EditInteractionData | null;
 }
 
 export function LogInteractionModal({
@@ -55,6 +66,7 @@ export function LogInteractionModal({
   contactId: fixedContactId,
   contactName: fixedContactName,
   preselectedEnquiryId,
+  editData,
 }: LogInteractionModalProps) {
   const navigate = useNavigate();
   const { crmUserId, loading: crmLoading } = useCrmUser();
@@ -155,6 +167,18 @@ export function LogInteractionModal({
     }
   }, [preselectedEnquiryId, isOpen]);
 
+  const isEditMode = Boolean(editData);
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (isOpen && editData) {
+      setInteractionType(editData.interaction_type || '');
+      setSubject(editData.subject || '');
+      setNotes(editData.notes || '');
+      setOutcome(editData.outcome || '');
+    }
+  }, [isOpen, editData]);
+
   const contacts: ContactOption[] = isAdmin ? adminContacts : assignedContacts;
   const contactsLoading = isAdmin ? adminContactsLoading : assignedLoading;
 
@@ -228,39 +252,57 @@ export function LogInteractionModal({
 
     setIsSubmitting(true);
     try {
-      const nextFollowUpAt = needsFollowup && dueDate ? dueDate.toISOString() : null;
-      const result = await createInteraction({
-        contact_id: effectiveContactId,
-        user_id: crmUserId,
-        interaction_type: interactionType,
-        outcome: outcome || null,
-        subject: subject.trim() || null,
-        notes: notes.trim(),
-        interaction_at: new Date().toISOString(),
-        next_follow_up_at: nextFollowUpAt,
-      });
+      if (isEditMode && editData) {
+        // --- Edit mode ---
+        const result = await updateInteraction(editData.id, {
+          interaction_type: interactionType as InteractionType,
+          outcome: outcome || null,
+          subject: subject.trim() || null,
+          notes: notes.trim(),
+        });
 
-      if (result.error) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
-        return;
-      }
+        if (result.error) {
+          toast({ title: 'Error', description: result.error, variant: 'destructive' });
+          return;
+        }
 
-      // Create follow-up task
-      if (needsFollowup && dueDate) {
-        const followupTitle = nextAction.trim() || `Follow up: ${interactionType} with ${effectiveContactName}`;
-        await createFollowupTask({
-          title: followupTitle,
-          notes: notes.trim() || null,
-          due_at: dueDate.toISOString(),
-          crmUserId,
-          related_contact_id: effectiveContactId,
+        toast({ title: 'Interaction Updated', description: 'Changes saved successfully.' });
+      } else {
+        // --- Create mode ---
+        const nextFollowUpAt = needsFollowup && dueDate ? dueDate.toISOString() : null;
+        const result = await createInteraction({
+          contact_id: effectiveContactId,
+          user_id: crmUserId,
+          interaction_type: interactionType,
+          outcome: outcome || null,
+          subject: subject.trim() || null,
+          notes: notes.trim(),
+          interaction_at: new Date().toISOString(),
+          next_follow_up_at: nextFollowUpAt,
+        });
+
+        if (result.error) {
+          toast({ title: 'Error', description: result.error, variant: 'destructive' });
+          return;
+        }
+
+        // Create follow-up task
+        if (needsFollowup && dueDate) {
+          const followupTitle = nextAction.trim() || `Follow up: ${interactionType} with ${effectiveContactName}`;
+          await createFollowupTask({
+            title: followupTitle,
+            notes: notes.trim() || null,
+            due_at: dueDate.toISOString(),
+            crmUserId,
+            related_contact_id: effectiveContactId,
+          });
+        }
+
+        toast({
+          title: 'Interaction Logged',
+          description: needsFollowup ? 'Interaction logged and follow-up task created.' : 'Interaction logged successfully.',
         });
       }
-
-      toast({
-        title: 'Interaction Logged',
-        description: needsFollowup ? 'Interaction logged and follow-up task created.' : 'Interaction logged successfully.',
-      });
 
       resetForm();
       onClose();
@@ -280,9 +322,11 @@ export function LogInteractionModal({
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {fixedContactId ? `Log Interaction — ${effectiveContactName}` : 'Log Interaction'}
+            {isEditMode ? 'Edit Interaction' : fixedContactId ? `Log Interaction — ${effectiveContactName}` : 'Log Interaction'}
           </DialogTitle>
-          <DialogDescription>Record a contact interaction with optional follow-up.</DialogDescription>
+          <DialogDescription>
+            {isEditMode ? 'Amend the interaction details below.' : 'Record a contact interaction with optional follow-up.'}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -511,7 +555,7 @@ export function LogInteractionModal({
             <Button type="button" variant="outline" onClick={handleClose}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Log It →
+              {isEditMode ? 'Save Changes' : 'Log It →'}
             </Button>
           </div>
         </form>
