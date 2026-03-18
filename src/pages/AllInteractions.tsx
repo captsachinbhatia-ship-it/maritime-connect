@@ -16,6 +16,7 @@ interface Interaction {
   id: string;
   contact_id: string;
   contact_name: string;
+  company_name: string | null;
   interaction_type: string;
   interaction_at: string;
   subject: string | null;
@@ -71,6 +72,7 @@ export default function AllInteractions() {
         id: r.id,
         contact_id: r.contact_id,
         contact_name: r.contact_name || r.full_name || 'Unknown',
+        company_name: r.company_name || null,
         interaction_type: r.interaction_type,
         interaction_at: r.interaction_at,
         subject: r.subject || null,
@@ -163,6 +165,9 @@ export default function AllInteractions() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{ix.contact_name}</p>
+                        {ix.company_name && (
+                          <span className="text-xs text-muted-foreground">— {ix.company_name}</span>
+                        )}
                         <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => openContact(ix.contact_id)} title="Open contact">
                           <ExternalLink className="h-3 w-3" />
                         </Button>

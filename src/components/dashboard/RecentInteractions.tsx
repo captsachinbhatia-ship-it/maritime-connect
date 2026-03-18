@@ -14,6 +14,7 @@ interface RecentInteraction {
   id: string;
   contact_id: string;
   contact_name: string;
+  company_name: string | null;
   interaction_type: string;
   interaction_at: string;
   subject: string | null;
@@ -85,12 +86,13 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
         id: r.id,
         contact_id: r.contact_id,
         contact_name: r.contact_name || r.full_name || 'Unknown',
+        company_name: r.company_name || null,
         interaction_type: r.interaction_type,
         interaction_at: r.interaction_at,
         subject: r.subject || null,
         notes: r.notes || null,
         outcome: r.outcome || null,
-        creator_name: r.creator_name || r.creator_full_name || null,
+        creator_name: r.creator_full_name || r.creator_name || null,
       })));
     } catch (error) {
       console.error('Failed to fetch recent interactions:', error);
@@ -174,6 +176,11 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium leading-tight">{interaction.contact_name}</p>
+                    {interaction.company_name && (
+                      <p className="text-[11px] text-muted-foreground leading-tight">
+                        {interaction.company_name}
+                      </p>
+                    )}
                     {interaction.subject && (
                       <p className="text-[11px] text-foreground/80 leading-tight mt-0.5">
                         {interaction.subject}
