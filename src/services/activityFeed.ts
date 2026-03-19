@@ -163,9 +163,9 @@ export function exportToCsv(data: ActivityFeedItem[], filename: string): void {
     'Type',
     'Role',
     'Stage',
-    'Interaction Type',
+    'Detail',
     'Outcome',
-    'Subject',
+    'Discussion Summary',
   ];
 
   const rows = data.map(item => [

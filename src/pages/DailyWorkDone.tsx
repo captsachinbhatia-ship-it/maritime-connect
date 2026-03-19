@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, startOfDay } from 'date-fns';
-import { Calendar as CalendarIcon, RefreshCw, Download, Search, Users, Activity } from 'lucide-react';
+import { Calendar as CalendarIcon, RefreshCw, Download, Search, Users, Activity, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
@@ -72,6 +72,17 @@ export default function DailyWorkDone() {
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
   const [selectedContactStage, setSelectedContactStage] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Expanded rows for discussion summary
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const toggleRow = (idx: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
 
   // Check admin access
   useEffect(() => {
@@ -373,9 +384,9 @@ export default function DailyWorkDone() {
                   <TableHead className="w-[120px]">Type</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Stage</TableHead>
-                  <TableHead>Interaction Type</TableHead>
+                  <TableHead>Detail</TableHead>
                   <TableHead>Outcome</TableHead>
-                  <TableHead>Subject</TableHead>
+                  <TableHead>Discussion Summary</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -392,57 +403,84 @@ export default function DailyWorkDone() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  activities.map((item, idx) => (
-                    <TableRow
-                      key={`${item.activity_at}-${item.contact_id}-${idx}`}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => handleRowClick(item)}
-                    >
-                      <TableCell className="font-mono text-xs">
-                        <div>{formatTime(item.activity_at)}</div>
-                        <div className="text-muted-foreground">{formatDate(item.activity_at)}</div>
-                      </TableCell>
-                      <TableCell>
-                        {item.actor_name || item.actor_email || 'Unknown'}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {item.contact_name || '—'}
-                      </TableCell>
-                      <TableCell>
-                        {item.company_name || '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={item.activity_type === 'INTERACTION' ? 'default' : 'secondary'}
-                        >
-                          {item.activity_type === 'INTERACTION' ? 'Interaction'
-                            : item.activity_type === 'CONTACT_CREATED' ? 'Created'
-                            : item.activity_type === 'STAGE_CHANGE' ? 'Stage Change'
-                            : item.activity_type === 'FOLLOW_UP' ? 'Follow-up'
-                            : item.activity_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {item.assignment_role ? (
-                          <Badge variant="outline" className="text-xs">
-                            {item.assignment_role}
+                  activities.map((item, idx) => {
+                    const hasNotes = !!(item.detail_3 && item.detail_3.trim());
+                    const isExpanded = expandedRows.has(idx);
+
+                    return (
+                      <TableRow
+                        key={`${item.activity_at}-${item.contact_id}-${idx}`}
+                        className="cursor-pointer hover:bg-muted/50 align-top"
+                        onClick={() => handleRowClick(item)}
+                      >
+                        <TableCell className="font-mono text-xs">
+                          <div>{formatTime(item.activity_at)}</div>
+                          <div className="text-muted-foreground">{formatDate(item.activity_at)}</div>
+                        </TableCell>
+                        <TableCell>
+                          {item.actor_name || item.actor_email || 'Unknown'}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {item.contact_name || '—'}
+                        </TableCell>
+                        <TableCell>
+                          {item.company_name || '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={item.activity_type === 'INTERACTION' ? 'default' : 'secondary'}
+                          >
+                            {item.activity_type === 'INTERACTION' ? 'Interaction'
+                              : item.activity_type === 'CONTACT_CREATED' ? 'Created'
+                              : item.activity_type === 'STAGE_CHANGE' ? 'Stage Change'
+                              : item.activity_type === 'FOLLOW_UP' ? 'Follow-up'
+                              : item.activity_type}
                           </Badge>
-                        ) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {item.to_stage || '—'}
-                      </TableCell>
-                      <TableCell>
-                        {item.detail_1 || '—'}
-                      </TableCell>
-                      <TableCell>
-                        {item.detail_2 || '—'}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {item.detail_3 || '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell>
+                          {item.assignment_role ? (
+                            <Badge variant="outline" className="text-xs">
+                              {item.assignment_role}
+                            </Badge>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {item.to_stage || '—'}
+                        </TableCell>
+                        <TableCell>
+                          {item.detail_1 || '—'}
+                        </TableCell>
+                        <TableCell>
+                          {item.detail_2 || '—'}
+                        </TableCell>
+                        <TableCell className="max-w-[350px]">
+                          {hasNotes ? (
+                            <div>
+                              <button
+                                className="flex items-center gap-1 text-xs text-primary hover:underline mb-1"
+                                onClick={(e) => { e.stopPropagation(); toggleRow(idx); }}
+                              >
+                                {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                {isExpanded ? 'Hide' : 'View'} summary
+                              </button>
+                              {isExpanded && (
+                                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap bg-muted/50 rounded p-2 mt-1">
+                                  {item.detail_3}
+                                </p>
+                              )}
+                              {!isExpanded && (
+                                <span className="text-xs text-muted-foreground truncate block max-w-[300px]">
+                                  {item.detail_3!.length > 80 ? item.detail_3!.slice(0, 80) + '…' : item.detail_3}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
