@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { previewWriteGuard } from '@/lib/previewGuard';
 import type { Contact, ContactWithCompany, CreateContactPayload, ContactFilters, ContactAssignment } from '@/types';
 
-export type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
+export type StageType = 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT';
 
 interface LastInteractionData {
   contact_id: string;

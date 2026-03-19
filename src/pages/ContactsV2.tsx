@@ -94,6 +94,7 @@ const TAB_META: { value: TabKey; label: string; icon: React.ElementType }[] = [
 
 const STAGE_COLORS: Record<string, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  TARGETING: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   ASPIRATION: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   ACHIEVEMENT: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
 };
@@ -347,15 +348,52 @@ function OwnerSummaryBlock({
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-xs font-medium text-muted-foreground mr-1">Filter by owner:</span>
       {rows.map((r) => (
-        <button
+        <span
           key={r.assigned_to_crm_user_id || r.assigned_to_name}
-          className={chipClass(r.assigned_to_crm_user_id, 'ANY', false)}
-          onClick={() => handleClick(r.assigned_to_crm_user_id, 'ANY', false)}
-          title={`P:${r.primary_count} · S:${r.secondary_count} · Total:${r.total_count}`}
+          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium select-none ${
+            isFilterActive(r.assigned_to_crm_user_id, 'ANY', false) ||
+            isFilterActive(r.assigned_to_crm_user_id, 'PRIMARY', false) ||
+            isFilterActive(r.assigned_to_crm_user_id, 'SECONDARY', false)
+              ? 'border-primary bg-primary/5'
+              : 'border-border bg-background'
+          }`}
         >
-          {r.assigned_to_name}
-          <span className="tabular-nums opacity-70">{r.total_count}</span>
-        </button>
+          <button
+            className={`cursor-pointer transition-colors ${
+              isFilterActive(r.assigned_to_crm_user_id, 'ANY', false)
+                ? 'text-primary font-semibold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => handleClick(r.assigned_to_crm_user_id, 'ANY', false)}
+            title={`All contacts for ${r.assigned_to_name}: ${r.total_count}`}
+          >
+            {r.assigned_to_name}
+          </button>
+          <button
+            className={`tabular-nums rounded px-1 cursor-pointer transition-colors ${
+              isFilterActive(r.assigned_to_crm_user_id, 'PRIMARY', false)
+                ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
+                : 'text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30'
+            }`}
+            onClick={() => handleClick(r.assigned_to_crm_user_id, 'PRIMARY', false)}
+            title={`Primary: ${r.primary_count}`}
+          >
+            P:{r.primary_count}
+          </button>
+          {r.secondary_count > 0 && (
+            <button
+              className={`tabular-nums rounded px-1 cursor-pointer transition-colors ${
+                isFilterActive(r.assigned_to_crm_user_id, 'SECONDARY', false)
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
+                  : 'text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30'
+              }`}
+              onClick={() => handleClick(r.assigned_to_crm_user_id, 'SECONDARY', false)}
+              title={`Secondary: ${r.secondary_count}`}
+            >
+              S:{r.secondary_count}
+            </button>
+          )}
+        </span>
       ))}
       {unassignedTotal > 0 && (
         <button

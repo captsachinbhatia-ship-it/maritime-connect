@@ -137,7 +137,7 @@ export function UserVsTeamComparison({ isCEO, isAdmin }: UserVsTeamComparisonPro
 
       // Build my stage sets
       const myStageContacts: Record<string, Set<string>> = {
-        COLD_CALLING: new Set(), ASPIRATION: new Set(), ACHIEVEMENT: new Set(),
+        COLD_CALLING: new Set(), TARGETING: new Set(), ASPIRATION: new Set(), ACHIEVEMENT: new Set(),
       };
       myAssignments.forEach(a => {
         if (myStageContacts[a.stage]) myStageContacts[a.stage].add(a.contact_id);
@@ -145,7 +145,7 @@ export function UserVsTeamComparison({ isCEO, isAdmin }: UserVsTeamComparisonPro
 
       // Build team stage sets
       const teamStageContacts: Record<string, Set<string>> = {
-        COLD_CALLING: new Set(), ASPIRATION: new Set(), ACHIEVEMENT: new Set(),
+        COLD_CALLING: new Set(), TARGETING: new Set(), ASPIRATION: new Set(), ACHIEVEMENT: new Set(),
       };
       allAssignments.forEach(a => {
         if (teamStageContacts[a.stage]) teamStageContacts[a.stage].add(a.contact_id);

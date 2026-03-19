@@ -28,13 +28,14 @@ export interface ContactV2Row {
 
 export type TabKey = "directory" | "my-primary" | "my-secondary" | "my-added" | "inactive" | "deleted";
 
-export type StageFilter = "ALL" | "COLD_CALLING" | "ASPIRATION" | "ACHIEVEMENT";
+export type StageFilter = "ALL" | "COLD_CALLING" | "TARGETING" | "ASPIRATION" | "ACHIEVEMENT";
 
-const STAGES: StageFilter[] = ["COLD_CALLING", "ASPIRATION", "ACHIEVEMENT"];
+const STAGES: StageFilter[] = ["COLD_CALLING", "TARGETING", "ASPIRATION", "ACHIEVEMENT"];
 
 export const STAGE_CHIPS: { value: StageFilter; label: string }[] = [
   { value: "ALL", label: "All" },
   { value: "COLD_CALLING", label: "Cold Calling" },
+  { value: "TARGETING", label: "Targeting" },
   { value: "ASPIRATION", label: "Aspiration" },
   { value: "ACHIEVEMENT", label: "Achievement" },
 ];
@@ -123,6 +124,7 @@ export function useContactsV2Data() {
   const [stageCounts, setStageCounts] = useState<Record<StageFilter, number>>({
     ALL: 0,
     COLD_CALLING: 0,
+    TARGETING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
   });
@@ -130,6 +132,7 @@ export function useContactsV2Data() {
   const [myPrimaryStageCounts, setMyPrimaryStageCounts] = useState<Record<StageFilter, number>>({
     ALL: 0,
     COLD_CALLING: 0,
+    TARGETING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
   });
@@ -137,6 +140,7 @@ export function useContactsV2Data() {
   const [mySecondaryStageCounts, setMySecondaryStageCounts] = useState<Record<StageFilter, number>>({
     ALL: 0,
     COLD_CALLING: 0,
+    TARGETING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
   });

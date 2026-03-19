@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import { previewWriteGuard } from '@/lib/previewGuard';
 
-export type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
+export type AssignmentStage = 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT';
 export type AssignmentRole = 'primary' | 'secondary';
 
 export interface ContactAssignment {

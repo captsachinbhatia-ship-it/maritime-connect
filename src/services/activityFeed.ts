@@ -1,8 +1,10 @@
 import { supabase } from '@/lib/supabaseClient';
 
+export type ActivityType = 'INTERACTION' | 'STAGE_SNAPSHOT' | 'CONTACT_CREATED' | 'STAGE_CHANGE' | 'FOLLOW_UP';
+
 export interface ActivityFeedItem {
   activity_at: string;
-  activity_type: 'INTERACTION' | 'STAGE_SNAPSHOT';
+  activity_type: ActivityType;
   actor_crm_user_id: string;
   actor_name: string | null;
   actor_email: string | null;
@@ -11,16 +13,16 @@ export interface ActivityFeedItem {
   company_name: string | null;
   assignment_role: string | null;
   to_stage: string | null;
-  detail_1: string | null; // interaction_type
-  detail_2: string | null; // outcome
-  detail_3: string | null; // subject
+  detail_1: string | null; // interaction_type / follow_up_type
+  detail_2: string | null; // outcome / status
+  detail_3: string | null; // subject / notes / designation
 }
 
 export interface ActivityFeedFilters {
   from: string;
   to: string;
   userId?: string;
-  activityType?: 'INTERACTION' | 'STAGE_SNAPSHOT';
+  activityType?: ActivityType;
   search?: string;
 }
 
@@ -80,6 +82,9 @@ export interface PerformanceSummary {
   interactionsCount: number;
   uniqueContactsTouched: number;
   stageSnapshotCount: number;
+  contactsCreated: number;
+  stageChanges: number;
+  followUps: number;
 }
 
 export function calculatePerformanceSummary(data: ActivityFeedItem[]): PerformanceSummary[] {
@@ -88,6 +93,9 @@ export function calculatePerformanceSummary(data: ActivityFeedItem[]): Performan
     interactions: number;
     contactIds: Set<string>;
     stageSnapshots: number;
+    contactsCreated: number;
+    stageChanges: number;
+    followUps: number;
   }>();
 
   data.forEach(item => {
@@ -100,16 +108,25 @@ export function calculatePerformanceSummary(data: ActivityFeedItem[]): Performan
         interactions: 0,
         contactIds: new Set(),
         stageSnapshots: 0,
+        contactsCreated: 0,
+        stageChanges: 0,
+        followUps: 0,
       });
     }
 
     const userStats = userMap.get(userId)!;
+    userStats.contactIds.add(item.contact_id);
 
     if (item.activity_type === 'INTERACTION') {
       userStats.interactions++;
-      userStats.contactIds.add(item.contact_id);
     } else if (item.activity_type === 'STAGE_SNAPSHOT') {
       userStats.stageSnapshots++;
+    } else if (item.activity_type === 'CONTACT_CREATED') {
+      userStats.contactsCreated++;
+    } else if (item.activity_type === 'STAGE_CHANGE') {
+      userStats.stageChanges++;
+    } else if (item.activity_type === 'FOLLOW_UP') {
+      userStats.followUps++;
     }
   });
 
@@ -121,11 +138,18 @@ export function calculatePerformanceSummary(data: ActivityFeedItem[]): Performan
       interactionsCount: stats.interactions,
       uniqueContactsTouched: stats.contactIds.size,
       stageSnapshotCount: stats.stageSnapshots,
+      contactsCreated: stats.contactsCreated,
+      stageChanges: stats.stageChanges,
+      followUps: stats.followUps,
     });
   });
 
-  // Sort by interactions count desc
-  summaries.sort((a, b) => b.interactionsCount - a.interactionsCount);
+  // Sort by total activity desc
+  summaries.sort((a, b) => {
+    const totalA = a.interactionsCount + a.contactsCreated + a.stageChanges + a.followUps;
+    const totalB = b.interactionsCount + b.contactsCreated + b.stageChanges + b.followUps;
+    return totalB - totalA;
+  });
 
   return summaries;
 }

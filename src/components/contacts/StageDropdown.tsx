@@ -29,12 +29,14 @@ interface StageDropdownProps {
 
 const STAGES: { value: AssignmentStage; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
+  { value: 'TARGETING', label: 'Targeting' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
 ];
 
 const STAGE_COLORS: Record<AssignmentStage, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300',
+  TARGETING: 'bg-orange-100 text-orange-800 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-300',
   ASPIRATION: 'bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300',
   ACHIEVEMENT: 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300',
 };

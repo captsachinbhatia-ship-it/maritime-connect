@@ -38,20 +38,20 @@ import { RequestInactiveDialog } from './RequestInactiveDialog';
 import { ContactRowHoverCard } from './ContactRowHoverCard';
 import { extractKeywordChips } from '@/lib/interactionKeywords';
 
-type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT';
+type StageType = 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT';
 
 const STAGES: { value: StageType; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
+  { value: 'TARGETING', label: 'Targeting' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
-  
 ];
 
 const STAGE_COLORS: Record<StageType, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800',
+  TARGETING: 'bg-orange-100 text-orange-800',
   ASPIRATION: 'bg-amber-100 text-amber-800',
   ACHIEVEMENT: 'bg-green-100 text-green-800',
-  
 };
 
 const INTERACTION_TYPE_ICONS: Record<string, React.ReactNode> = {

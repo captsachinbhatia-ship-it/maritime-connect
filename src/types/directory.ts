@@ -1,5 +1,6 @@
 export type AssignmentStage =
   | 'COLD_CALLING'
+  | 'TARGETING'
   | 'ASPIRATION'
   | 'ACHIEVEMENT';
 

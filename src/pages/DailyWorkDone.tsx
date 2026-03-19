@@ -130,7 +130,7 @@ export default function DailyWorkDone() {
         from: fromDate.toISOString(),
         to: toDate.toISOString(),
         userId: selectedUserId !== 'all' ? selectedUserId : undefined,
-        activityType: selectedType !== 'all' ? (selectedType as 'INTERACTION' | 'STAGE_SNAPSHOT') : undefined,
+        activityType: selectedType !== 'all' ? (selectedType as any) : undefined,
         search: searchQuery || undefined,
       });
 
@@ -306,7 +306,9 @@ export default function DailyWorkDone() {
                 <SelectContent>
                   <SelectItem value="all">All types</SelectItem>
                   <SelectItem value="INTERACTION">Interaction</SelectItem>
-                  <SelectItem value="STAGE_SNAPSHOT">Stage Snapshot</SelectItem>
+                  <SelectItem value="CONTACT_CREATED">Contact Created</SelectItem>
+                  <SelectItem value="STAGE_CHANGE">Stage Change</SelectItem>
+                  <SelectItem value="FOLLOW_UP">Follow-up</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -413,7 +415,11 @@ export default function DailyWorkDone() {
                         <Badge
                           variant={item.activity_type === 'INTERACTION' ? 'default' : 'secondary'}
                         >
-                          {item.activity_type === 'INTERACTION' ? 'Interaction' : 'Stage'}
+                          {item.activity_type === 'INTERACTION' ? 'Interaction'
+                            : item.activity_type === 'CONTACT_CREATED' ? 'Created'
+                            : item.activity_type === 'STAGE_CHANGE' ? 'Stage Change'
+                            : item.activity_type === 'FOLLOW_UP' ? 'Follow-up'
+                            : item.activity_type}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -459,20 +465,22 @@ export default function DailyWorkDone() {
                 <TableRow>
                   <TableHead>User</TableHead>
                   <TableHead className="text-right">Interactions</TableHead>
+                  <TableHead className="text-right">Contacts Created</TableHead>
+                  <TableHead className="text-right">Stage Changes</TableHead>
+                  <TableHead className="text-right">Follow-ups</TableHead>
                   <TableHead className="text-right">Unique Contacts</TableHead>
-                  <TableHead className="text-right">Stage Snapshots</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       <RefreshCw className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : performanceSummary.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       No performance data for the selected period.
                     </TableCell>
                   </TableRow>
@@ -486,10 +494,16 @@ export default function DailyWorkDone() {
                         {summary.interactionsCount}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {summary.uniqueContactsTouched}
+                        {summary.contactsCreated}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {summary.stageSnapshotCount}
+                        {summary.stageChanges}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {summary.followUps}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {summary.uniqueContactsTouched}
                       </TableCell>
                     </TableRow>
                   ))

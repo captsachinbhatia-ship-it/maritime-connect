@@ -8,10 +8,11 @@ import { supabase } from '@/lib/supabaseClient';
 import { getUserNames } from '@/services/interactions';
 import { Navigate } from 'react-router-dom';
 
-type AssignmentStage = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+type AssignmentStage = 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
 const STAGE_LABELS: Record<AssignmentStage, string> = {
   COLD_CALLING: 'Cold Calling',
+  TARGETING: 'Targeting',
   ASPIRATION: 'Aspiration',
   ACHIEVEMENT: 'Achievement',
   INACTIVE: 'Inactive',
@@ -19,6 +20,7 @@ const STAGE_LABELS: Record<AssignmentStage, string> = {
 
 const STAGE_COLORS: Record<AssignmentStage, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800',
+  TARGETING: 'bg-orange-100 text-orange-800',
   ASPIRATION: 'bg-amber-100 text-amber-800',
   ACHIEVEMENT: 'bg-green-100 text-green-800',
   INACTIVE: 'bg-gray-100 text-gray-800',
@@ -98,7 +100,7 @@ export default function AdminSummary() {
 
           setGlobalTotals({ total, assigned, unassigned });
           setGlobalStages(
-            (['COLD_CALLING', 'ASPIRATION', 'ACHIEVEMENT', 'INACTIVE'] as AssignmentStage[]).map(s => ({
+            (['COLD_CALLING', 'TARGETING', 'ASPIRATION', 'ACHIEVEMENT', 'INACTIVE'] as AssignmentStage[]).map(s => ({
               stage: s,
               primary_count: stageMap[s].primary,
               secondary_count: stageMap[s].secondary,

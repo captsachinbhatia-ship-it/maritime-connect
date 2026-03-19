@@ -23,10 +23,11 @@ import { useToast } from '@/hooks/use-toast';
 import { createStageRequest } from '@/services/stageRequests';
 import { useAuth } from '@/contexts/AuthContext';
 
-type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+type StageType = 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
 const STAGES: { value: StageType; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
+  { value: 'TARGETING', label: 'Targeting' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
   { value: 'INACTIVE', label: 'Inactive' },
@@ -34,6 +35,7 @@ const STAGES: { value: StageType; label: string }[] = [
 
 const STAGE_COLORS: Record<string, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+  TARGETING: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
   ASPIRATION: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
   ACHIEVEMENT: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
   INACTIVE: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300',

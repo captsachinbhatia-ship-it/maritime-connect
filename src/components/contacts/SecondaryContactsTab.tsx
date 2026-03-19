@@ -26,13 +26,14 @@ import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
 import { ContactWithCompany } from '@/types';
 
-type StageType = 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+type StageType = 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
-type StageFilter = 'ALL' | 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
+type StageFilter = 'ALL' | 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT' | 'INACTIVE';
 
 const STAGE_CHIPS: { value: StageFilter; label: string }[] = [
   { value: 'ALL', label: 'All' },
   { value: 'COLD_CALLING', label: 'Cold Calling' },
+  { value: 'TARGETING', label: 'Targeting' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
   { value: 'INACTIVE', label: 'Inactive' },
@@ -40,6 +41,7 @@ const STAGE_CHIPS: { value: StageFilter; label: string }[] = [
 
 const STAGE_LABELS: Record<string, string> = {
   COLD_CALLING: 'Cold Calling',
+  TARGETING: 'Targeting',
   ASPIRATION: 'Aspiration',
   ACHIEVEMENT: 'Achievement',
   INACTIVE: 'Inactive',
@@ -47,6 +49,7 @@ const STAGE_LABELS: Record<string, string> = {
 
 const STAGE_COLORS: Record<string, string> = {
   COLD_CALLING: 'bg-blue-100 text-blue-800',
+  TARGETING: 'bg-orange-100 text-orange-800',
   ASPIRATION: 'bg-amber-100 text-amber-800',
   ACHIEVEMENT: 'bg-green-100 text-green-800',
   INACTIVE: 'bg-gray-100 text-gray-800',

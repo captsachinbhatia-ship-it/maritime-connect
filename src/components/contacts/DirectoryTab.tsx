@@ -24,23 +24,23 @@ import { useToast } from "@/hooks/use-toast";
 
 const STAGE_OPTIONS: { value: AssignmentStage; label: string }[] = [
   { value: "COLD_CALLING", label: "Cold Calling" },
+  { value: "TARGETING", label: "Targeting" },
   { value: "ASPIRATION", label: "Aspiration" },
   { value: "ACHIEVEMENT", label: "Achievement" },
-  
 ];
 
 const STAGE_LABELS: Record<string, string> = {
   COLD_CALLING: "Cold Calling",
+  TARGETING: "Targeting",
   ASPIRATION: "Aspiration",
   ACHIEVEMENT: "Achievement",
-  
 };
 
 const STAGE_COLORS: Record<string, string> = {
   COLD_CALLING: "bg-blue-100 text-blue-800",
+  TARGETING: "bg-orange-100 text-orange-800",
   ASPIRATION: "bg-amber-100 text-amber-800",
   ACHIEVEMENT: "bg-green-100 text-green-800",
-  
 };
 
 interface DirectoryTabProps {
@@ -143,7 +143,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
 
   // Stage counts
   const stageCounts = useMemo(() => {
-    const counts: Record<string, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
+    const counts: Record<string, number> = { COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
     contacts.forEach((c) => {
       if (c.primary_stage && counts[c.primary_stage] !== undefined) counts[c.primary_stage]++;
     });

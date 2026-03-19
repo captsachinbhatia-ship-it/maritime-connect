@@ -10,10 +10,11 @@ import { cn } from '@/lib/utils';
 import { fetchDashboardMetrics } from '@/services/dashboardMetrics';
 import { AssignmentStage } from '@/types/directory';
 
-const ACTIVE_STAGES: AssignmentStage[] = ['COLD_CALLING', 'ASPIRATION', 'ACHIEVEMENT'];
+const ACTIVE_STAGES: AssignmentStage[] = ['COLD_CALLING', 'TARGETING', 'ASPIRATION', 'ACHIEVEMENT'];
 
 const stageConfig = [
   { key: 'COLD_CALLING' as AssignmentStage, label: 'Cold Calling', color: 'bg-blue-500', tab: 'my-contacts' },
+  { key: 'TARGETING' as AssignmentStage, label: 'Targeting', color: 'bg-orange-500', tab: 'my-contacts' },
   { key: 'ASPIRATION' as AssignmentStage, label: 'Aspiration', color: 'bg-amber-500', tab: 'my-contacts' },
   { key: 'ACHIEVEMENT' as AssignmentStage, label: 'Achievement', color: 'bg-emerald-500', tab: 'my-contacts' },
 ];
@@ -27,7 +28,7 @@ export function ContactHealthSnapshot({ crmUserId: crmUserIdProp }: ContactHealt
   const navigate = useNavigate();
   const { crmUser } = useAuth();
   const [counts, setCounts] = useState<Record<string, number>>({
-    COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0,
+    COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0,
   });
   const [totalActive, setTotalActive] = useState(0);
   const [staleCount, setStaleCount] = useState(0);

@@ -83,7 +83,7 @@ export function AddAssignmentModal({
       contact_id: contactId,
       assigned_to_crm_user_id: selectedUserId,
       assignment_role: assignmentRole,
-      stage: currentStage as 'COLD_CALLING' | 'ASPIRATION' | 'ACHIEVEMENT',
+      stage: currentStage as 'COLD_CALLING' | 'TARGETING' | 'ASPIRATION' | 'ACHIEVEMENT',
     });
 
     if (result.error) {

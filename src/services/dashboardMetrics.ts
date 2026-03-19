@@ -24,6 +24,7 @@ export async function fetchDashboardMetrics(): Promise<{ data: DashboardMetrics 
 
   const byStage: Record<AssignmentStage, number> = {
     COLD_CALLING: 0,
+    TARGETING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
   };

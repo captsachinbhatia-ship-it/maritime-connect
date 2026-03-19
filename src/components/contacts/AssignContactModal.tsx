@@ -35,6 +35,7 @@ interface AssignContactModalProps {
 
 const STAGES: { value: AssignmentStage; label: string }[] = [
   { value: 'COLD_CALLING', label: 'Cold Calling' },
+  { value: 'TARGETING', label: 'Targeting' },
   { value: 'ASPIRATION', label: 'Aspiration' },
   { value: 'ACHIEVEMENT', label: 'Achievement' },
 ];
