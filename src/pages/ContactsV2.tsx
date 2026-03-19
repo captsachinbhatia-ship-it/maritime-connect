@@ -321,7 +321,7 @@ function OwnerSummaryBlock({
   }, [visible]);
 
   if (!visible) return null;
-  if (loading) return <Skeleton className="h-24 w-full" />;
+  if (loading) return <Skeleton className="h-8 w-full" />;
   if (rows.length === 0 && unassignedTotal === 0) return null;
 
   const isFilterActive = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) => {
@@ -329,7 +329,6 @@ function OwnerSummaryBlock({
   };
 
   const handleClick = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) => {
-    // Toggle: if already active, clear filter
     if (isFilterActive(userId, role, unassigned)) {
       onOwnerFilter({ userId: null, role: null, unassigned: false });
     } else {
@@ -337,61 +336,40 @@ function OwnerSummaryBlock({
     }
   };
 
-  const countCellClass = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) =>
-    `text-right tabular-nums cursor-pointer transition-colors rounded px-1 ${
+  const chipClass = (userId: string | null, role: 'PRIMARY' | 'SECONDARY' | 'ANY' | null, unassigned: boolean) =>
+    `inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors select-none ${
       isFilterActive(userId, role, unassigned)
-        ? 'bg-primary/15 text-primary font-bold'
-        : 'hover:bg-accent hover:text-accent-foreground'
+        ? 'border-primary bg-primary/15 text-primary shadow-sm'
+        : 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground'
     }`;
 
   return (
-    <div className="rounded-md border overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="min-w-[140px]">Owner</TableHead>
-            <TableHead className="min-w-[80px] text-right">Primary</TableHead>
-            <TableHead className="min-w-[80px] text-right">Secondary</TableHead>
-            <TableHead className="min-w-[80px] text-right">Total</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.assigned_to_crm_user_id || r.assigned_to_name}>
-              <TableCell className="font-medium">{r.assigned_to_name}</TableCell>
-              <TableCell
-                className={countCellClass(r.assigned_to_crm_user_id, 'PRIMARY', false)}
-                onClick={() => handleClick(r.assigned_to_crm_user_id, 'PRIMARY', false)}
-              >
-                {r.primary_count}
-              </TableCell>
-              <TableCell
-                className={countCellClass(r.assigned_to_crm_user_id, 'SECONDARY', false)}
-                onClick={() => handleClick(r.assigned_to_crm_user_id, 'SECONDARY', false)}
-              >
-                {r.secondary_count}
-              </TableCell>
-              <TableCell
-                className={countCellClass(r.assigned_to_crm_user_id, 'ANY', false)}
-                onClick={() => handleClick(r.assigned_to_crm_user_id, 'ANY', false)}
-              >
-                <span className="font-semibold">{r.total_count}</span>
-              </TableCell>
-            </TableRow>
-          ))}
-          <TableRow className="bg-muted/30">
-            <TableCell className="font-medium text-destructive">⚠ UNASSIGNED</TableCell>
-            <TableCell className="text-right tabular-nums">0</TableCell>
-            <TableCell className="text-right tabular-nums">0</TableCell>
-            <TableCell
-              className={countCellClass(null, null, true)}
-              onClick={() => handleClick(null, null, true)}
-            >
-              <span className="font-semibold text-destructive">{unassignedTotal}</span>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs font-medium text-muted-foreground mr-1">Filter by owner:</span>
+      {rows.map((r) => (
+        <button
+          key={r.assigned_to_crm_user_id || r.assigned_to_name}
+          className={chipClass(r.assigned_to_crm_user_id, 'ANY', false)}
+          onClick={() => handleClick(r.assigned_to_crm_user_id, 'ANY', false)}
+          title={`P:${r.primary_count} · S:${r.secondary_count} · Total:${r.total_count}`}
+        >
+          {r.assigned_to_name}
+          <span className="tabular-nums opacity-70">{r.total_count}</span>
+        </button>
+      ))}
+      {unassignedTotal > 0 && (
+        <button
+          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors select-none ${
+            isFilterActive(null, null, true)
+              ? 'border-destructive bg-destructive/10 text-destructive shadow-sm'
+              : 'border-border bg-background text-destructive/70 hover:bg-destructive/5'
+          }`}
+          onClick={() => handleClick(null, null, true)}
+        >
+          Unassigned
+          <span className="tabular-nums font-semibold">{unassignedTotal}</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -612,11 +590,13 @@ function ContactsV2Table({
             )}
             <TableHead className="min-w-[160px]">Full Name</TableHead>
             <TableHead className="min-w-[140px]">Company</TableHead>
+            {isDirectory && <TableHead className="min-w-[100px]">Type</TableHead>}
             <TableHead className="min-w-[120px]">Designation</TableHead>
             {!isDirectory && <TableHead className="min-w-[160px]">Email</TableHead>}
             {!isDirectory && <TableHead className="min-w-[120px]">Phone</TableHead>}
             {showOwners && <TableHead className="min-w-[120px]">Primary Owner</TableHead>}
             {showOwners && <TableHead className="min-w-[120px]">Secondary Owner</TableHead>}
+            {isDirectory && <TableHead className="min-w-[100px]">Added By</TableHead>}
             {showSecondaryCol && <TableHead className="min-w-[120px]">Secondary Owner</TableHead>}
             {showPrimaryCol && <TableHead className="min-w-[120px]">Primary Owner</TableHead>}
             <TableHead className="min-w-[100px]">Stage</TableHead>
@@ -653,6 +633,13 @@ function ContactsV2Table({
                   <span className="text-muted-foreground/50">—</span>
                 )}
               </TableCell>
+              {isDirectory && (
+                <TableCell className="text-xs text-muted-foreground">
+                  {row.company_type ? (
+                    <Badge variant="outline" className="text-[10px] font-normal">{row.company_type}</Badge>
+                  ) : '—'}
+                </TableCell>
+              )}
               <TableCell className="text-sm text-muted-foreground">{row.designation ?? '—'}</TableCell>
               {!isDirectory && (
                 <TableCell className="text-sm text-muted-foreground max-w-[180px] truncate">
@@ -695,6 +682,11 @@ function ContactsV2Table({
                       {row.secondary_owner ?? '—'}
                     </span>
                   )}
+                </TableCell>
+              )}
+              {isDirectory && (
+                <TableCell className="text-xs text-muted-foreground">
+                  {row.created_by_name ?? '—'}
                 </TableCell>
               )}
               {showSecondaryCol && (

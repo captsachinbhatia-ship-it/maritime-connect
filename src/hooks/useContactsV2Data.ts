@@ -20,6 +20,8 @@ export interface ContactV2Row {
   updated_at: string | null;
   last_interaction_at: string | null;
   created_by_crm_user_id: string | null;
+  created_by_name: string | null;
+  company_type: string | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
 }
@@ -84,6 +86,8 @@ function normalize(row: any): ContactV2Row {
     updated_at: row.updated_at ?? null,
     last_interaction_at: row.last_interaction_at ?? null,
     created_by_crm_user_id: row.created_by_crm_user_id ?? null,
+    created_by_name: row.created_by_name ?? null,
+    company_type: row.company_type ?? null,
     is_deleted: row.is_deleted ?? false,
     deleted_at: row.deleted_at ?? null,
   };
@@ -448,6 +452,8 @@ export function useContactsV2Data() {
             updated_at: row.updated_at ?? null,
             last_interaction_at: null,
             created_by_crm_user_id: row.created_by_crm_user_id ?? null,
+            created_by_name: null,
+            company_type: null,
             is_deleted: row.is_deleted ?? false,
             deleted_at: row.deleted_at ?? null,
           }));
@@ -628,6 +634,8 @@ export function useContactsV2Data() {
               updated_at: row.updated_at ?? null,
               last_interaction_at: null,
               created_by_crm_user_id: row.created_by_crm_user_id ?? null,
+              created_by_name: null,
+              company_type: null,
               is_deleted: row.is_deleted ?? false,
               deleted_at: row.deleted_at ?? null,
             };
@@ -754,6 +762,41 @@ export function useContactsV2Data() {
                 row.secondary_owner = snap.secondary_owner_name ?? row.secondary_owner;
               }
             });
+          }
+
+          // Enrich with creator names
+          const creatorIds = [...new Set(normalized.map((r) => r.created_by_crm_user_id).filter(Boolean))] as string[];
+          if (creatorIds.length > 0) {
+            const { data: creators } = await supabase.from("crm_users").select("id, full_name").in("id", creatorIds);
+            if (creators && creators.length > 0) {
+              const creatorMap = new Map<string, string>();
+              creators.forEach((c: any) => creatorMap.set(c.id, c.full_name));
+              normalized.forEach((row) => {
+                if (row.created_by_crm_user_id) {
+                  row.created_by_name = creatorMap.get(row.created_by_crm_user_id) ?? null;
+                }
+              });
+            }
+          }
+
+          // Enrich with company types
+          const companyNames = [...new Set(normalized.map((r) => r.company_name).filter(Boolean))] as string[];
+          if (companyNames.length > 0) {
+            const { data: companiesData } = await supabase
+              .from("companies")
+              .select("company_name, company_type")
+              .in("company_name", companyNames);
+            if (companiesData && companiesData.length > 0) {
+              const compTypeMap = new Map<string, string>();
+              companiesData.forEach((c: any) => {
+                if (c.company_type) compTypeMap.set(c.company_name, c.company_type);
+              });
+              normalized.forEach((row) => {
+                if (row.company_name) {
+                  row.company_type = compTypeMap.get(row.company_name) ?? null;
+                }
+              });
+            }
           }
         }
 
