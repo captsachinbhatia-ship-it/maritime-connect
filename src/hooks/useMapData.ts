@@ -25,7 +25,7 @@ export function useMapData() {
         // Real CRM enquiries
         supabase
           .from('enquiries')
-          .select('id, enquiry_number, cargo_type, loading_port, discharge_port, laycan_from, laycan_to, status, enquiry_mode, vessel_type, quantity, quantity_unit')
+          .select('id, enquiry_number, cargo_type, loading_port, discharge_port, laycan_from, laycan_to, status, enquiry_mode, vessel_type, vessel_name, quantity, quantity_unit')
           .eq('is_draft', false)
           .is('deleted_at', null)
           .order('created_at', { ascending: false }),
@@ -44,36 +44,60 @@ export function useMapData() {
       ]);
 
       // Map CRM vessels → Vessel type
-      if (vRes.data) {
-        setVessels(vRes.data.map((v: any) => ({
-          id: v.id,
-          name: v.name,
-          imo: v.imo,
-          vessel_type: v.vessel_type || v.size_class,
-          dwt: v.dwt,
-          open_port: v.open_port,
-          open_date: v.open_date,
-          lat: v.lat,
-          lng: v.lng,
-          region: v.region,
-          flag: v.flag,
-          year_built: v.year_built,
-        })));
-      }
+      const dbVessels: Vessel[] = (vRes.data || []).map((v: any) => ({
+        id: v.id,
+        name: v.name,
+        imo: v.imo,
+        vessel_type: v.vessel_type || v.size_class,
+        dwt: v.dwt,
+        open_port: v.open_port,
+        open_date: v.open_date,
+        lat: v.lat != null ? Number(v.lat) : null,
+        lng: v.lng != null ? Number(v.lng) : null,
+        region: v.region,
+        flag: v.flag,
+        year_built: v.year_built,
+      }));
 
-      // Map CRM enquiries → MapEnquiry type (geocode ports on the fly)
+      // Map CRM enquiries → split vessel openings from cargo enquiries
+      const cargoEnquiries: MapEnquiry[] = [];
+      const enqVessels: Vessel[] = [];
+
       if (eRes.data) {
-        const mapped: MapEnquiry[] = eRes.data.map((e: any) => {
+        for (const e of eRes.data as any[]) {
+          const isVesselOpening = !!e.vessel_name;
+
+          if (isVesselOpening) {
+            // TC enquiry with vessel_name → treat as vessel opening
+            const coord = lookupPortCoordinates(e.loading_port);
+            if (coord) {
+              enqVessels.push({
+                id: e.id,
+                name: e.vessel_name,
+                imo: null,
+                vessel_type: e.vessel_type || null,
+                dwt: e.quantity ? Number(e.quantity) : null,
+                open_port: e.loading_port,
+                open_date: e.laycan_from || null,
+                lat: coord.lat,
+                lng: coord.lng,
+                region: coord.region,
+                flag: null,
+                year_built: null,
+              });
+            }
+          }
+
+          // Also add to enquiries list (so they still appear in enquiry tables)
           const loadCoord = lookupPortCoordinates(e.loading_port);
           const dischCoord = lookupPortCoordinates(e.discharge_port);
 
-          // Map CRM status to map status
           let mapStatus = 'open';
           const s = (e.status || '').toUpperCase();
           if (s === 'FIXED' || s === 'WON' || s === 'SUBJECTS') mapStatus = 'fixed';
           else if (s === 'QUOTED' || s === 'OFFER_OUT' || s === 'COUNTERING' || s === 'IN_MARKET' || s === 'SCREENING') mapStatus = 'pending';
 
-          return {
+          cargoEnquiries.push({
             id: e.id,
             ref_no: e.enquiry_number,
             cargo: e.cargo_type || e.enquiry_mode || 'General',
@@ -89,10 +113,13 @@ export function useMapData() {
             laycan: e.laycan_from ? `${e.laycan_from}${e.laycan_to ? ' — ' + e.laycan_to : ''}` : null,
             charter_type: e.enquiry_mode,
             status: mapStatus,
-          };
-        });
-        setEnquiries(mapped);
+          });
+        }
       }
+
+      // Merge DB vessels + TC vessel openings from enquiries
+      setVessels([...dbVessels, ...enqVessels]);
+      setEnquiries(cargoEnquiries);
 
       if (pRes.data) setPorts(pRes.data as PortPda[]);
       if (tvRes.data) setTankerVessels(tvRes.data as TankerVessel[]);

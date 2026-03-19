@@ -43,6 +43,8 @@ const PORT_DB: Record<string, PortCoord> = {
   'vietnam': { lat: 10.77, lng: 106.70, region: 'SA' },
   'bangladesh': { lat: 22.33, lng: 91.83, region: 'SA' },
   'chittagong': { lat: 22.33, lng: 91.83, region: 'SA' },
+  'jakarta': { lat: -6.11, lng: 106.85, region: 'SA' },
+  'tanjung priok': { lat: -6.10, lng: 106.88, region: 'SA' },
   // Far East
   'yokohama': { lat: 35.44, lng: 139.64, region: 'FE' },
   'chiba': { lat: 35.59, lng: 140.07, region: 'FE' },
