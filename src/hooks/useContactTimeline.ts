@@ -57,7 +57,7 @@ export function useContactTimeline(contactId: string | null, enabled: boolean) {
         // Assignments (stage changes)
         supabase
           .from('contact_assignments')
-          .select('id, created_at, stage, assignment_role, status, assigned_to_crm_user_id, crm_users!contact_assignments_assigned_to_crm_user_fk(full_name)')
+          .select('id, assigned_at, stage, assignment_role, status, assigned_to_crm_user_id, crm_users!contact_assignments_assigned_to_crm_user_fk(full_name)')
           .eq('contact_id', contactId)
           .order('created_at', { ascending: false }),
 
@@ -111,7 +111,7 @@ export function useContactTimeline(contactId: string | null, enabled: boolean) {
           const actor = (a as any).crm_users?.full_name ?? null;
           merged.push({
             id: `stg-${a.id}`,
-            date: a.created_at,
+            date: a.assigned_at,
             type: 'stage_change',
             title: `${(a.stage || 'Unknown').replace(/_/g, ' ')} — ${a.assignment_role || 'assignment'}`,
             subtitle: `Status: ${a.status}`,
