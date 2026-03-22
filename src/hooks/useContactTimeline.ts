@@ -43,7 +43,7 @@ export function useContactTimeline(contactId: string | null, enabled: boolean) {
         // Interactions
         supabase
           .from('contact_interactions')
-          .select('id, interaction_at, interaction_type, outcome, subject, notes, user_id, crm_users!contact_interactions_user_id_fkey(full_name)')
+          .select('id, interaction_at, interaction_type, outcome, subject, notes, user_id, crm_users!ci_user_id_fkey(full_name)')
           .eq('contact_id', contactId)
           .order('interaction_at', { ascending: false }),
 
@@ -57,7 +57,7 @@ export function useContactTimeline(contactId: string | null, enabled: boolean) {
         // Assignments (stage changes)
         supabase
           .from('contact_assignments')
-          .select('id, created_at, stage, assignment_role, status, assigned_to_crm_user_id, crm_users!contact_assignments_assigned_to_crm_user_id_fkey(full_name)')
+          .select('id, created_at, stage, assignment_role, status, assigned_to_crm_user_id, crm_users!contact_assignments_assigned_to_crm_user_fk(full_name)')
           .eq('contact_id', contactId)
           .order('created_at', { ascending: false }),
 
