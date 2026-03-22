@@ -59,7 +59,7 @@ export function useContactTimeline(contactId: string | null, enabled: boolean) {
           .from('contact_assignments')
           .select('id, assigned_at, stage, assignment_role, status, assigned_to_crm_user_id, crm_users!contact_assignments_assigned_to_crm_user_fk(full_name)')
           .eq('contact_id', contactId)
-          .order('created_at', { ascending: false }),
+          .order('assigned_at', { ascending: false }),
 
         // Enquiries
         supabase

@@ -33,7 +33,7 @@ export async function getAssignmentsByContact(
     .from('contact_assignments')
     .select('*')
     .eq('contact_id', contactId)
-    .order('created_at', { ascending: false });
+    .order('assigned_at', { ascending: false });
 
   if (error) return { data: null, error: error.message };
   return { data: data as ContactAssignment[], error: null };
