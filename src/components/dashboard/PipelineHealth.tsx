@@ -7,6 +7,7 @@ import { AssignmentStage } from '@/types/directory';
 
 const stageConfig = [
   { key: 'COLD_CALLING' as AssignmentStage, label: 'Cold Calling', color: 'bg-blue-500' },
+  { key: 'TARGETING' as AssignmentStage, label: 'Targeting', color: 'bg-orange-500' },
   { key: 'ASPIRATION' as AssignmentStage, label: 'Aspiration', color: 'bg-amber-500' },
   { key: 'ACHIEVEMENT' as AssignmentStage, label: 'Achievement', color: 'bg-emerald-500' },
 ] as const;
@@ -14,6 +15,7 @@ const stageConfig = [
 export function PipelineHealth() {
   const [counts, setCounts] = useState<Record<AssignmentStage, number>>({
     COLD_CALLING: 0,
+    TARGETING: 0,
     ASPIRATION: 0,
     ACHIEVEMENT: 0,
   });

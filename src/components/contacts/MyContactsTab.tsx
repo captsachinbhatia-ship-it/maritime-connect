@@ -204,7 +204,7 @@ export function MyContactsTab() {
 
   // Compute stage counts from the full dataset
   const stageCounts = useMemo(() => {
-    const counts: Record<StageType, number> = { COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
+    const counts: Record<StageType, number> = { COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
     allContacts.forEach(c => {
       const key = ((c as any).stage ?? '').trim().toUpperCase() as StageType;
       if (key in counts) counts[key]++;
