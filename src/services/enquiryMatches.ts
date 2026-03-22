@@ -35,7 +35,7 @@ export async function fetchMatchedVessels(cargoEnquiryId: string): Promise<{ dat
       .from('enquiry_matches')
       .select(`
         id, match_notes, matched_at, status,
-        matched_by_user:crm_users!matched_by (full_name),
+        matched_by_user:crm_users!enquiry_matches_matched_by_fkey (full_name),
         vessel_enq:enquiries!vessel_enquiry_id (
           id, enquiry_number, vessel_name, vessel_type,
           loading_port, laycan_from,
@@ -59,7 +59,7 @@ export async function fetchMatchedCargoes(vesselEnquiryId: string): Promise<{ da
       .from('enquiry_matches')
       .select(`
         id, match_notes, matched_at, status,
-        matched_by_user:crm_users!matched_by (full_name),
+        matched_by_user:crm_users!enquiry_matches_matched_by_fkey (full_name),
         cargo_enq:enquiries!cargo_enquiry_id (
           id, enquiry_number, cargo_type, quantity, quantity_unit,
           loading_port, discharge_port, laycan_from, laycan_to,

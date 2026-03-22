@@ -357,7 +357,7 @@ export async function getTaskRecipients(taskId: string): Promise<{
       .select(
         `
         *,
-        recipient:crm_users!task_recipients_crm_user_id_fkey(full_name)
+        recipient:crm_users!task_recipients_user_fk(full_name)
       `,
       )
       .eq("task_id", taskId);

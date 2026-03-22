@@ -454,7 +454,7 @@ function CargoTable({ refreshKey }: { refreshKey: number }) {
         id, enquiry_number, cargo_type, quantity, quantity_unit,
         loading_port, discharge_port, laycan_from, laycan_to,
         vessel_type, vessel_name, status, subject, notes, created_by, created_at, deleted_at, enquiry_mode, other_requirements,
-        crm_users!created_by (full_name)
+        crm_users!enquiries_created_by_fkey (full_name)
       `)
       .in('enquiry_mode', ['SPOT', 'VOY', 'CVC', 'BB'])
       .eq('is_draft', false)
@@ -663,7 +663,7 @@ function VesselTable({ refreshKey }: { refreshKey: number }) {
         loading_port, discharge_port, laycan_from, laycan_to,
         other_requirements, status, subject, notes, cargo_type, quantity, quantity_unit,
         created_by, created_at, deleted_at, enquiry_mode,
-        crm_users!created_by (full_name)
+        crm_users!enquiries_created_by_fkey (full_name)
       `)
       .in('enquiry_mode', ['TC', 'SNP'])
       .eq('is_draft', false)

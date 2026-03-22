@@ -32,7 +32,7 @@ export async function fetchDocuments(): Promise<{ data: CrmDocument[] | null; er
         product, load_area, discharge_area, vessel_size, source_type,
         related_enquiry_id, related_company_id,
         created_at, deleted_at,
-        uploaded_by_user:crm_users!uploaded_by (full_name),
+        uploaded_by_user:crm_users!crm_documents_uploaded_by_fkey (full_name),
         related_enquiry:enquiries!related_enquiry_id (enquiry_number, subject),
         related_company:companies!related_company_id (company_name)
       `)
@@ -95,7 +95,7 @@ export async function fetchDocumentsForEnquiry(enquiryId: string): Promise<{ dat
   try {
     const { data, error } = await supabase
       .from('crm_documents')
-      .select('id, title, category, drive_url, created_at, uploaded_by_user:crm_users!uploaded_by(full_name)')
+      .select('id, title, category, drive_url, created_at, uploaded_by_user:crm_users!crm_documents_uploaded_by_fkey(full_name)')
       .eq('related_enquiry_id', enquiryId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
