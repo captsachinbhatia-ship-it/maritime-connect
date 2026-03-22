@@ -150,7 +150,7 @@ export function useContactsV2Data() {
     async (tab: TabKey) => {
       // No stage counts for deleted or inactive tabs
       if (tab === "deleted" || tab === "inactive") {
-        setStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
+        setStageCounts({ ALL: 0, COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
         return;
       }
       try {
@@ -170,6 +170,7 @@ export function useContactsV2Data() {
         const counts: Record<StageFilter, number> = {
           ALL: 0,
           COLD_CALLING: 0,
+          TARGETING: 0,
           ASPIRATION: 0,
           ACHIEVEMENT: 0,
         };
@@ -297,7 +298,7 @@ export function useContactsV2Data() {
           if (!crmUserId) {
             setRows([]);
             setTotalRows(0);
-            setMyPrimaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
+            setMyPrimaryStageCounts({ ALL: 0, COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -320,7 +321,7 @@ export function useContactsV2Data() {
           if (!assignments || assignments.length === 0) {
             setRows([]);
             setTotalRows(0);
-            setMyPrimaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
+            setMyPrimaryStageCounts({ ALL: 0, COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -349,6 +350,7 @@ export function useContactsV2Data() {
           const computedCounts: Record<StageFilter, number> = {
             ALL: 0,
             COLD_CALLING: 0,
+            TARGETING: 0,
             ASPIRATION: 0,
             ACHIEVEMENT: 0,
           };
@@ -480,7 +482,7 @@ export function useContactsV2Data() {
           if (!crmUserId) {
             setRows([]);
             setTotalRows(0);
-            setMySecondaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
+            setMySecondaryStageCounts({ ALL: 0, COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -503,7 +505,7 @@ export function useContactsV2Data() {
           if (!secAsg || secAsg.length === 0) {
             setRows([]);
             setTotalRows(0);
-            setMySecondaryStageCounts({ ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
+            setMySecondaryStageCounts({ ALL: 0, COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 });
             setIsLoading(false);
             return;
           }
@@ -525,7 +527,7 @@ export function useContactsV2Data() {
           );
 
           // Compute stage counts from contact_assignments.stage (same source as rows)
-          const secStageCounts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
+          const secStageCounts: Record<StageFilter, number> = { ALL: 0, COLD_CALLING: 0, TARGETING: 0, ASPIRATION: 0, ACHIEVEMENT: 0 };
           contactIds.forEach((cid: string) => {
             const stage = normalizeStage(primaryMap.get(cid)?.stage);
             if (stage && stage in secStageCounts) secStageCounts[stage]++;

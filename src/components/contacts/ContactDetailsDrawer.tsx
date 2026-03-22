@@ -41,6 +41,7 @@ import { EditContactModal } from './EditContactModal';
 import { DeleteContactDialog } from './DeleteContactDialog';
 import { Trash2 } from 'lucide-react';
 import { ContactQuickActions } from './ContactQuickActions';
+import { ContactTimeline } from './ContactTimeline';
 
 
 interface ContactDetailsDrawerProps {
@@ -72,7 +73,7 @@ export function ContactDetailsDrawer({
   onCompanyChange,
 }: ContactDetailsDrawerProps) {
   const { crmUser, isAdmin: authIsAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState('interactions');
+  const [activeTab, setActiveTab] = useState('activity');
   const [assignments, setAssignments] = useState<ContactAssignment[]>([]);
   const [interactions, setInteractions] = useState<ContactInteraction[]>([]);
   const [assigneeNames, setAssigneeNames] = useState<Record<string, string>>({});
@@ -279,7 +280,7 @@ export function ContactDetailsDrawer({
   // Reset state when drawer closes
   useEffect(() => {
     if (!isOpen) {
-      setActiveTab('interactions');
+      setActiveTab('activity');
       setAssignments([]);
       setInteractions([]);
       setFollowups([]);
@@ -503,6 +504,9 @@ export function ContactDetailsDrawer({
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-[calc(100vh-100px)]">
           <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-6">
+            <TabsTrigger value="activity" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
+              Activity
+            </TabsTrigger>
             <TabsTrigger value="details" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               Details
             </TabsTrigger>
@@ -518,6 +522,26 @@ export function ContactDetailsDrawer({
           </TabsList>
 
           <ScrollArea className="flex-1">
+            {/* Activity Tab — unified timeline */}
+            <TabsContent value="activity" className="m-0 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  Activity Timeline
+                </h3>
+                <Button
+                  size="sm"
+                  onClick={() => setIsAddInteractionOpen(true)}
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  Log Interaction
+                </Button>
+              </div>
+              <ContactTimeline
+                contactId={contact.id}
+                enabled={isOpen && activeTab === 'activity'}
+              />
+            </TabsContent>
+
             {/* Details Tab */}
             <TabsContent value="details" className="m-0 p-6">
               <div className="space-y-6">

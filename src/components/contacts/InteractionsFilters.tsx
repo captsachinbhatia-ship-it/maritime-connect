@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
+import { INTERACTION_TYPE_OPTIONS, ALL_OUTCOME_OPTIONS, LEGACY_OUTCOME_OPTIONS } from '@/lib/interactionConstants';
 
 export interface InteractionsFiltersState {
   type: string;
@@ -63,7 +63,12 @@ export function InteractionsFilters({ filters, onFiltersChange }: InteractionsFi
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Outcomes</SelectItem>
-            {OUTCOME_OPTIONS.map((opt) => (
+            {ALL_OUTCOME_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+            {LEGACY_OUTCOME_OPTIONS.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.icon} {opt.label}
               </SelectItem>

@@ -20,7 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { createInteraction, InteractionType } from '@/services/interactions';
-import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
+import { INTERACTION_TYPE_OPTIONS, getOutcomeOptionsForType } from '@/lib/interactionConstants';
 
 interface AddInteractionModalProps {
   contactId: string;
@@ -136,7 +136,7 @@ export function AddInteractionModal({
             </Label>
             <Select
               value={interactionType}
-              onValueChange={(val) => setInteractionType(val as InteractionType)}
+              onValueChange={(val) => { setInteractionType(val as InteractionType); setOutcome(''); }}
             >
               <SelectTrigger id="interaction-type">
                 <SelectValue placeholder="Select type" />
@@ -151,21 +151,23 @@ export function AddInteractionModal({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="outcome">Outcome</Label>
-            <Select value={outcome} onValueChange={setOutcome}>
-              <SelectTrigger id="outcome">
-                <SelectValue placeholder="Select outcome (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {OUTCOME_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.icon} {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {interactionType && getOutcomeOptionsForType(interactionType).length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="outcome">Outcome</Label>
+              <Select value={outcome} onValueChange={setOutcome}>
+                <SelectTrigger id="outcome">
+                  <SelectValue placeholder="Select outcome (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getOutcomeOptionsForType(interactionType).map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="subject">Subject</Label>

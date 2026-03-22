@@ -20,7 +20,7 @@ import { createFollowupTask } from '@/services/teamTasks';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
-import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
+import { INTERACTION_TYPE_OPTIONS, getOutcomeOptionsForType } from '@/lib/interactionConstants';
 
 interface ContactOption {
   id: string;
@@ -377,7 +377,7 @@ export function LogInteractionModal({
           {/* Interaction Type */}
           <div className="space-y-2">
             <Label>Interaction Type <span className="text-destructive">*</span></Label>
-            <Select value={interactionType} onValueChange={(v) => setInteractionType(v as InteractionType)}>
+            <Select value={interactionType} onValueChange={(v) => { setInteractionType(v as InteractionType); setOutcome(''); }}>
               <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
               <SelectContent>
                 {INTERACTION_TYPE_OPTIONS.map((t) => (
@@ -411,17 +411,19 @@ export function LogInteractionModal({
           </div>
 
           {/* Outcome */}
-          <div className="space-y-2">
-            <Label>Outcome</Label>
-            <Select value={outcome} onValueChange={setOutcome}>
-              <SelectTrigger><SelectValue placeholder="Select outcome..." /></SelectTrigger>
-              <SelectContent>
-                {OUTCOME_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.icon} {o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {interactionType && getOutcomeOptionsForType(interactionType).length > 0 && (
+            <div className="space-y-2">
+              <Label>Outcome</Label>
+              <Select value={outcome} onValueChange={setOutcome}>
+                <SelectTrigger><SelectValue placeholder="Select outcome..." /></SelectTrigger>
+                <SelectContent>
+                  {getOutcomeOptionsForType(interactionType).map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Duration */}
           {showDuration && (

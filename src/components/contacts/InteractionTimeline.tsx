@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ContactInteraction } from '@/services/interactions';
 import { extractKeywordChips } from '@/lib/interactionKeywords';
+import { getOutcomeBadgeColor, OUTCOME_BADGE_STYLES } from '@/lib/interactionConstants';
 import { InteractionComments } from './InteractionComments';
 import { LogInteractionModal, EditInteractionData } from './LogInteractionModal';
 import { useCrmUser } from '@/hooks/useCrmUser';
@@ -38,27 +39,6 @@ const INTERACTION_COLORS: Record<string, string> = {
   NOTE: 'bg-muted text-muted-foreground',
 };
 
-const OUTCOME_STYLES: Record<string, string> = {
-  INTERESTED: 'text-green-700 dark:text-green-400',
-  DEAL_PROGRESS: 'text-green-700 dark:text-green-400',
-  CLOSED_WON: 'text-green-700 dark:text-green-400',
-  NOT_INTERESTED: 'text-red-600 dark:text-red-400',
-  CLOSED_LOST: 'text-red-600 dark:text-red-400',
-  NO_RESPONSE: 'text-amber-600 dark:text-amber-400',
-  FOLLOW_UP: 'text-blue-600 dark:text-blue-400',
-  MEETING_SCHEDULED: 'text-blue-600 dark:text-blue-400',
-};
-
-const OUTCOME_ICONS: Record<string, string> = {
-  INTERESTED: '✅',
-  DEAL_PROGRESS: '📈',
-  CLOSED_WON: '🎉',
-  NOT_INTERESTED: '❌',
-  CLOSED_LOST: '📉',
-  NO_RESPONSE: '🔇',
-  FOLLOW_UP: '🔔',
-  MEETING_SCHEDULED: '📅',
-};
 
 function getTimeGroupLabel(dateStr: string): string {
   const date = new Date(dateStr);
@@ -206,11 +186,10 @@ function InteractionCard({
             <div className="flex flex-wrap items-center gap-1.5 text-xs mt-2">
               {interaction.outcome && (
                 <span
-                  className={`font-medium ${
-                    OUTCOME_STYLES[interaction.outcome] || 'text-muted-foreground'
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    OUTCOME_BADGE_STYLES[getOutcomeBadgeColor(interaction.outcome)]
                   }`}
                 >
-                  {OUTCOME_ICONS[interaction.outcome] || '•'}{' '}
                   {interaction.outcome.replace(/_/g, ' ')}
                 </span>
               )}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Users, X } from "lucide-react";
+import { Download, Loader2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -31,6 +31,7 @@ export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete
   const [assigneeUserId, setAssigneeUserId] = useState<string>("");
   const [bulkStage, setBulkStage] = useState<string>("");
   const [isApplying, setIsApplying] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     getActiveCrmUsers().then((r) => {
@@ -127,6 +128,85 @@ export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete
     }
   };
 
+  const handleExportCsv = async () => {
+    if (count === 0) return;
+    setIsExporting(true);
+
+    try {
+      // Fetch contacts with joined data for the selected IDs (batch of 50 max per Supabase)
+      const batches: any[][] = [];
+      for (let i = 0; i < selectedIds.length; i += 50) {
+        const batch = selectedIds.slice(i, i + 50);
+        const { data } = await supabase
+          .from("v_directory_contacts")
+          .select("id, full_name, email, company_name, primary_stage, primary_owner_id")
+          .in("id", batch);
+        if (data) batches.push(data);
+      }
+      const rows = batches.flat();
+
+      // Resolve owner names
+      const ownerIds = [...new Set(rows.map((r) => r.primary_owner_id).filter(Boolean))];
+      const ownerNameMap: Record<string, string> = {};
+      if (ownerIds.length > 0) {
+        const { data: ownerData } = await supabase
+          .from("crm_users")
+          .select("id, full_name")
+          .in("id", ownerIds);
+        (ownerData || []).forEach((u: any) => {
+          ownerNameMap[u.id] = u.full_name;
+        });
+      }
+
+      // Fetch primary phone numbers
+      const phoneMap: Record<string, string> = {};
+      for (let i = 0; i < selectedIds.length; i += 50) {
+        const batch = selectedIds.slice(i, i + 50);
+        const { data: phones } = await supabase
+          .from("contact_phones")
+          .select("contact_id, phone_number")
+          .in("contact_id", batch)
+          .eq("is_primary", true);
+        (phones || []).forEach((p: any) => {
+          phoneMap[p.contact_id] = p.phone_number;
+        });
+      }
+
+      // Build CSV
+      const header = ["Full Name", "Email", "Phone", "Company", "Stage", "Assigned Broker"];
+      const csvRows = rows.map((r) => [
+        r.full_name || "",
+        r.email || "",
+        phoneMap[r.id] || "",
+        r.company_name || "",
+        (r.primary_stage || "").replace(/_/g, " "),
+        r.primary_owner_id ? ownerNameMap[r.primary_owner_id] || "" : "",
+      ]);
+
+      const escapeCsv = (val: string) => {
+        if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return val;
+      };
+
+      const csv = [header, ...csvRows].map((row) => row.map(escapeCsv).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `contacts-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({ title: "Export complete", description: `${rows.length} contacts exported to CSV` });
+    } catch (e: any) {
+      toast({ title: "Export failed", description: e?.message || "Unexpected error", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 mb-3">
       <div className="flex items-center gap-2 mr-2">
@@ -174,6 +254,14 @@ export function DirectoryBulkToolbar({ selectedIds, onClearSelection, onComplete
           </>
         ) : (
           "Apply"
+        )}
+      </Button>
+
+      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleExportCsv} disabled={isExporting || isApplying}>
+        {isExporting ? (
+          <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Exporting…</>
+        ) : (
+          <><Download className="mr-1 h-3 w-3" />Export CSV</>
         )}
       </Button>
 

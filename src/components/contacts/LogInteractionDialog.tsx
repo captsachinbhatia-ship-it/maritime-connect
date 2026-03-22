@@ -32,7 +32,7 @@ import { toast } from '@/hooks/use-toast';
 import { createInteraction, InteractionType } from '@/services/interactions';
 import { createFollowupTask } from '@/services/teamTasks';
 import { useCrmUser } from '@/hooks/useCrmUser';
-import { INTERACTION_TYPE_OPTIONS, OUTCOME_OPTIONS } from '@/lib/interactionConstants';
+import { INTERACTION_TYPE_OPTIONS, getOutcomeOptionsForType } from '@/lib/interactionConstants';
 
 interface LogInteractionDialogProps {
   contactId: string;
@@ -190,7 +190,7 @@ export function LogInteractionDialog({
           {/* Interaction Type */}
           <div className="space-y-2">
             <Label>Interaction Type <span className="text-destructive">*</span></Label>
-            <Select value={interactionType} onValueChange={(val) => setInteractionType(val as InteractionType)}>
+            <Select value={interactionType} onValueChange={(val) => { setInteractionType(val as InteractionType); setOutcome(''); }}>
               <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
               <SelectContent>
                 {INTERACTION_TYPE_OPTIONS.map((type) => (
@@ -224,17 +224,19 @@ export function LogInteractionDialog({
           </div>
 
           {/* Outcome */}
-          <div className="space-y-2">
-            <Label>Outcome</Label>
-            <Select value={outcome} onValueChange={setOutcome}>
-              <SelectTrigger><SelectValue placeholder="Select outcome..." /></SelectTrigger>
-              <SelectContent>
-                {OUTCOME_OPTIONS.map((out) => (
-                  <SelectItem key={out.value} value={out.value}>{out.icon} {out.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {interactionType && getOutcomeOptionsForType(interactionType).length > 0 && (
+            <div className="space-y-2">
+              <Label>Outcome</Label>
+              <Select value={outcome} onValueChange={setOutcome}>
+                <SelectTrigger><SelectValue placeholder="Select outcome..." /></SelectTrigger>
+                <SelectContent>
+                  {getOutcomeOptionsForType(interactionType).map((out) => (
+                    <SelectItem key={out.value} value={out.value}>{out.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Duration */}
           {showDuration && (

@@ -20,6 +20,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { assignPrimaryContactOwner, getActiveCrmUsers } from '@/services/assignPrimary';
+import { createColdCallSequence } from '@/services/coldCallSequence';
 
 interface AssignPrimaryModalProps {
   open: boolean;
@@ -92,11 +93,31 @@ export function AssignPrimaryModal({
     }
 
     const assigneeName = users.find(u => u.id === selectedUserId)?.full_name || 'User';
-    
-    toast({
-      title: 'Assignment successful',
-      description: `Assigned to ${assigneeName}`,
-    });
+
+    // Auto-create cold call follow-up sequence
+    if (selectedStage === 'COLD_CALLING' && result.data?.assignment_id) {
+      const seqError = await createColdCallSequence({
+        contactId,
+        assignedTo: selectedUserId,
+        assignmentId: result.data.assignment_id,
+      });
+      if (!seqError) {
+        toast({
+          title: 'Assignment successful',
+          description: `Assigned to ${assigneeName} — 3 follow-ups scheduled`,
+        });
+      } else {
+        toast({
+          title: 'Assignment successful',
+          description: `Assigned to ${assigneeName} (follow-up sequence failed: ${seqError})`,
+        });
+      }
+    } else {
+      toast({
+        title: 'Assignment successful',
+        description: `Assigned to ${assigneeName}`,
+      });
+    }
 
     setIsSaving(false);
     onOpenChange(false);

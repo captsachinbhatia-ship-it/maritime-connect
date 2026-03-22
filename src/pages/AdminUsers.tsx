@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { UserPlus, RefreshCw } from 'lucide-react';
 import { UsersTable } from '@/components/admin/UsersTable';
 import { AddUserModal } from '@/components/admin/AddUserModal';
+import { AutoSequenceToggle } from '@/components/contacts/AutoSequenceToggle';
 import { listCrmUsers, CrmUser } from '@/services/users';
 import { useToast } from '@/hooks/use-toast';
 
@@ -82,6 +83,17 @@ export default function AdminUsers() {
         </CardHeader>
         <CardContent>
           <UsersTable users={users} isLoading={isLoading} onRefresh={fetchUsers} />
+        </CardContent>
+      </Card>
+
+      {/* Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Settings</CardTitle>
+          <CardDescription>Automation and workflow settings</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AutoSequenceToggle />
         </CardContent>
       </Card>
 

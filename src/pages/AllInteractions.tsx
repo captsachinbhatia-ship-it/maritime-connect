@@ -13,6 +13,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { LogInteractionModal, EditInteractionData } from '@/components/contacts/LogInteractionModal';
 import { InteractionComments } from '@/components/contacts/InteractionComments';
 import { useCrmUser } from '@/hooks/useCrmUser';
+import { ALL_OUTCOME_OPTIONS, LEGACY_OUTCOME_OPTIONS, getOutcomeBadgeColor, OUTCOME_BADGE_STYLES } from '@/lib/interactionConstants';
 import { useAuth } from '@/contexts/AuthContext';
 import { InteractionType } from '@/services/interactions';
 
@@ -150,10 +151,12 @@ export default function AllInteractions() {
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Outcomes</SelectItem>
-            <SelectItem value="INTERESTED">Positive</SelectItem>
-            <SelectItem value="NO_RESPONSE">No Response</SelectItem>
-            <SelectItem value="NOT_INTERESTED">Not Interested</SelectItem>
-            <SelectItem value="FOLLOW_UP">Follow-up Needed</SelectItem>
+            {ALL_OUTCOME_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+            {LEGACY_OUTCOME_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.icon} {opt.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -229,7 +232,7 @@ export default function AllInteractions() {
                         {ix.notes && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ix.notes}</p>}
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <Badge variant="secondary" className="text-[10px] py-0 h-4">{ix.interaction_type}</Badge>
-                          {ix.outcome && <Badge variant="outline" className="text-[10px] py-0 h-4">{ix.outcome}</Badge>}
+                          {ix.outcome && <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-medium h-4 ${OUTCOME_BADGE_STYLES[getOutcomeBadgeColor(ix.outcome)]}`}>{ix.outcome.replace(/_/g, ' ')}</span>}
                           {ix.creator_full_name && <span className="text-[10px] text-muted-foreground">by {ix.creator_full_name}</span>}
                           <span className="text-[10px] text-muted-foreground ml-auto">
                             {formatDistanceToNow(new Date(ix.interaction_at), { addSuffix: true })}

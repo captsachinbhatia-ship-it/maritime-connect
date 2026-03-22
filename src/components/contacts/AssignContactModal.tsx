@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { getActiveCrmUsers } from '@/services/assignPrimary';
 import { addAssignment, type AssignmentStage, type AssignmentRole } from '@/services/assignments';
+import { createColdCallSequence } from '@/services/coldCallSequence';
 import { useToast } from '@/hooks/use-toast';
 
 interface AssignContactModalProps {
@@ -107,10 +108,31 @@ export function AssignContactModal({
 
     const assigneeName = users.find(u => u.id === selectedUserId)?.full_name || 'User';
 
-    toast({
-      title: 'Assignment successful',
-      description: `${assigneeName} assigned as ${assignmentRole.toLowerCase()} owner`,
-    });
+    // Auto-create cold call sequence for primary COLD_CALLING assignments
+    const effectiveStage = assignmentRole === 'primary' ? selectedStage : 'COLD_CALLING';
+    if (assignmentRole === 'primary' && effectiveStage === 'COLD_CALLING' && result.data?.assignmentId) {
+      const seqError = await createColdCallSequence({
+        contactId,
+        assignedTo: selectedUserId,
+        assignmentId: result.data.assignmentId,
+      });
+      if (!seqError) {
+        toast({
+          title: 'Assignment successful',
+          description: `${assigneeName} assigned — 3 follow-ups scheduled`,
+        });
+      } else {
+        toast({
+          title: 'Assignment successful',
+          description: `${assigneeName} assigned (follow-up sequence failed)`,
+        });
+      }
+    } else {
+      toast({
+        title: 'Assignment successful',
+        description: `${assigneeName} assigned as ${assignmentRole.toLowerCase()} owner`,
+      });
+    }
 
     setIsSaving(false);
     onOpenChange(false);

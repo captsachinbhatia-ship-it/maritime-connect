@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { MessageSquare, Phone, Mail, Video, StickyNote, PlusCircle, ExternalLink, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { LogInteractionModal } from '@/components/contacts/LogInteractionModal';
+import { getOutcomeBadgeColor, OUTCOME_BADGE_STYLES } from '@/lib/interactionConstants';
 
 interface RecentInteraction {
   id: string;
@@ -198,9 +199,9 @@ export function RecentInteractions({ crmUserId: crmUserIdProp }: RecentInteracti
                         {interaction.interaction_type}
                       </Badge>
                       {interaction.outcome && (
-                        <Badge variant="outline" className="text-[10px] py-0 h-4">
-                          {interaction.outcome}
-                        </Badge>
+                        <span className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-medium h-4 ${OUTCOME_BADGE_STYLES[getOutcomeBadgeColor(interaction.outcome)]}`}>
+                          {interaction.outcome.replace(/_/g, ' ')}
+                        </span>
                       )}
                       {commercialChips.map(chip => (
                         <Badge key={chip} variant="default" className="text-[10px] py-0 h-4 bg-amber-500/15 text-amber-700 border-amber-300/50">

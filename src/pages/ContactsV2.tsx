@@ -21,6 +21,8 @@ import {
   UserX,
   RotateCcw,
   Ban,
+  LayoutGrid,
+  Columns3,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +56,9 @@ import { EditContactModal } from '@/components/contacts/EditContactModal';
 import { DeleteContactDialog } from '@/components/contacts/DeleteContactDialog';
 import { DirectoryBulkToolbar } from '@/components/contacts/DirectoryBulkToolbar';
 import { InlineOwnerSelector } from '@/components/contacts/InlineOwnerSelector';
+import { SmartViewsDropdown } from '@/components/contacts/SmartViewsDropdown';
+import { ContactKanbanView } from '@/components/contacts/ContactKanbanView';
+import type { SmartViewFilters } from '@/hooks/useSmartViews';
 import { supabase } from '@/lib/supabaseClient';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { useAuth } from '@/contexts/AuthContext';
@@ -942,6 +947,15 @@ export default function ContactsV2() {
 
   const cumulative = useCumulativeCounts();
 
+  // ── View mode (table vs kanban) ────────────────────────────────
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>(() => {
+    return (localStorage.getItem('contacts-view-mode') as 'table' | 'kanban') || 'table';
+  });
+  const toggleViewMode = (mode: 'table' | 'kanban') => {
+    setViewMode(mode);
+    localStorage.setItem('contacts-view-mode', mode);
+  };
+
   // ── Selection state ────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -1382,6 +1396,27 @@ export default function ContactsV2() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex rounded-lg border p-0.5">
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => toggleViewMode('table')}
+              title="Table view"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => toggleViewMode('kanban')}
+              title="Pipeline view"
+            >
+              <Columns3 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
           <Button asChild variant="outline">
             <Link to="/contacts/bulk-import">
               <FileUp className="mr-2 h-4 w-4" />
@@ -1436,20 +1471,51 @@ export default function ContactsV2() {
         </button>
       </div>
 
-      {/* Stage chips (My Primary only) + search */}
+      {/* Stage chips (My Primary only) + search + Smart Views */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {activeTab === 'my-primary' && (
           <StageChipBar counts={activeTab === 'my-primary' ? myPrimaryStageCounts : stageCounts} active={stageFilter} onChange={setStageFilter} />
         )}
-        <div className={`relative w-full max-w-sm ${activeTab !== 'my-primary' ? '' : ''}`}>
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            key={activeTab}
-            type="text"
-            placeholder={isDirectory ? 'Search name, company…' : 'Search name, company, email, phone…'}
-            defaultValue={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9"
+        <div className="flex items-center gap-2 w-full max-w-lg">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              key={activeTab}
+              type="text"
+              placeholder={isDirectory ? 'Search name, company…' : 'Search name, company, email, phone…'}
+              defaultValue={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <SmartViewsDropdown
+            currentFilters={{
+              stage: stageFilter !== 'ALL' ? [stageFilter] : undefined,
+              ownerUserId: ownerFilter.userId || undefined,
+              search: search || undefined,
+            }}
+            onApplyFilters={(filters: SmartViewFilters) => {
+              if (filters.stage && filters.stage.length > 0) {
+                setStageFilter(filters.stage[0] as any);
+              } else {
+                setStageFilter('ALL');
+              }
+              if (filters.ownerUserId) {
+                setOwnerFilter({ userId: filters.ownerUserId, role: 'PRIMARY', unassigned: false });
+              } else {
+                setOwnerFilter({ userId: null, role: null, unassigned: false });
+              }
+              if (filters.search) {
+                setSearch(filters.search);
+              }
+              if (!isDirectory) changeTab('directory');
+            }}
+            onClear={() => {
+              setStageFilter('ALL');
+              setOwnerFilter({ userId: null, role: null, unassigned: false });
+              setSearch('');
+              setAlphaFilter(null);
+            }}
           />
         </div>
       </div>
@@ -1481,35 +1547,52 @@ export default function ContactsV2() {
         </Alert>
       )}
 
-      {/* A-Z Filter + Top Pagination (Directory only) */}
-      {isDirectory && (
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <AlphaFilterBar active={alphaFilter} onChange={setAlphaFilter} />
-          {!isLoading && totalPages > 1 && (
-            <PaginationBar page={page} totalPages={totalPages} totalRows={totalRows} onPageChange={changePage} compact />
-          )}
-        </div>
-      )}
-
-      {/* Table */}
-      {isLoading ? (
-        <TableSkeleton />
-      ) : (
-        <ContactsV2Table
+      {/* Kanban view */}
+      {viewMode === 'kanban' ? (
+        <ContactKanbanView
           rows={rows}
-          activeTab={activeTab}
-          isAdmin={isAdmin}
-          crmUserId={crmUserId}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          onToggleAll={toggleAll}
-          allSelected={allSelected}
-          onRowClick={handleRowClick}
-          onRowAction={handleRowAction}
-          onInlineAssign={handleInlineAssign}
-          onInlineRemove={handleInlineRemove}
-          onStageChange={refetchAll}
+          isLoading={isLoading}
+          onRefresh={refetchAll}
+          onOpenContact={(contact, stage) => {
+            setDrawerContact(contact);
+            setDrawerStage(stage);
+            setDrawerRestricted(false);
+            setDrawerOpen(true);
+          }}
         />
+      ) : (
+        <>
+          {/* A-Z Filter + Top Pagination (Directory only) */}
+          {isDirectory && (
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <AlphaFilterBar active={alphaFilter} onChange={setAlphaFilter} />
+              {!isLoading && totalPages > 1 && (
+                <PaginationBar page={page} totalPages={totalPages} totalRows={totalRows} onPageChange={changePage} compact />
+              )}
+            </div>
+          )}
+
+          {/* Table */}
+          {isLoading ? (
+            <TableSkeleton />
+          ) : (
+            <ContactsV2Table
+              rows={rows}
+              activeTab={activeTab}
+              isAdmin={isAdmin}
+              crmUserId={crmUserId}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onToggleAll={toggleAll}
+              allSelected={allSelected}
+              onRowClick={handleRowClick}
+              onRowAction={handleRowAction}
+              onInlineAssign={handleInlineAssign}
+              onInlineRemove={handleInlineRemove}
+              onStageChange={refetchAll}
+            />
+          )}
+        </>
       )}
 
       {/* Bottom Pagination */}

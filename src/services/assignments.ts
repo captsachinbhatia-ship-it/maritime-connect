@@ -194,7 +194,7 @@ export async function addAssignment(params: {
   stage: AssignmentStage;
   /** Pass crm_users.id from useCrmUser() to avoid an extra DB round-trip. */
   assigned_by_crm_user_id?: string | null;
-}): Promise<{ data: boolean | null; error: string | null }> {
+}): Promise<{ data: { assignmentId: string | null } | null; error: string | null }> {
   const now = new Date().toISOString();
 
   try {
@@ -221,8 +221,8 @@ export async function addAssignment(params: {
       .is('ended_at', null)
       .eq('assignment_role', params.assignment_role.toUpperCase());
 
-    // Insert new
-    const { error } = await supabase
+    // Insert new and return the id
+    const { data: inserted, error } = await supabase
       .from('contact_assignments')
       .insert({
         contact_id: params.contact_id,
@@ -231,10 +231,12 @@ export async function addAssignment(params: {
         assignment_role: params.assignment_role.toUpperCase(),
         stage: params.assignment_role.toUpperCase() === 'PRIMARY' ? params.stage : 'COLD_CALLING',
         status: 'ACTIVE',
-      });
+      })
+      .select('id')
+      .single();
 
     if (error) return { data: null, error: error.message };
-    return { data: true, error: null };
+    return { data: { assignmentId: inserted?.id || null }, error: null };
   } catch (e: any) {
     return { data: null, error: e?.message || 'Unexpected error in addAssignment' };
   }
