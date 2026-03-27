@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabaseClient";
 
 export interface MarketFixture {
   id: string;
@@ -90,14 +90,15 @@ export async function uploadMarketReport(
     if (uploadedBy) formData.append("uploaded_by", uploadedBy);
 
     const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData.session?.access_token;
+    const token = sessionData.session?.access_token ?? SUPABASE_ANON_KEY;
 
     const res = await fetch(
-      `https://kirwzfxgzzqxtesolhbg.supabase.co/functions/v1/parse-market-report`,
+      `${SUPABASE_URL}/functions/v1/parse-market-report`,
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          apikey: SUPABASE_ANON_KEY,
         },
         body: formData,
       }
