@@ -58,8 +58,8 @@ export function FixtureTable({ fixtures, vesselClass }: Props) {
   const sorted = useMemo(() => {
     const arr = [...fixtures];
     arr.sort((a, b) => {
-      const av = (a as Record<string, unknown>)[sortCol];
-      const bv = (b as Record<string, unknown>)[sortCol];
+      const av = (a as unknown as Record<string, unknown>)[sortCol];
+      const bv = (b as unknown as Record<string, unknown>)[sortCol];
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
