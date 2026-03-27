@@ -13,6 +13,7 @@ import {
   FolderOpen,
   TrendingUp,
   Globe,
+  Newspaper,
 } from 'lucide-react';
 import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
@@ -42,6 +43,7 @@ const navItems = [
   { title: 'Documents', url: '/documents', icon: FolderOpen },
   { title: 'Performance', url: '/performance', icon: TrendingUp },
   { title: 'Map View', url: '/map', icon: Globe },
+  { title: 'Market Reports', url: '/market-reports', icon: Newspaper },
 ];
 
 const adminNavItems = [
