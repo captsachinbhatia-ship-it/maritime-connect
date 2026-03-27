@@ -28,6 +28,7 @@ import AllFollowups from "./pages/AllFollowups";
 import Documents from "./pages/Documents";
 import Performance from "./pages/Performance";
 import MapView from "./pages/MapView";
+import MarketReports from "./pages/MarketReports";
 import { AdminRoute } from "./components/AdminRoute";
 
 import CompleteProfile from "./pages/CompleteProfile";
@@ -80,6 +81,7 @@ const App = () => {
                 <Route path="documents" element={<Documents />} />
                 <Route path="performance" element={<Performance />} />
                 <Route path="map" element={<MapView />} />
+                <Route path="market-reports" element={<MarketReports />} />
                 <Route element={<AdminRoute />}>
                   <Route path="reporting" element={<Reporting />} />
                 </Route>
