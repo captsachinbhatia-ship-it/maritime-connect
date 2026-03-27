@@ -81,6 +81,7 @@ export default function MarketReports() {
 
     const { data, error: err } = await fetchMarketData(selectedDate);
     if (err) {
+      console.warn("[MarketReports] fetch error:", err);
       setError(err);
     } else {
       setFixtures(data ?? []);
