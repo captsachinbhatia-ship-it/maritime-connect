@@ -93,7 +93,7 @@ export async function uploadMarketReport(
     const token = sessionData.session?.access_token;
 
     const res = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL ?? "https://kirwzfxgzzqxtesolhbg.supabase.co"}/functions/v1/parse-market-report`,
+      `https://kirwzfxgzzqxtesolhbg.supabase.co/functions/v1/parse-market-report`,
       {
         method: "POST",
         headers: {
