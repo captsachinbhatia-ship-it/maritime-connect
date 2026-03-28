@@ -24,6 +24,7 @@ export interface MarketFixture {
   rate_numeric: number | null;
   fixture_status: string | null;
   broker: string | null;
+  coating: string | null;
   confidence: number | null;
   pdf_filename: string | null;
   created_at: string;
@@ -40,7 +41,7 @@ export async function fetchMarketData(filters?: {
     let query = supabase
       .from("market_data")
       .select(
-        "id, report_source, report_date, vessel_name, vessel_class, dwt, built_year, owner, charterer, cargo_grade, cargo_type, quantity_mt, load_port, load_region, discharge_port, discharge_region, laycan_from, laycan_to, rate_type, rate_value, rate_numeric, fixture_status, broker, confidence, pdf_filename, created_at"
+        "id, report_source, report_date, vessel_name, vessel_class, dwt, built_year, owner, charterer, cargo_grade, cargo_type, quantity_mt, load_port, load_region, discharge_port, discharge_region, laycan_from, laycan_to, rate_type, rate_value, rate_numeric, fixture_status, broker, coating, confidence, pdf_filename, created_at"
       )
       .order("report_date", { ascending: false })
       .order("vessel_class", { ascending: true })

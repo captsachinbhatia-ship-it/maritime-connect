@@ -39,6 +39,7 @@ interface FixtureRow {
   rate_numeric: number | null;
   fixture_status: string | null;
   broker: string | null;
+  coating: string | null;
   confidence: number | null;
   raw_text: string | null;
 }
@@ -72,14 +73,14 @@ Return a JSON object with these top-level keys:
 Each fixture object must have these fields (use null for missing values):
 
 - vessel_name: string — vessel name (e.g. "FRONT DEFENDER")
-- vessel_class: string — one of: VLCC, Suezmax, Aframax, MR, LR1, LR2 (infer from DWT or report section if not explicit)
+- vessel_class: string — one of: VLCC, ULCC, Suezmax, Aframax, Panamax, LR2, LR1, MR, Small Tanker, GP, Handy, Coaster, VLGC, LGC, MGC, SGC, Chemical, Capesize, Kamsarmax, Supramax, Handymax, Handysize (infer from DWT, cargo, or report section)
 - dwt: number — deadweight tonnage
 - built_year: number — year built
 - flag: string — vessel flag state
 - owner: string — vessel owner/operator
 - charterer: string — chartering company
 - cargo_grade: string — specific cargo (e.g. "Arabian Light", "Naphtha", "Fuel Oil 380")
-- cargo_type: string — one of: Crude, CPP, DPP, Chemical, LPG
+- cargo_type: string — one of: Crude, CPP, DPP, Chemical, LPG, LNG, Vegetable Oil, Dry Bulk
 - quantity_mt: number — cargo quantity in metric tons
 - quantity_cbm: number — cargo quantity in cubic meters
 - load_port: string — loading port
@@ -93,16 +94,26 @@ Each fixture object must have these fields (use null for missing values):
 - rate_numeric: number — parsed numeric value (WS points as integer, USD amounts in full, e.g. 850000 not 850k)
 - fixture_status: string — one of: reported, fixed, on_subs, failed, withdrawn
 - broker: string — broker name if mentioned
+- coating: string — tank coating if mentioned (e.g. "Epoxy", "Phenolic Epoxy", "Zinc", "Stainless Steel", "Marineline", or null)
 - confidence: number — your confidence in the extraction accuracy (0.0 to 1.0)
 - raw_text: string — the original line(s) from the report for this fixture
 
 Vessel class inference rules:
-- VLCC: 200,000+ DWT
-- Suezmax: 120,000–199,999 DWT
-- Aframax: 80,000–119,999 DWT
+- VLCC: 200,000+ DWT (crude)
+- ULCC: 320,000+ DWT (crude)
+- Suezmax: 120,000–199,999 DWT (crude)
+- Aframax: 80,000–119,999 DWT (crude/dirty)
+- Panamax: 60,000–80,000 DWT
 - LR2: 80,000–119,999 DWT (clean/CPP cargo)
 - LR1: 55,000–79,999 DWT (clean/CPP cargo)
-- MR: 25,000–54,999 DWT
+- MR: 25,000–54,999 DWT (clean products)
+- Small Tanker: 3,000–10,000 DWT
+- GP: 10,000–24,999 DWT
+- Handy: 25,000–39,999 DWT (general/chemical)
+- VLGC: 80,000+ cbm (LPG)
+- LGC/MGC/SGC: smaller gas carriers
+- Chemical: chemical tankers with coated tanks
+- Capesize/Kamsarmax/Supramax/Handymax/Handysize: dry bulk vessels
 
 Date inference: If the report only says "5/4" or "Apr 5", interpret relative to the report date. Convert to YYYY-MM-DD.
 
@@ -350,6 +361,7 @@ Deno.serve(async (req: Request) => {
       rate_numeric: f.rate_numeric,
       fixture_status: f.fixture_status ?? "reported",
       broker: f.broker,
+      coating: f.coating,
       confidence: f.confidence,
       uploaded_by: uploadedBy,
       pdf_filename: fileName,

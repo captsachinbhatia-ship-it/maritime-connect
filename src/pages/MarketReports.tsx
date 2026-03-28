@@ -28,8 +28,12 @@ import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
 import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
 import { detectDiscrepancies } from "@/lib/discrepancies";
-
-const VESSEL_CLASSES = ["VLCC", "Suezmax", "Aframax", "LR2", "LR1", "MR"];
+import {
+  VESSEL_CLASSES,
+  VESSEL_CLASS_FILTER_OPTIONS,
+  CARGO_TYPE_FILTER_OPTIONS,
+  COATING_FILTER_OPTIONS,
+} from "@/lib/marketConstants";
 
 const SOURCE_OPTIONS = [
   { value: "all", label: "All Sources" },
@@ -47,20 +51,6 @@ const STATUS_OPTIONS = [
   { value: "reported", label: "Reported" },
   { value: "failed", label: "Failed" },
   { value: "withdrawn", label: "Withdrawn" },
-];
-
-const VESSEL_CLASS_OPTIONS = [
-  { value: "all", label: "All Vessel Types" },
-  ...VESSEL_CLASSES.map((c) => ({ value: c, label: c })),
-];
-
-const CARGO_TYPE_OPTIONS = [
-  { value: "all", label: "All Cargo Types" },
-  { value: "Crude", label: "Crude" },
-  { value: "CPP", label: "CPP" },
-  { value: "DPP", label: "DPP" },
-  { value: "Chemical", label: "Chemical" },
-  { value: "LPG", label: "LPG" },
 ];
 
 /** Extract unique non-null values from fixtures for a given field */
@@ -95,6 +85,7 @@ export default function MarketReports() {
   const [filterLoadPort, setFilterLoadPort] = useState("all");
   const [filterDischPort, setFilterDischPort] = useState("all");
   const [filterVesselName, setFilterVesselName] = useState("all");
+  const [filterCoating, setFilterCoating] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [laycanFrom, setLaycanFrom] = useState("");
@@ -157,6 +148,8 @@ export default function MarketReports() {
         return false;
       if (filterVesselName !== "all" && f.vessel_name !== filterVesselName)
         return false;
+      if (filterCoating !== "all" && f.coating !== filterCoating)
+        return false;
 
       // Laycan date range
       if (laycanFrom && f.laycan_from && f.laycan_from < laycanFrom)
@@ -201,8 +194,8 @@ export default function MarketReports() {
   }, [
     fixtures, filterSource, filterStatus, filterVesselClass, filterCargoType,
     filterLoadRegion, filterDischRegion, filterLoadPort, filterDischPort,
-    filterVesselName, laycanFrom, laycanTo, dwtMin, dwtMax, qtyMin, qtyMax,
-    searchTerm,
+    filterVesselName, filterCoating, laycanFrom, laycanTo, dwtMin, dwtMax,
+    qtyMin, qtyMax, searchTerm,
   ]);
 
   // Group by vessel class
@@ -244,6 +237,7 @@ export default function MarketReports() {
     setFilterLoadPort("all");
     setFilterDischPort("all");
     setFilterVesselName("all");
+    setFilterCoating("all");
     setDateFrom("");
     setDateTo("");
     setLaycanFrom("");
@@ -264,6 +258,7 @@ export default function MarketReports() {
     filterLoadPort !== "all" ||
     filterDischPort !== "all" ||
     filterVesselName !== "all" ||
+    filterCoating !== "all" ||
     searchTerm !== "" ||
     dateFrom !== "" ||
     dateTo !== "" ||
@@ -284,6 +279,7 @@ export default function MarketReports() {
     filterLoadPort !== "all",
     filterDischPort !== "all",
     filterVesselName !== "all",
+    filterCoating !== "all",
     searchTerm !== "",
     dateFrom !== "" || dateTo !== "",
     laycanFrom !== "" || laycanTo !== "",
@@ -363,7 +359,7 @@ export default function MarketReports() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {VESSEL_CLASS_OPTIONS.map((o) => (
+            {VESSEL_CLASS_FILTER_OPTIONS.map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}
               </SelectItem>
@@ -375,7 +371,7 @@ export default function MarketReports() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {CARGO_TYPE_OPTIONS.map((o) => (
+            {CARGO_TYPE_FILTER_OPTIONS.map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}
               </SelectItem>
@@ -486,6 +482,18 @@ export default function MarketReports() {
                 {dischRegions.map((v) => (
                   <SelectItem key={v} value={v}>
                     {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterCoating} onValueChange={setFilterCoating}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectValue placeholder="Coating" />
+              </SelectTrigger>
+              <SelectContent>
+                {COATING_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
