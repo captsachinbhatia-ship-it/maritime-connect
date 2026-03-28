@@ -276,6 +276,15 @@ export function FixtureTable({
                       }
                       return null;
                     })()}
+                    {row.is_repeat && (
+                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-orange-50 text-orange-600 border-orange-200">repeat</Badge>
+                    )}
+                    {row.status_discrepancy && (
+                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-yellow-50 text-yellow-700 border-yellow-200">status</Badge>
+                    )}
+                    {row.vessel_type_mismatch && (
+                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-blue-50 text-blue-600 border-blue-200">type?</Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs tabular-nums">
                     {row.dwt ? row.dwt.toLocaleString() : "—"}
@@ -330,6 +339,9 @@ export function FixtureTable({
                     className="text-xs font-mono whitespace-nowrap"
                   >
                     {row.rate_value || "—"}
+                    {row.rate_ws != null && row.rate_lumpsum != null && (
+                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-yellow-50 text-yellow-700 border-yellow-200">WS+LS</Badge>
+                    )}
                   </DiscrepantCell>
                   <DiscrepantCell
                     fixtureId={row.id}
