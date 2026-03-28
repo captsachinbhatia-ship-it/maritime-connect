@@ -389,7 +389,26 @@ Deno.serve(async (req: Request) => {
     // Extract fixtures via Claude (auto-detects source & date)
     const extraction = await extractFixtures(base64, mediaType);
 
-    const reportSource = extraction.report_source ?? "unknown";
+    // Determine report source — fallback to filename matching if Claude says "unknown"
+    let reportSource = extraction.report_source ?? "unknown";
+    if (reportSource === "unknown") {
+      const fn = fileName.toLowerCase();
+      const SOURCE_PATTERNS: Record<string, string[]> = {
+        meiwa_vlcc: ["meiwa", "vlcc"],
+        meiwa_dirty: ["meiwa", "dirty"],
+        presco: ["presco"],
+        gibson: ["gibson"],
+        vantage_dpp: ["vantage"],
+        eastport: ["eastport"],
+        alliance: ["alliance"],
+      };
+      for (const [src, keywords] of Object.entries(SOURCE_PATTERNS)) {
+        if (keywords.every((kw) => fn.includes(kw))) {
+          reportSource = src;
+          break;
+        }
+      }
+    }
 
     // Sanity check: if Claude returned a date more than 30 days from today, use today
     let reportDate = extraction.report_date ?? new Date().toISOString().slice(0, 10);
