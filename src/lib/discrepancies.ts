@@ -70,7 +70,7 @@ export function detectDiscrepancies(fixtures: MarketFixture[]): {
     for (const field of COMPARE_FIELDS) {
       const values: Record<string, string | number | null> = {};
       for (const [src, f] of bySource) {
-        values[src] = (f as Record<string, unknown>)[field] as
+        values[src] = (f as unknown as Record<string, unknown>)[field] as
           | string
           | number
           | null;
