@@ -1,4 +1,4 @@
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
 export interface MarketFixture {
   id: string;
@@ -83,30 +83,36 @@ export async function uploadMarketReport(
   uploadedBy: string | null
 ): Promise<{ inserted: number; error: string | null }> {
   try {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("report_source", reportSource);
-    formData.append("report_date", reportDate);
-    if (uploadedBy) formData.append("uploaded_by", uploadedBy);
+    // Read file as base64 to send via JSON (avoids multipart CORS issues)
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (let i = 0; i < uint8.length; i++) {
+      binary += String.fromCharCode(uint8[i]);
+    }
+    const base64 = btoa(binary);
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData.session?.access_token ?? SUPABASE_ANON_KEY;
-
-    const res = await fetch(
-      `${SUPABASE_URL}/functions/v1/parse-market-report`,
+    const { data, error } = await supabase.functions.invoke(
+      "parse-market-report",
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          apikey: SUPABASE_ANON_KEY,
+        body: {
+          file_base64: base64,
+          file_name: file.name,
+          report_source: reportSource,
+          report_date: reportDate,
+          uploaded_by: uploadedBy,
         },
-        body: formData,
       }
     );
 
-    const json = await res.json();
-    if (!res.ok) return { inserted: 0, error: json.error ?? "Upload failed" };
-    return { inserted: json.inserted ?? 0, error: null };
+    if (error) {
+      return {
+        inserted: 0,
+        error: error.message ?? "Upload failed",
+      };
+    }
+
+    return { inserted: data?.inserted ?? 0, error: null };
   } catch (err) {
     return {
       inserted: 0,

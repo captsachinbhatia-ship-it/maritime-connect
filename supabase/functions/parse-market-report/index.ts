@@ -167,29 +167,55 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUser = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Parse multipart form data
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const reportSource = (formData.get("report_source") as string) ?? "unknown";
-    const reportDate =
-      (formData.get("report_date") as string) ??
-      new Date().toISOString().slice(0, 10);
-    const uploadedBy = formData.get("uploaded_by") as string | null;
+    // Support both JSON (from supabase.functions.invoke) and form data
+    const contentType = req.headers.get("content-type") ?? "";
+    let base64: string;
+    let reportSource: string;
+    let reportDate: string;
+    let uploadedBy: string | null;
+    let fileName: string;
 
-    if (!file || file.type !== "application/pdf") {
-      return new Response(
-        JSON.stringify({ error: "A PDF file is required" }),
-        {
-          status: 400,
-          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-        }
-      );
+    if (contentType.includes("application/json")) {
+      const body = await req.json();
+      base64 = body.file_base64;
+      reportSource = body.report_source ?? "unknown";
+      reportDate = body.report_date ?? new Date().toISOString().slice(0, 10);
+      uploadedBy = body.uploaded_by ?? null;
+      fileName = body.file_name ?? "upload.pdf";
+
+      if (!base64) {
+        return new Response(
+          JSON.stringify({ error: "file_base64 is required" }),
+          {
+            status: 400,
+            headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          }
+        );
+      }
+    } else {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      reportSource = (formData.get("report_source") as string) ?? "unknown";
+      reportDate =
+        (formData.get("report_date") as string) ??
+        new Date().toISOString().slice(0, 10);
+      uploadedBy = formData.get("uploaded_by") as string | null;
+
+      if (!file || file.type !== "application/pdf") {
+        return new Response(
+          JSON.stringify({ error: "A PDF file is required" }),
+          {
+            status: 400,
+            headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      fileName = file.name;
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      base64 = btoa(String.fromCharCode(...uint8));
     }
-
-    // Read file to base64
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
-    const base64 = btoa(String.fromCharCode(...uint8));
 
     // Extract fixtures via Claude
     const extraction = await extractFixturesFromPdf(
@@ -241,7 +267,7 @@ Deno.serve(async (req: Request) => {
       broker: f.broker,
       confidence: f.confidence,
       uploaded_by: uploadedBy,
-      pdf_filename: file.name,
+      pdf_filename: fileName,
     }));
 
     // Insert into market_data (service_role bypasses RLS)
