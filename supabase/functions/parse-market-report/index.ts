@@ -156,28 +156,144 @@ function detectMediaType(fileName: string, providedType?: string): string {
   return extMap[ext] ?? providedType ?? "application/octet-stream";
 }
 
-function buildContentBlock(
+// Types that Claude document API supports natively
+const NATIVE_DOC_TYPES = new Set(["application/pdf"]);
+
+// Types that need text extraction before sending to Claude
+const TEXT_EXTRACT_TYPES = new Set([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+  "application/msword",
+  "application/vnd.ms-excel",
+]);
+
+/** Extract text from a .docx file (ZIP containing XML) */
+async function extractDocxText(base64: string): Promise<string> {
+  const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const zip = await JSZip.loadAsync(bytes);
+  const docXml = await zip.file("word/document.xml")?.async("string");
+  if (!docXml) return "[Could not extract text from .docx]";
+
+  // Strip XML tags, keep text content
+  return docXml
+    .replace(/<w:tab\/>/g, "\t")
+    .replace(/<w:br\/>/g, "\n")
+    .replace(/<\/w:p>/g, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Extract text from a .xlsx file (ZIP containing XML) */
+async function extractXlsxText(base64: string): Promise<string> {
+  const { default: JSZip } = await import("https://esm.sh/jszip@3.10.1");
+
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const zip = await JSZip.loadAsync(bytes);
+
+  // Read shared strings
+  const ssXml = await zip.file("xl/sharedStrings.xml")?.async("string");
+  const strings: string[] = [];
+  if (ssXml) {
+    const matches = ssXml.matchAll(/<t[^>]*>([^<]*)<\/t>/g);
+    for (const m of matches) strings.push(m[1]);
+  }
+
+  // Read first sheet
+  const sheetXml = await zip.file("xl/worksheets/sheet1.xml")?.async("string");
+  if (!sheetXml) return "[Could not extract text from .xlsx]";
+
+  const rows: string[] = [];
+  const rowMatches = sheetXml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g);
+  for (const rm of rowMatches) {
+    const cells: string[] = [];
+    const cellMatches = rm[1].matchAll(/<c[^>]*(?:t="s"[^>]*)?>[\s\S]*?<v>(\d+)<\/v>[\s\S]*?<\/c>|<c[^>]*>[\s\S]*?<v>([^<]*)<\/v>[\s\S]*?<\/c>/g);
+    for (const cm of cellMatches) {
+      if (cm[1] !== undefined) {
+        cells.push(strings[parseInt(cm[1])] ?? cm[1]);
+      } else if (cm[2] !== undefined) {
+        cells.push(cm[2]);
+      }
+    }
+    if (cells.length > 0) rows.push(cells.join("\t"));
+  }
+  return rows.join("\n").trim() || "[Empty spreadsheet]";
+}
+
+/** Decode base64 CSV to text */
+function extractCsvText(base64: string): string {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+/** Extract text from non-native file types */
+async function extractTextFromFile(
   base64: string,
   mediaType: string
-): Record<string, unknown> {
-  if (IMAGE_TYPES.has(mediaType)) {
-    return {
-      type: "image",
-      source: { type: "base64", media_type: mediaType, data: base64 },
-    };
+): Promise<string> {
+  if (mediaType.includes("wordprocessingml") || mediaType === "application/msword") {
+    return extractDocxText(base64);
   }
-  // PDFs, Word, Excel, CSV — all sent as document type
-  return {
-    type: "document",
-    source: { type: "base64", media_type: mediaType, data: base64 },
-  };
+  if (mediaType.includes("spreadsheetml") || mediaType === "application/vnd.ms-excel") {
+    return extractXlsxText(base64);
+  }
+  if (mediaType === "text/csv") {
+    return extractCsvText(base64);
+  }
+  return "[Unsupported file format]";
 }
 
 async function extractFixtures(
   fileBase64: string,
   mediaType: string
 ): Promise<ClaudeExtractionResponse> {
-  const fileBlock = buildContentBlock(fileBase64, mediaType);
+  // Build the message content based on file type
+  const content: Record<string, unknown>[] = [];
+
+  if (IMAGE_TYPES.has(mediaType)) {
+    content.push({
+      type: "image",
+      source: { type: "base64", media_type: mediaType, data: fileBase64 },
+    });
+  } else if (NATIVE_DOC_TYPES.has(mediaType)) {
+    content.push({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: fileBase64 },
+    });
+  } else if (TEXT_EXTRACT_TYPES.has(mediaType)) {
+    // Extract text from Word/Excel/CSV, send as text block
+    const text = await extractTextFromFile(fileBase64, mediaType);
+    content.push({
+      type: "text",
+      text: `Here is the content of a broker report file:\n\n${text}`,
+    });
+  } else {
+    // Fallback: try as PDF
+    content.push({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: fileBase64 },
+    });
+  }
+
+  content.push({
+    type: "text",
+    text: EXTRACTION_PROMPT,
+  });
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -192,13 +308,7 @@ async function extractFixtures(
       messages: [
         {
           role: "user",
-          content: [
-            fileBlock,
-            {
-              type: "text",
-              text: EXTRACTION_PROMPT,
-            },
-          ],
+          content,
         },
       ],
     }),
