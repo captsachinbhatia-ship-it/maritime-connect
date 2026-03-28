@@ -91,10 +91,11 @@ export async function fetchAvailableDates(): Promise<{
 
 export interface ReportSummary {
   report_source: string;
-  pdf_filename: string | null;
-  report_date: string;
   fixture_count: number;
-  uploaded_at: string;
+  upload_count: number;
+  latest_report_date: string;
+  latest_uploaded_at: string;
+  filenames: string[];
 }
 
 export async function fetchReportHistory(): Promise<{
@@ -109,25 +110,42 @@ export async function fetchReportHistory(): Promise<{
 
     if (error) return { data: null, error: error.message };
 
-    // Group by source + date + filename
+    // Group by source — one row per source
     const map = new Map<string, ReportSummary>();
+    const uploadTracker = new Map<string, Set<string>>(); // source -> set of filename|date combos
+
     for (const row of data ?? []) {
-      const key = `${row.report_source}|${row.report_date}|${row.pdf_filename ?? ""}`;
-      const existing = map.get(key);
+      const src = row.report_source;
+      const uploadKey = `${row.pdf_filename ?? ""}|${row.report_date}`;
+      const existing = map.get(src);
       if (existing) {
         existing.fixture_count++;
-        if (row.created_at > existing.uploaded_at) {
-          existing.uploaded_at = row.created_at;
+        if (row.created_at > existing.latest_uploaded_at) {
+          existing.latest_uploaded_at = row.created_at;
         }
+        if (row.report_date > existing.latest_report_date) {
+          existing.latest_report_date = row.report_date;
+        }
+        if (row.pdf_filename && !existing.filenames.includes(row.pdf_filename)) {
+          existing.filenames.push(row.pdf_filename);
+        }
+        uploadTracker.get(src)!.add(uploadKey);
       } else {
-        map.set(key, {
-          report_source: row.report_source,
-          pdf_filename: row.pdf_filename,
-          report_date: row.report_date,
+        map.set(src, {
+          report_source: src,
           fixture_count: 1,
-          uploaded_at: row.created_at,
+          upload_count: 1,
+          latest_report_date: row.report_date,
+          latest_uploaded_at: row.created_at,
+          filenames: row.pdf_filename ? [row.pdf_filename] : [],
         });
+        uploadTracker.set(src, new Set([uploadKey]));
       }
+    }
+
+    // Set upload_count from tracker
+    for (const [src, summary] of map) {
+      summary.upload_count = uploadTracker.get(src)?.size ?? 1;
     }
 
     return { data: [...map.values()], error: null };

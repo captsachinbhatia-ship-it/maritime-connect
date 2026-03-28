@@ -12,6 +12,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   fetchReportHistory,
   type ReportSummary,
 } from "@/services/marketData";
@@ -67,7 +73,7 @@ export function ReportHistoryTable({ refreshKey }: Props) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4" />
-          <h3 className="text-sm font-semibold">Uploaded Reports</h3>
+          <h3 className="text-sm font-semibold">Report Sources</h3>
           <Badge variant="secondary" className="text-xs">
             {reports.length}
           </Badge>
@@ -82,31 +88,52 @@ export function ReportHistoryTable({ refreshKey }: Props) {
           <TableHeader>
             <TableRow>
               <TableHead className="text-xs">Source</TableHead>
-              <TableHead className="text-xs">File</TableHead>
-              <TableHead className="text-xs">Report Date</TableHead>
-              <TableHead className="text-xs">Fixtures</TableHead>
-              <TableHead className="text-xs">Uploaded</TableHead>
+              <TableHead className="text-xs">Reports Uploaded</TableHead>
+              <TableHead className="text-xs">Total Fixtures</TableHead>
+              <TableHead className="text-xs">Latest Report Date</TableHead>
+              <TableHead className="text-xs">Last Upload</TableHead>
+              <TableHead className="text-xs">Files</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {reports.map((r, i) => (
-              <TableRow key={i}>
+            {reports.map((r) => (
+              <TableRow key={r.report_source}>
                 <TableCell className="text-xs">
                   <Badge variant="outline" className="text-[10px]">
                     {SOURCE_LABELS[r.report_source] ?? r.report_source}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                  {r.pdf_filename ?? "—"}
-                </TableCell>
-                <TableCell className="text-xs whitespace-nowrap">
-                  {format(new Date(r.report_date + "T00:00:00"), "d MMM yyyy")}
+                <TableCell className="text-xs tabular-nums font-medium">
+                  {r.upload_count}
                 </TableCell>
                 <TableCell className="text-xs tabular-nums">
                   {r.fixture_count}
                 </TableCell>
+                <TableCell className="text-xs whitespace-nowrap">
+                  {format(new Date(r.latest_report_date + "T00:00:00"), "d MMM yyyy")}
+                </TableCell>
                 <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
-                  {format(new Date(r.uploaded_at), "d MMM yyyy, HH:mm")}
+                  {format(new Date(r.latest_uploaded_at), "d MMM yyyy, HH:mm")}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {r.filenames.length <= 2 ? (
+                    <span className="text-muted-foreground">
+                      {r.filenames.join(", ") || "—"}
+                    </span>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="text-muted-foreground cursor-help">
+                          {r.filenames[0]} +{r.filenames.length - 1} more
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          {r.filenames.map((f, i) => (
+                            <p key={i} className="text-xs">{f}</p>
+                          ))}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
