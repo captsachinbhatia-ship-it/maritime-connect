@@ -42,15 +42,16 @@ export function UploadReportDialog({
       const file = files[i];
       setProgress(`Processing ${i + 1} of ${files.length}: ${file.name}…`);
 
-      const { inserted, reportSource, reportDate, error } =
+      const { inserted, skipped, reportSource, reportDate, error } =
         await uploadMarketReport(file, uploadedBy);
 
       if (error) {
         results.push(`${file.name}: failed — ${error}`);
       } else {
         totalInserted += inserted;
+        const skipNote = skipped > 0 ? `, ${skipped} duplicates skipped` : "";
         results.push(
-          `${file.name}: ${inserted} fixtures (${reportSource}, ${reportDate})`
+          `${file.name}: ${inserted} new fixtures${skipNote} (${reportSource}, ${reportDate})`
         );
       }
     }

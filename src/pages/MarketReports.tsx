@@ -28,6 +28,7 @@ import {
 } from "@/services/marketData";
 import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
+import { detectDiscrepancies } from "@/lib/discrepancies";
 
 const VESSEL_CLASSES = ["VLCC", "Suezmax", "Aframax", "LR2", "LR1", "MR"];
 
@@ -141,6 +142,12 @@ export default function MarketReports() {
     return map;
   }, [filtered]);
 
+  // Discrepancies (computed on all fixtures, not filtered)
+  const { vesselDiscrepancies, fixtureFieldMap } = useMemo(
+    () => detectDiscrepancies(fixtures),
+    [fixtures]
+  );
+
   // Stats
   const totalFixtures = filtered.length;
   const fixedCount = filtered.filter(
@@ -197,6 +204,15 @@ export default function MarketReports() {
         <Badge variant="outline" className="text-xs">
           {sourcesCount} source{sourcesCount !== 1 ? "s" : ""}
         </Badge>
+        {vesselDiscrepancies.size > 0 && (
+          <Badge
+            variant="outline"
+            className="text-xs bg-amber-50 text-amber-700 border-amber-200"
+          >
+            {vesselDiscrepancies.size} discrepanc
+            {vesselDiscrepancies.size === 1 ? "y" : "ies"}
+          </Badge>
+        )}
       </div>
 
       {/* Filters */}
@@ -267,12 +283,19 @@ export default function MarketReports() {
                   key={cls}
                   vesselClass={cls}
                   fixtures={grouped[cls]}
+                  fixtureFieldMap={fixtureFieldMap}
+                  vesselDiscrepancies={vesselDiscrepancies}
                 />
               )
           )}
           {/* Show "Other" if any fixtures don't match known classes */}
           {grouped["Other"] && grouped["Other"].length > 0 && (
-            <FixtureTable vesselClass="Other" fixtures={grouped["Other"]} />
+            <FixtureTable
+              vesselClass="Other"
+              fixtures={grouped["Other"]}
+              fixtureFieldMap={fixtureFieldMap}
+              vesselDiscrepancies={vesselDiscrepancies}
+            />
           )}
         </div>
       )}

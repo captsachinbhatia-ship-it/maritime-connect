@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -9,8 +9,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { MarketFixture } from "@/services/marketData";
+import type { VesselDiscrepancy } from "@/lib/discrepancies";
 
 const STATUS_COLORS: Record<string, string> = {
   fixed: "bg-green-100 text-green-800 border-green-300",
@@ -40,9 +47,16 @@ type SortCol =
 interface Props {
   fixtures: MarketFixture[];
   vesselClass: string;
+  fixtureFieldMap: Map<string, Set<string>>;
+  vesselDiscrepancies: Map<string, VesselDiscrepancy>;
 }
 
-export function FixtureTable({ fixtures, vesselClass }: Props) {
+export function FixtureTable({
+  fixtures,
+  vesselClass,
+  fixtureFieldMap,
+  vesselDiscrepancies,
+}: Props) {
   const [sortCol, setSortCol] = useState<SortCol>("vessel_name");
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -105,6 +119,63 @@ export function FixtureTable({ fixtures, vesselClass }: Props) {
     return `${fStr}–${t.getDate()}/${t.getMonth() + 1}`;
   };
 
+  const getDiscrepancyTooltip = (
+    fixtureId: string,
+    field: string
+  ): string | null => {
+    const fields = fixtureFieldMap.get(fixtureId);
+    if (!fields?.has(field)) return null;
+
+    // Find the vessel discrepancy for this fixture
+    for (const disc of vesselDiscrepancies.values()) {
+      if (!disc.fixtureIds.includes(fixtureId)) continue;
+      const fd = disc.fields.find((f) => f.field === field);
+      if (!fd) return null;
+      return Object.entries(fd.values)
+        .map(([src, val]) => `${SOURCE_LABELS[src] ?? src}: ${val ?? "—"}`)
+        .join("\n");
+    }
+    return null;
+  };
+
+  const DiscrepantCell = ({
+    fixtureId,
+    field,
+    children,
+    className,
+  }: {
+    fixtureId: string;
+    field: string;
+    children: React.ReactNode;
+    className?: string;
+  }) => {
+    const tooltip = getDiscrepancyTooltip(fixtureId, field);
+    if (!tooltip) {
+      return <TableCell className={className}>{children}</TableCell>;
+    }
+    return (
+      <TableCell className={cn(className, "bg-amber-100/60")}>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">{children}</span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p className="text-xs font-semibold mb-1">Cross-report values:</p>
+              {tooltip.split("\n").map((line, i) => (
+                <p key={i} className="text-xs">
+                  {line}
+                </p>
+              ))}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </TableCell>
+    );
+  };
+
+  const discrepancyCount = sorted.filter((r) => fixtureFieldMap.has(r.id)).length;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -112,6 +183,15 @@ export function FixtureTable({ fixtures, vesselClass }: Props) {
         <Badge variant="secondary" className="text-xs">
           {fixtures.length}
         </Badge>
+        {discrepancyCount > 0 && (
+          <Badge
+            variant="outline"
+            className="text-xs bg-amber-50 text-amber-700 border-amber-200"
+          >
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            {discrepancyCount} discrepanc{discrepancyCount === 1 ? "y" : "ies"}
+          </Badge>
+        )}
       </div>
 
       <div className="rounded-lg border overflow-auto max-h-[50vh]">
@@ -142,61 +222,111 @@ export function FixtureTable({ fixtures, vesselClass }: Props) {
                 </TableCell>
               </TableRow>
             )}
-            {sorted.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="text-xs font-medium whitespace-nowrap">
-                  {row.vessel_name || "TBN"}
-                </TableCell>
-                <TableCell className="text-xs tabular-nums">
-                  {row.dwt ? row.dwt.toLocaleString() : "—"}
-                </TableCell>
-                <TableCell className="text-xs">
-                  {row.charterer || "—"}
-                </TableCell>
-                <TableCell className="text-xs uppercase">
-                  {row.cargo_grade || row.cargo_type || "—"}
-                </TableCell>
-                <TableCell className="text-xs tabular-nums">
-                  {row.quantity_mt ? row.quantity_mt.toLocaleString() : "—"}
-                </TableCell>
-                <TableCell className="text-xs uppercase whitespace-nowrap">
-                  {row.load_port || "—"}
-                  {row.load_region && (
-                    <span className="text-muted-foreground ml-1">
-                      ({row.load_region})
-                    </span>
+            {sorted.map((row) => {
+              const hasDisc = fixtureFieldMap.has(row.id);
+              return (
+                <TableRow
+                  key={row.id}
+                  className={cn(
+                    hasDisc && "border-l-2 border-l-amber-400 bg-amber-50/30"
                   )}
-                </TableCell>
-                <TableCell className="text-xs uppercase whitespace-nowrap">
-                  {row.discharge_port || "—"}
-                  {row.discharge_region && (
-                    <span className="text-muted-foreground ml-1">
-                      ({row.discharge_region})
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs whitespace-nowrap">
-                  {formatLaycan(row.laycan_from, row.laycan_to)}
-                </TableCell>
-                <TableCell className="text-xs font-mono whitespace-nowrap">
-                  {row.rate_value || "—"}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px]",
-                      STATUS_COLORS[row.fixture_status ?? ""] ?? ""
+                >
+                  <TableCell className="text-xs font-medium whitespace-nowrap">
+                    {row.vessel_name || "TBN"}
+                    {hasDisc && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <AlertTriangle className="inline h-3 w-3 ml-1 text-amber-500" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs font-semibold">
+                              Cross-report discrepancy
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Fields:{" "}
+                              {[...fixtureFieldMap.get(row.id)!].join(", ")}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
+                  </TableCell>
+                  <TableCell className="text-xs tabular-nums">
+                    {row.dwt ? row.dwt.toLocaleString() : "—"}
+                  </TableCell>
+                  <DiscrepantCell
+                    fixtureId={row.id}
+                    field="charterer"
+                    className="text-xs"
                   >
-                    {row.fixture_status ?? "—"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                  {SOURCE_LABELS[row.report_source] ?? row.report_source}
-                </TableCell>
-              </TableRow>
-            ))}
+                    {row.charterer || "—"}
+                  </DiscrepantCell>
+                  <DiscrepantCell
+                    fixtureId={row.id}
+                    field="cargo_grade"
+                    className="text-xs uppercase"
+                  >
+                    {row.cargo_grade || row.cargo_type || "—"}
+                  </DiscrepantCell>
+                  <TableCell className="text-xs tabular-nums">
+                    {row.quantity_mt ? row.quantity_mt.toLocaleString() : "—"}
+                  </TableCell>
+                  <DiscrepantCell
+                    fixtureId={row.id}
+                    field="load_port"
+                    className="text-xs uppercase whitespace-nowrap"
+                  >
+                    {row.load_port || "—"}
+                    {row.load_region && (
+                      <span className="text-muted-foreground ml-1">
+                        ({row.load_region})
+                      </span>
+                    )}
+                  </DiscrepantCell>
+                  <DiscrepantCell
+                    fixtureId={row.id}
+                    field="discharge_port"
+                    className="text-xs uppercase whitespace-nowrap"
+                  >
+                    {row.discharge_port || "—"}
+                    {row.discharge_region && (
+                      <span className="text-muted-foreground ml-1">
+                        ({row.discharge_region})
+                      </span>
+                    )}
+                  </DiscrepantCell>
+                  <TableCell className="text-xs whitespace-nowrap">
+                    {formatLaycan(row.laycan_from, row.laycan_to)}
+                  </TableCell>
+                  <DiscrepantCell
+                    fixtureId={row.id}
+                    field="rate_value"
+                    className="text-xs font-mono whitespace-nowrap"
+                  >
+                    {row.rate_value || "—"}
+                  </DiscrepantCell>
+                  <DiscrepantCell
+                    fixtureId={row.id}
+                    field="fixture_status"
+                    className=""
+                  >
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px]",
+                        STATUS_COLORS[row.fixture_status ?? ""] ?? ""
+                      )}
+                    >
+                      {row.fixture_status ?? "—"}
+                    </Badge>
+                  </DiscrepantCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                    {SOURCE_LABELS[row.report_source] ?? row.report_source}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

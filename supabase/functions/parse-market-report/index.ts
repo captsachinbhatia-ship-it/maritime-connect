@@ -224,6 +224,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({
           success: true,
           inserted: 0,
+          skipped: 0,
           report_source: reportSource,
           report_date: reportDate,
           message: "No fixtures found in the report",
@@ -235,8 +236,43 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Dedup: fetch existing vessel names for this source + date
+    const { data: existing } = await supabaseUser
+      .from("market_data")
+      .select("vessel_name")
+      .eq("report_source", reportSource)
+      .eq("report_date", reportDate);
+
+    const existingNames = new Set(
+      (existing ?? []).map((r: { vessel_name: string | null }) =>
+        (r.vessel_name ?? "").trim().toLowerCase()
+      )
+    );
+
+    const newFixtures = extraction.fixtures.filter(
+      (f) => !existingNames.has((f.vessel_name ?? "").trim().toLowerCase())
+    );
+    const skipped = extraction.fixtures.length - newFixtures.length;
+
+    if (newFixtures.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          inserted: 0,
+          skipped,
+          report_source: reportSource,
+          report_date: reportDate,
+          message: `All ${skipped} fixtures already exist`,
+        }),
+        {
+          status: 200,
+          headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Build insert rows
-    const rows = extraction.fixtures.map((f) => ({
+    const rows = newFixtures.map((f) => ({
       report_source: reportSource,
       report_date: reportDate,
       raw_text: f.raw_text,
@@ -281,10 +317,11 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         inserted: data?.length ?? 0,
+        skipped,
         fixtures: extraction.fixtures.length,
         report_source: reportSource,
         report_date: reportDate,
-        sample: extraction.fixtures.slice(0, 3),
+        sample: newFixtures.slice(0, 3),
       }),
       {
         status: 200,

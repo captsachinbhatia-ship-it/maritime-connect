@@ -81,6 +81,7 @@ export async function uploadMarketReport(
   uploadedBy: string | null
 ): Promise<{
   inserted: number;
+  skipped: number;
   reportSource: string | null;
   reportDate: string | null;
   error: string | null;
@@ -109,6 +110,7 @@ export async function uploadMarketReport(
     if (error) {
       return {
         inserted: 0,
+        skipped: 0,
         reportSource: null,
         reportDate: null,
         error: error.message ?? "Upload failed",
@@ -117,6 +119,7 @@ export async function uploadMarketReport(
 
     return {
       inserted: data?.inserted ?? 0,
+      skipped: data?.skipped ?? 0,
       reportSource: data?.report_source ?? null,
       reportDate: data?.report_date ?? null,
       error: null,
@@ -124,6 +127,7 @@ export async function uploadMarketReport(
   } catch (err) {
     return {
       inserted: 0,
+      skipped: 0,
       reportSource: null,
       reportDate: null,
       error: err instanceof Error ? err.message : "Unknown error",
