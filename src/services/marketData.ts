@@ -223,6 +223,7 @@ export interface Resolution {
   remark: string | null;
   resolved_by: string | null;
   resolved_by_name: string | null;
+  display_name: string | null;
   created_at: string;
 }
 
@@ -247,6 +248,7 @@ export async function resolveDiscrepancy(params: {
   reportDate: string;
   fieldName: string;
   resolvedValue: string | null;
+  displayName: string | null;
   remark: string;
   resolvedBy: string | null;
   resolvedByName: string;
@@ -265,6 +267,7 @@ export async function resolveDiscrepancy(params: {
         .from("market_data_resolutions")
         .update({
           resolved_value: params.resolvedValue,
+          display_name: params.displayName,
           remark: params.remark,
           resolved_by: params.resolvedBy,
           resolved_by_name: params.resolvedByName,
@@ -280,6 +283,7 @@ export async function resolveDiscrepancy(params: {
           report_date: params.reportDate,
           field_name: params.fieldName,
           resolved_value: params.resolvedValue,
+          display_name: params.displayName,
           remark: params.remark,
           resolved_by: params.resolvedBy,
           resolved_by_name: params.resolvedByName,

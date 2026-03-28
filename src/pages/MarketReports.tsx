@@ -26,8 +26,10 @@ import { cn } from "@/lib/utils";
 import { useCrmUser } from "@/hooks/useCrmUser";
 import {
   fetchMarketData,
+  fetchResolutions,
   type MarketRecord,
   type MarketFixture,
+  type Resolution,
 } from "@/services/marketData";
 import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { BalticRoutesTable } from "@/components/market-reports/BalticRoutesTable";
@@ -121,6 +123,7 @@ export default function MarketReports() {
   const [quickFilter, setQuickFilter] = useState<string | null>(null);
   const [resolveTarget, setResolveTarget] = useState<VesselDiscrepancy | null>(null);
   const [cargoTab, setCargoTab] = useState<"all" | "dirty" | "clean">("all");
+  const [resolutions, setResolutions] = useState<Resolution[]>([]);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -160,6 +163,8 @@ export default function MarketReports() {
     } else {
       setFixtures(data ?? []);
     }
+    // Fetch resolutions alongside
+    fetchResolutions().then(({ data: res }) => setResolutions(res ?? []));
     setLoading(false);
   }, [dateFrom, dateTo]);
 
@@ -257,7 +262,7 @@ export default function MarketReports() {
     const relevantRecords = fixtures.filter((r) => r.report_type === type);
     if (relevantRecords.length === 0) return;
     const latestDate = relevantRecords[0]?.report_date ?? new Date().toISOString().slice(0, 10);
-    await generateMarketReportPdf({ reportType: type, reportDate: latestDate, records: relevantRecords });
+    await generateMarketReportPdf({ reportType: type, reportDate: latestDate, records: relevantRecords, resolutions });
   };
 
   const toggleQuickFilter = (filter: string) => {
@@ -728,7 +733,7 @@ export default function MarketReports() {
           reportDate={fixtures.find((f) => resolveTarget.fixtureIds.includes(f.id))?.report_date ?? ""}
           resolvedBy={crmUserId}
           resolvedByName={crmUser?.full_name ?? "Unknown"}
-          onResolved={loadFixtures}
+          onResolved={() => { loadFixtures(); fetchResolutions().then(({ data }) => setResolutions(data ?? [])); }}
         />
       )}
     </div>

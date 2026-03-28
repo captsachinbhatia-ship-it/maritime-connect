@@ -1,17 +1,14 @@
 import { useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -19,13 +16,16 @@ import { resolveDiscrepancy } from "@/services/marketData";
 import type { VesselDiscrepancy } from "@/lib/discrepancies";
 
 const SOURCE_LABELS: Record<string, string> = {
-  meiwa_vlcc: "Meiwa VLCC",
-  meiwa_dirty: "Meiwa Dirty",
-  presco: "Presco",
-  gibson: "Gibson",
-  vantage_dpp: "Vantage DPP",
-  eastport: "Eastport",
-  alliance: "Alliance",
+  meiwa_vlcc: "Meiwa VLCC", meiwa_dirty: "Meiwa Dirty",
+  presco: "Presco", gibson: "Gibson", vantage_dpp: "Vantage DPP",
+  eastport: "Eastport", yamamoto: "Yamamoto", alliance: "Alliance",
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  charterer: "Charterer", cargo_grade: "Cargo",
+  load_port: "Load Port", discharge_port: "Discharge Port",
+  rate_value: "Rate", rate_numeric: "Rate (numeric)",
+  fixture_status: "Status",
 };
 
 interface Props {
@@ -39,28 +39,20 @@ interface Props {
 }
 
 export function ResolveDiscrepancyDialog({
-  open,
-  onOpenChange,
-  discrepancy,
-  reportDate,
-  resolvedBy,
-  resolvedByName,
-  onResolved,
+  open, onOpenChange, discrepancy, reportDate,
+  resolvedBy, resolvedByName, onResolved,
 }: Props) {
   const [selections, setSelections] = useState<Record<string, string>>({});
+  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
   const [remark, setRemark] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     const fieldsToResolve = discrepancy.fields.filter(
-      (f) => selections[f.field]
+      (f) => selections[f.field] || displayNames[f.field]
     );
     if (fieldsToResolve.length === 0 && !remark.trim()) {
-      toast({
-        title: "Nothing to resolve",
-        description: "Select at least one value or add a remark.",
-        variant: "destructive",
-      });
+      toast({ title: "Nothing to resolve", description: "Select a value, set a display name, or add a remark.", variant: "destructive" });
       return;
     }
 
@@ -72,38 +64,31 @@ export function ResolveDiscrepancyDialog({
         reportDate,
         fieldName: fd.field,
         resolvedValue: selections[fd.field] ?? null,
+        displayName: displayNames[fd.field]?.trim() || null,
         remark: remark.trim(),
         resolvedBy,
         resolvedByName,
       });
       if (error) {
-        toast({
-          title: "Error saving resolution",
-          description: error,
-          variant: "destructive",
-        });
+        toast({ title: "Error saving", description: error, variant: "destructive" });
         setSaving(false);
         return;
       }
     }
 
-    // If only remark, no field selections — save as general remark
     if (fieldsToResolve.length === 0 && remark.trim()) {
       const { error } = await resolveDiscrepancy({
         vesselName: discrepancy.vesselKey,
         reportDate,
         fieldName: "_remark",
         resolvedValue: null,
+        displayName: null,
         remark: remark.trim(),
         resolvedBy,
         resolvedByName,
       });
       if (error) {
-        toast({
-          title: "Error saving remark",
-          description: error,
-          variant: "destructive",
-        });
+        toast({ title: "Error saving remark", description: error, variant: "destructive" });
         setSaving(false);
         return;
       }
@@ -112,6 +97,7 @@ export function ResolveDiscrepancyDialog({
     setSaving(false);
     toast({ title: "Discrepancy resolved", description: `${discrepancy.vesselKey} — by ${resolvedByName}` });
     setSelections({});
+    setDisplayNames({});
     setRemark("");
     onOpenChange(false);
     onResolved();
@@ -119,78 +105,100 @@ export function ResolveDiscrepancyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-auto">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-auto">
         <DialogHeader>
-          <DialogTitle>Resolve Discrepancy — {discrepancy.vesselKey}</DialogTitle>
+          <DialogTitle>Resolve — {discrepancy.vesselKey}</DialogTitle>
           <DialogDescription>
-            Pick the correct value for each field, or add a remark.
+            Pick the correct value, then set how it should appear in the PDF report.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {discrepancy.fields.map((fd) => (
-            <div key={fd.field} className="space-y-2">
-              <Label className="text-xs font-semibold capitalize">
-                {fd.field.replace(/_/g, " ")}
-              </Label>
-              <RadioGroup
-                value={selections[fd.field] ?? ""}
-                onValueChange={(val) =>
-                  setSelections((prev) => ({ ...prev, [fd.field]: val }))
-                }
-                className="space-y-1"
-              >
-                {Object.entries(fd.values).map(([src, val]) => (
-                  <div
-                    key={src}
-                    className={cn(
-                      "flex items-center gap-2 rounded-md border px-3 py-1.5",
-                      selections[fd.field] === String(val ?? "")
-                        ? "border-primary bg-primary/5"
-                        : "border-muted"
-                    )}
-                  >
-                    <RadioGroupItem
-                      value={String(val ?? "")}
-                      id={`${fd.field}-${src}`}
-                    />
-                    <label
-                      htmlFor={`${fd.field}-${src}`}
-                      className="flex-1 text-xs cursor-pointer"
+        <div className="space-y-5">
+          {discrepancy.fields.map((fd) => {
+            const label = FIELD_LABELS[fd.field] ?? fd.field.replace(/_/g, " ");
+            return (
+              <div key={fd.field} className="space-y-2 rounded-lg border p-3">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </Label>
+
+                {/* Source values as radio buttons */}
+                <RadioGroup
+                  value={selections[fd.field] ?? ""}
+                  onValueChange={(val) =>
+                    setSelections((prev) => {
+                      const next = { ...prev, [fd.field]: val };
+                      // Auto-fill display name if not already set
+                      if (!displayNames[fd.field]) {
+                        setDisplayNames((dp) => ({ ...dp, [fd.field]: val }));
+                      }
+                      return next;
+                    })
+                  }
+                  className="space-y-1"
+                >
+                  {Object.entries(fd.values).map(([src, val]) => (
+                    <div
+                      key={src}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md border px-3 py-1.5 cursor-pointer",
+                        selections[fd.field] === String(val ?? "")
+                          ? "border-primary bg-primary/5"
+                          : "border-muted hover:bg-muted/50"
+                      )}
                     >
-                      <Badge variant="outline" className="text-[10px] mr-2">
-                        {SOURCE_LABELS[src] ?? src}
-                      </Badge>
-                      <span className="font-mono">{val ?? "—"}</span>
-                    </label>
-                  </div>
-                ))}
-              </RadioGroup>
-            </div>
-          ))}
+                      <RadioGroupItem value={String(val ?? "")} id={`${fd.field}-${src}`} />
+                      <label htmlFor={`${fd.field}-${src}`} className="flex-1 text-xs cursor-pointer">
+                        <Badge variant="outline" className="text-[10px] mr-2">
+                          {SOURCE_LABELS[src] ?? src}
+                        </Badge>
+                        <span className="font-mono">{val ?? "—"}</span>
+                      </label>
+                    </div>
+                  ))}
+                </RadioGroup>
+
+                {/* Display name for PDF */}
+                <div className="flex items-center gap-2 mt-2">
+                  <Label className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    Display in PDF as:
+                  </Label>
+                  <Input
+                    value={displayNames[fd.field] ?? ""}
+                    onChange={(e) =>
+                      setDisplayNames((prev) => ({ ...prev, [fd.field]: e.target.value }))
+                    }
+                    placeholder={selections[fd.field] || "e.g. South Korea, Singapore..."}
+                    className="h-7 text-xs flex-1"
+                  />
+                </div>
+                {displayNames[fd.field] && selections[fd.field] && displayNames[fd.field] !== selections[fd.field] && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Source says <span className="font-mono">"{selections[fd.field]}"</span> → PDF will show <span className="font-mono font-semibold">"{displayNames[fd.field]}"</span>
+                  </p>
+                )}
+              </div>
+            );
+          })}
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold">Remark</Label>
             <Textarea
               value={remark}
               onChange={(e) => setRemark(e.target.value)}
-              placeholder="Optional note about this resolution…"
-              className="text-xs h-16"
+              placeholder="Optional note…"
+              className="text-xs h-14"
             />
           </div>
 
           <p className="text-[10px] text-muted-foreground">
-            Resolved by: {resolvedByName}
+            Resolved by: <span className="font-medium">{resolvedByName}</span>
           </p>
         </div>
 
         <DialogFooter>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-            )}
+            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
             Save Resolution
           </Button>
         </DialogFooter>

@@ -5,7 +5,7 @@
  * For CRM UI, it also tags fixtures with conflict/mismatch badges.
  */
 
-import type { MarketRecord } from "@/services/marketData";
+import type { MarketRecord, Resolution } from "@/services/marketData";
 
 // ---------- Port aliases (client-side fallback, DB table is authoritative) ----------
 
@@ -79,19 +79,30 @@ function parseRate(rate: string | null): { ws: number | null; lumpsum: number | 
   const r = rate.trim().toUpperCase();
   if (r === "RNR" || r === "TBN" || r === "-") return { ws: null, lumpsum: null, display: r };
 
-  // WS: W54.25, WS467, WS 450
-  const wsMatch = r.match(/^W[S]?\s?(\d+\.?\d*)$/);
-  if (wsMatch) return { ws: parseFloat(wsMatch[1]), lumpsum: null, display: `WS ${wsMatch[1]}` };
+  // WS range: W515-525 or WS515-525
+  const wsRangeMatch = r.match(/^W[S]?\s?(\d+\.?\d*)\s?[-–]\s?(\d+\.?\d*)$/);
+  if (wsRangeMatch) {
+    const low = parseFloat(wsRangeMatch[1]);
+    const high = parseFloat(wsRangeMatch[2]);
+    return { ws: (low + high) / 2, lumpsum: null, display: `W${wsRangeMatch[1]}-${wsRangeMatch[2]}` };
+  }
 
-  // Lumpsum: $3.2M, $17.95M, $850K, 13.0M, 13M
-  const lsMatch = r.match(/^\$?(\d+\.?\d*)\s?(M|K)?$/i);
+  // WS single: W54.25, WS467, WS 450, W317.5, WS317.5 — all normalised to same
+  const wsMatch = r.match(/^W[S]?\s?(\d+\.?\d*)$/);
+  if (wsMatch) return { ws: parseFloat(wsMatch[1]), lumpsum: null, display: `W${wsMatch[1]}` };
+
+  // Lumpsum: $3.2M, $17.95M, $850K, 13.0M, 13M, $13,000,000
+  const lsMatch = r.match(/^\$?([\d,]+\.?\d*)\s?(M|K)?$/i);
   if (lsMatch) {
-    const val = parseFloat(lsMatch[1]);
+    const val = parseFloat(lsMatch[1].replace(/,/g, ""));
     const unit = (lsMatch[2] ?? "").toUpperCase();
     let numeric = val;
     if (unit === "M") numeric = val * 1_000_000;
     else if (unit === "K") numeric = val * 1_000;
-    const displayVal = numeric >= 1_000_000 ? `$${(numeric / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M` : `$${numeric.toLocaleString()}`;
+    // Normalise display: $13M not $13.0M, $17.95M stays
+    const displayVal = numeric >= 1_000_000
+      ? `$${(numeric / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`
+      : `$${numeric.toLocaleString()}`;
     return { ws: null, lumpsum: numeric, display: displayVal };
   }
 
@@ -151,7 +162,21 @@ export interface NormalisedReport {
 
 // ---------- Main normalisation ----------
 
-export function normaliseForPdf(records: MarketRecord[]): NormalisedReport {
+export function normaliseForPdf(records: MarketRecord[], resolutions?: Resolution[]): NormalisedReport {
+  // Build resolution lookup: vessel_name (lower) + field -> display_name
+  const resolutionMap = new Map<string, string>();
+  for (const r of resolutions ?? []) {
+    if (r.display_name) {
+      const key = `${r.vessel_name.trim().toLowerCase()}|${r.field_name}`;
+      resolutionMap.set(key, r.display_name);
+    }
+  }
+
+  const getResolved = (vesselName: string, field: string, fallback: string): string => {
+    const key = `${vesselName.trim().toLowerCase()}|${field}`;
+    return resolutionMap.get(key) ?? fallback;
+  };
+
   const fixtureRecords = records.filter((r) => r.record_type === "FIXTURE" || !r.record_type);
 
   // Group by vessel+load+discharge (dedup key)
@@ -234,15 +259,17 @@ export function normaliseForPdf(records: MarketRecord[]): NormalisedReport {
     if (possibleRepeat) keyFlags.push("Possible repeat fixture");
     if (keyFlags.length > 0) flags.set(key, keyFlags);
 
+    // Apply resolution display_name overrides (user-chosen PDF display values)
+    const vn = primary.vessel_name ?? "";
     const fixture: NormalisedFixture = {
-      charterer,
+      charterer: getResolved(vn, "charterer", charterer),
       qty: primary.quantity_mt ? (primary.quantity_mt / 1000).toFixed(0) : "",
-      cargo: primary.cargo_grade ?? primary.cargo_type ?? "",
+      cargo: getResolved(vn, "cargo_grade", primary.cargo_grade ?? primary.cargo_type ?? ""),
       laycan: primary.raw_text ?? "",
-      load,
-      discharge,
+      load: getResolved(vn, "load_port", load),
+      discharge: getResolved(vn, "discharge_port", discharge),
       vessel: toTitleCase(primary.vessel_name ?? "TBN"),
-      rate: finalRate,
+      rate: getResolved(vn, "rate_value", finalRate),
       status: formatStatus(bestStatus.fixture_status),
       segment,
       rateConflict,

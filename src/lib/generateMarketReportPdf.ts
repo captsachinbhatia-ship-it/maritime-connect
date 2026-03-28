@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable, { type CellDef } from "jspdf-autotable";
 import { format } from "date-fns";
-import type { MarketRecord } from "@/services/marketData";
+import type { MarketRecord, Resolution } from "@/services/marketData";
 import { normaliseForPdf, type NormalisedFixture } from "@/lib/fixtureNormaliser";
 import logoJpg from "@/assets/logo-aq-maritime.jpg";
 
@@ -38,6 +38,7 @@ interface GenerateOptions {
   reportType: string;
   reportDate: string;
   records: MarketRecord[];
+  resolutions?: Resolution[];
 }
 
 // ── Logo loader ───────────────────────────────────────────────
@@ -54,7 +55,7 @@ async function getLogoDataUrl(): Promise<string> {
 }
 
 // ── Main ──────────────────────────────────────────────────────
-export async function generateMarketReportPdf({ reportType, reportDate, records }: GenerateOptions) {
+export async function generateMarketReportPdf({ reportType, reportDate, records, resolutions }: GenerateOptions) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();   // 210
   const H = doc.internal.pageSize.getHeight();  // 297
@@ -65,7 +66,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records 
 
   const balticRecords = records.filter((r) => r.record_type === "BALTIC");
   const bunkerRecords = records.filter((r) => r.record_type === "BUNKER");
-  const { fixtures: normFixtures } = normaliseForPdf(records);
+  const { fixtures: normFixtures } = normaliseForPdf(records, resolutions);
 
   const isDirty = reportType === "DPP";
   const segOrder = isDirty ? DIRTY_ORDER : CLEAN_ORDER;
