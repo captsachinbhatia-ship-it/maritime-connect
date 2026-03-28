@@ -215,3 +215,84 @@ export async function uploadMarketReport(
     };
   }
 }
+
+// ---------- Discrepancy resolutions ----------
+
+export interface Resolution {
+  id: string;
+  vessel_name: string;
+  report_date: string;
+  field_name: string;
+  resolved_value: string | null;
+  remark: string | null;
+  resolved_by: string | null;
+  resolved_by_name: string | null;
+  created_at: string;
+}
+
+export async function fetchResolutions(): Promise<{
+  data: Resolution[] | null;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from("market_data_resolutions")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) return { data: null, error: error.message };
+    return { data: data as Resolution[], error: null };
+  } catch (err) {
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+export async function resolveDiscrepancy(params: {
+  vesselName: string;
+  reportDate: string;
+  fieldName: string;
+  resolvedValue: string | null;
+  remark: string;
+  resolvedBy: string | null;
+  resolvedByName: string;
+}): Promise<{ error: string | null }> {
+  try {
+    // Upsert — update if same vessel+date+field exists
+    const { data: existing } = await supabase
+      .from("market_data_resolutions")
+      .select("id")
+      .eq("vessel_name", params.vesselName)
+      .eq("report_date", params.reportDate)
+      .eq("field_name", params.fieldName)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      const { error } = await supabase
+        .from("market_data_resolutions")
+        .update({
+          resolved_value: params.resolvedValue,
+          remark: params.remark,
+          resolved_by: params.resolvedBy,
+          resolved_by_name: params.resolvedByName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing[0].id);
+      if (error) return { error: error.message };
+    } else {
+      const { error } = await supabase
+        .from("market_data_resolutions")
+        .insert({
+          vessel_name: params.vesselName,
+          report_date: params.reportDate,
+          field_name: params.fieldName,
+          resolved_value: params.resolvedValue,
+          remark: params.remark,
+          resolved_by: params.resolvedBy,
+          resolved_by_name: params.resolvedByName,
+        });
+      if (error) return { error: error.message };
+    }
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}

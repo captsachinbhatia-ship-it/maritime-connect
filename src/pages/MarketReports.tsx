@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { useCrmUser } from "@/hooks/useCrmUser";
 import {
   fetchMarketData,
@@ -29,7 +30,8 @@ import {
 import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
 import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
-import { detectDiscrepancies } from "@/lib/discrepancies";
+import { ResolveDiscrepancyDialog } from "@/components/market-reports/ResolveDiscrepancyDialog";
+import { detectDiscrepancies, type VesselDiscrepancy } from "@/lib/discrepancies";
 import {
   VESSEL_CLASSES,
   VESSEL_CLASS_FILTER_OPTIONS,
@@ -67,7 +69,7 @@ function uniqueValues(fixtures: MarketFixture[], field: keyof MarketFixture): st
 }
 
 export default function MarketReports() {
-  const { crmUserId } = useCrmUser();
+  const { crmUserId, crmUser } = useCrmUser();
 
   // State
   const [fixtures, setFixtures] = useState<MarketFixture[]>([]);
@@ -77,6 +79,8 @@ export default function MarketReports() {
   const [historyRefresh, setHistoryRefresh] = useState(0);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [activeTab, setActiveTab] = useState("fixtures");
+  const [quickFilter, setQuickFilter] = useState<string | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<VesselDiscrepancy | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -182,12 +186,39 @@ export default function MarketReports() {
     [fixtures]
   );
 
+  // Apply quick filter (from clickable stats badges)
+  const displayed = useMemo(() => {
+    if (!quickFilter) return filtered;
+    if (quickFilter === "fixed") return filtered.filter((f) => f.fixture_status === "fixed");
+    if (quickFilter === "discrepancies") return filtered.filter((f) => fixtureFieldMap.has(f.id));
+    return filtered;
+  }, [filtered, quickFilter, fixtureFieldMap]);
+
+  // Regroup after quick filter
+  const grouped = useMemo(() => {
+    const map: Record<string, MarketFixture[]> = {};
+    for (const cls of VESSEL_CLASSES) map[cls] = [];
+    for (const f of displayed) {
+      const cls = f.vessel_class ?? "Other";
+      if (!map[cls]) map[cls] = [];
+      map[cls].push(f);
+    }
+    return map;
+  }, [displayed]);
+
   const totalFixtures = filtered.length;
+  const displayedCount = displayed.length;
   const fixedCount = filtered.filter((f) => f.fixture_status === "fixed").length;
   const sourcesCount = new Set(filtered.map((f) => f.report_source)).size;
   const dateCount = new Set(filtered.map((f) => f.report_date)).size;
+  const discrepancyFixtureCount = filtered.filter((f) => fixtureFieldMap.has(f.id)).length;
+
+  const toggleQuickFilter = (filter: string) => {
+    setQuickFilter((prev) => (prev === filter ? null : filter));
+  };
 
   const clearAll = () => {
+    setQuickFilter(null);
     setSearchTerm(""); setFilterSource("all"); setFilterStatus("all");
     setFilterVesselClass("all"); setFilterCargoType("all");
     setFilterLoadRegion("all"); setFilterDischRegion("all");
@@ -245,12 +276,26 @@ export default function MarketReports() {
 
         {/* ====== FIXTURES TAB ====== */}
         <TabsContent value="fixtures" className="space-y-4 mt-4">
-          {/* Stats */}
-          <div className="flex items-center gap-4">
-            <Badge variant="secondary" className="text-xs">
+          {/* Stats — clickable to quick-filter */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              variant={quickFilter === null ? "secondary" : "outline"}
+              className="text-xs cursor-pointer hover:bg-secondary/80"
+              onClick={() => setQuickFilter(null)}
+            >
               {totalFixtures} fixture{totalFixtures !== 1 ? "s" : ""}
+              {quickFilter && ` (showing ${displayedCount})`}
             </Badge>
-            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-xs cursor-pointer",
+                quickFilter === "fixed"
+                  ? "bg-green-200 text-green-900 border-green-400"
+                  : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+              )}
+              onClick={() => toggleQuickFilter("fixed")}
+            >
               {fixedCount} fixed
             </Badge>
             <Badge variant="outline" className="text-xs">
@@ -260,9 +305,23 @@ export default function MarketReports() {
               {dateCount} date{dateCount !== 1 ? "s" : ""}
             </Badge>
             {vesselDiscrepancies.size > 0 && (
-              <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
-                {vesselDiscrepancies.size} discrepanc{vesselDiscrepancies.size === 1 ? "y" : "ies"}
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-xs cursor-pointer",
+                  quickFilter === "discrepancies"
+                    ? "bg-amber-200 text-amber-900 border-amber-400"
+                    : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                )}
+                onClick={() => toggleQuickFilter("discrepancies")}
+              >
+                {discrepancyFixtureCount} discrepanc{vesselDiscrepancies.size === 1 ? "y" : "ies"}
               </Badge>
+            )}
+            {quickFilter && (
+              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-2" onClick={() => setQuickFilter(null)}>
+                Clear
+              </Button>
             )}
           </div>
 
@@ -438,6 +497,7 @@ export default function MarketReports() {
                       fixtures={grouped[cls]}
                       fixtureFieldMap={fixtureFieldMap}
                       vesselDiscrepancies={vesselDiscrepancies}
+                      onResolve={setResolveTarget}
                     />
                   )
               )}
@@ -486,6 +546,19 @@ export default function MarketReports() {
         }}
         uploadedBy={crmUserId}
       />
+
+      {/* Resolve discrepancy dialog */}
+      {resolveTarget && (
+        <ResolveDiscrepancyDialog
+          open={!!resolveTarget}
+          onOpenChange={(o) => !o && setResolveTarget(null)}
+          discrepancy={resolveTarget}
+          reportDate={fixtures.find((f) => resolveTarget.fixtureIds.includes(f.id))?.report_date ?? ""}
+          resolvedBy={crmUserId}
+          resolvedByName={crmUser?.full_name ?? "Unknown"}
+          onResolved={loadFixtures}
+        />
+      )}
     </div>
   );
 }

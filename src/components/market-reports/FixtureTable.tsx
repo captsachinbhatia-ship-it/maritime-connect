@@ -52,6 +52,7 @@ interface Props {
   vesselClass: string;
   fixtureFieldMap: Map<string, Set<string>>;
   vesselDiscrepancies: Map<string, VesselDiscrepancy>;
+  onResolve?: (disc: VesselDiscrepancy) => void;
 }
 
 export function FixtureTable({
@@ -59,6 +60,7 @@ export function FixtureTable({
   vesselClass,
   fixtureFieldMap,
   vesselDiscrepancies,
+  onResolve,
 }: Props) {
   const [sortCol, setSortCol] = useState<SortCol>("vessel_name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -251,10 +253,29 @@ export function FixtureTable({
                               Fields:{" "}
                               {[...fixtureFieldMap.get(row.id)!].join(", ")}
                             </p>
+                            {onResolve && (
+                              <p className="text-xs text-primary mt-1">Click to resolve</p>
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     )}
+                    {hasDisc && onResolve && (() => {
+                      // Find the VesselDiscrepancy for this row
+                      for (const disc of vesselDiscrepancies.values()) {
+                        if (disc.fixtureIds.includes(row.id)) {
+                          return (
+                            <button
+                              className="ml-1 text-[10px] text-amber-600 hover:text-amber-800 underline"
+                              onClick={() => onResolve(disc)}
+                            >
+                              Resolve
+                            </button>
+                          );
+                        }
+                      }
+                      return null;
+                    })()}
                   </TableCell>
                   <TableCell className="text-xs tabular-nums">
                     {row.dwt ? row.dwt.toLocaleString() : "—"}
