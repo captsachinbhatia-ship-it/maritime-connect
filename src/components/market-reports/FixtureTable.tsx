@@ -33,6 +33,8 @@ const SOURCE_LABELS: Record<string, string> = {
   presco: "Presco",
   gibson: "Gibson",
   vantage_dpp: "Vantage DPP",
+  eastport: "Eastport",
+  alliance: "Alliance",
 };
 
 type SortCol =

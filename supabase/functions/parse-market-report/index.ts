@@ -57,16 +57,17 @@ const EXTRACTION_PROMPT = `You are a maritime fixture data extraction engine.
 You will receive a daily tanker broker report PDF. Your job is to:
 
 1. IDENTIFY the report source and date automatically:
-   - Report source must be one of: meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp
+   - Report source must be one of: meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, eastport, alliance
    - Look at the header, logo, title, or footer to determine the source
    - Find the report date from the document (usually in the header or title)
+   - IMPORTANT: The current year is 2026. If the document says "27.MAR.2026" or "March 27, 2026" or "27/03/2026", the date is 2026-03-27. Do NOT use 2024 or 2025 unless the document explicitly states those years.
    - If you cannot determine the source, use "unknown"
    - Format the date as YYYY-MM-DD
 
 2. EXTRACT every fixture and enquiry row into structured data.
 
 Return a JSON object with these top-level keys:
-- "report_source": string — one of: meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, unknown
+- "report_source": string — one of: meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, eastport, alliance, unknown
 - "report_date": string — the report date in YYYY-MM-DD format
 - "fixtures": array of objects
 
@@ -279,8 +280,20 @@ Deno.serve(async (req: Request) => {
     const extraction = await extractFixtures(base64, mediaType);
 
     const reportSource = extraction.report_source ?? "unknown";
-    const reportDate =
-      extraction.report_date ?? new Date().toISOString().slice(0, 10);
+
+    // Sanity check: if Claude returned a date more than 30 days from today, use today
+    let reportDate = extraction.report_date ?? new Date().toISOString().slice(0, 10);
+    const today = new Date();
+    const parsed = new Date(reportDate + "T00:00:00");
+    const diffDays = Math.abs(
+      (today.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (diffDays > 30) {
+      console.warn(
+        `Date sanity check: Claude returned ${reportDate} (${diffDays.toFixed(0)} days off). Using today.`
+      );
+      reportDate = today.toISOString().slice(0, 10);
+    }
 
     if (!extraction.fixtures || extraction.fixtures.length === 0) {
       return new Response(

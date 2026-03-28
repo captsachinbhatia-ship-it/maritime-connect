@@ -44,6 +44,8 @@ const SOURCE_OPTIONS = [
   { value: "presco", label: "Presco" },
   { value: "gibson", label: "Gibson" },
   { value: "vantage_dpp", label: "Vantage DPP" },
+  { value: "eastport", label: "Eastport" },
+  { value: "alliance", label: "Alliance" },
 ];
 
 const STATUS_OPTIONS = [
