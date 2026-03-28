@@ -205,16 +205,6 @@ export default function MarketReports() {
     qtyMin, qtyMax, searchTerm,
   ]);
 
-  const grouped = useMemo(() => {
-    const map: Record<string, MarketFixture[]> = {};
-    for (const cls of VESSEL_CLASSES) map[cls] = [];
-    for (const f of filtered) {
-      const cls = f.vessel_class ?? "Other";
-      if (!map[cls]) map[cls] = [];
-      map[cls].push(f);
-    }
-    return map;
-  }, [filtered]);
 
   const { vesselDiscrepancies, fixtureFieldMap } = useMemo(
     () => detectDiscrepancies(fixtures),
