@@ -156,15 +156,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Authenticate the caller
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), {
-        status: 401,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
-    }
-
     const supabaseUser = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Support both JSON (from supabase.functions.invoke) and form data
