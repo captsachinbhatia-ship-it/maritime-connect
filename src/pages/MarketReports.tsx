@@ -38,6 +38,15 @@ import {
   CARGO_TYPE_FILTER_OPTIONS,
   COATING_FILTER_OPTIONS,
 } from "@/lib/marketConstants";
+import {
+  startOfWeek,
+  endOfWeek,
+  subDays,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  format as fmtDate,
+} from "date-fns";
 
 const SOURCE_OPTIONS = [
   { value: "all", label: "All Sources" },
@@ -58,6 +67,31 @@ const STATUS_OPTIONS = [
   { value: "failed", label: "Failed" },
   { value: "withdrawn", label: "Withdrawn" },
 ];
+
+// Date preset helpers
+type DatePreset = { label: string; from: string; to: string };
+function getDatePresets(): DatePreset[] {
+  const today = new Date();
+  const fmt = (d: Date) => fmtDate(d, "yyyy-MM-dd");
+  return [
+    { label: "Today", from: fmt(today), to: fmt(today) },
+    { label: "This week", from: fmt(startOfWeek(today, { weekStartsOn: 1 })), to: fmt(endOfWeek(today, { weekStartsOn: 1 })) },
+    { label: "Last 7 days", from: fmt(subDays(today, 6)), to: fmt(today) },
+    { label: "This month", from: fmt(startOfMonth(today)), to: fmt(endOfMonth(today)) },
+    { label: "Last month", from: fmt(startOfMonth(subMonths(today, 1))), to: fmt(endOfMonth(subMonths(today, 1))) },
+  ];
+}
+
+// Dirty = Crude, DPP. Clean = CPP, Chemical, LPG, LNG, Vegetable Oil
+const DIRTY_CARGO_TYPES = new Set(["Crude", "DPP"]);
+const CLEAN_CARGO_TYPES = new Set(["CPP", "Chemical", "LPG", "LNG", "Vegetable Oil"]);
+
+function classifyCargo(cargoType: string | null): "dirty" | "clean" | "other" {
+  if (!cargoType) return "other";
+  if (DIRTY_CARGO_TYPES.has(cargoType)) return "dirty";
+  if (CLEAN_CARGO_TYPES.has(cargoType)) return "clean";
+  return "other";
+}
 
 function uniqueValues(fixtures: MarketFixture[], field: keyof MarketFixture): string[] {
   const set = new Set<string>();
@@ -81,6 +115,7 @@ export default function MarketReports() {
   const [activeTab, setActiveTab] = useState("fixtures");
   const [quickFilter, setQuickFilter] = useState<string | null>(null);
   const [resolveTarget, setResolveTarget] = useState<VesselDiscrepancy | null>(null);
+  const [cargoTab, setCargoTab] = useState<"all" | "dirty" | "clean">("all");
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -186,13 +221,15 @@ export default function MarketReports() {
     [fixtures]
   );
 
-  // Apply quick filter (from clickable stats badges)
+  // Apply quick filter + cargo tab
   const displayed = useMemo(() => {
-    if (!quickFilter) return filtered;
-    if (quickFilter === "fixed") return filtered.filter((f) => f.fixture_status === "fixed");
-    if (quickFilter === "discrepancies") return filtered.filter((f) => fixtureFieldMap.has(f.id));
-    return filtered;
-  }, [filtered, quickFilter, fixtureFieldMap]);
+    let result = filtered;
+    if (quickFilter === "fixed") result = result.filter((f) => f.fixture_status === "fixed");
+    if (quickFilter === "discrepancies") result = result.filter((f) => fixtureFieldMap.has(f.id));
+    if (cargoTab === "dirty") result = result.filter((f) => classifyCargo(f.cargo_type) === "dirty");
+    if (cargoTab === "clean") result = result.filter((f) => classifyCargo(f.cargo_type) === "clean");
+    return result;
+  }, [filtered, quickFilter, fixtureFieldMap, cargoTab]);
 
   // Regroup after quick filter
   const grouped = useMemo(() => {
@@ -212,6 +249,8 @@ export default function MarketReports() {
   const sourcesCount = new Set(filtered.map((f) => f.report_source)).size;
   const dateCount = new Set(filtered.map((f) => f.report_date)).size;
   const discrepancyFixtureCount = filtered.filter((f) => fixtureFieldMap.has(f.id)).length;
+  const dirtyCount = filtered.filter((f) => classifyCargo(f.cargo_type) === "dirty").length;
+  const cleanCount = filtered.filter((f) => classifyCargo(f.cargo_type) === "clean").length;
 
   const toggleQuickFilter = (filter: string) => {
     setQuickFilter((prev) => (prev === filter ? null : filter));
@@ -219,6 +258,7 @@ export default function MarketReports() {
 
   const clearAll = () => {
     setQuickFilter(null);
+    setCargoTab("all");
     setSearchTerm(""); setFilterSource("all"); setFilterStatus("all");
     setFilterVesselClass("all"); setFilterCargoType("all");
     setFilterLoadRegion("all"); setFilterDischRegion("all");
@@ -442,10 +482,44 @@ export default function MarketReports() {
                 <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-32 h-8 text-xs" />
                 <span className="text-xs text-muted-foreground">to</span>
                 <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-32 h-8 text-xs" />
-                <span className="text-xs text-muted-foreground w-16 ml-2">Laycan</span>
+                {getDatePresets().map((p) => (
+                  <Button
+                    key={p.label}
+                    variant={dateFrom === p.from && dateTo === p.to ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 text-[10px] px-2"
+                    onClick={() => { setDateFrom(p.from); setDateTo(p.to); }}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+                {(dateFrom || dateTo) && (
+                  <Button variant="ghost" size="sm" className="h-7 text-[10px] px-2" onClick={() => { setDateFrom(""); setDateTo(""); }}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground w-20">Laycan</span>
                 <Input type="date" value={laycanFrom} onChange={(e) => setLaycanFrom(e.target.value)} className="w-32 h-8 text-xs" />
                 <span className="text-xs text-muted-foreground">to</span>
                 <Input type="date" value={laycanTo} onChange={(e) => setLaycanTo(e.target.value)} className="w-32 h-8 text-xs" />
+                {getDatePresets().map((p) => (
+                  <Button
+                    key={p.label}
+                    variant={laycanFrom === p.from && laycanTo === p.to ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 text-[10px] px-2"
+                    onClick={() => { setLaycanFrom(p.from); setLaycanTo(p.to); }}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+                {(laycanFrom || laycanTo) && (
+                  <Button variant="ghost" size="sm" className="h-7 text-[10px] px-2" onClick={() => { setLaycanFrom(""); setLaycanTo(""); }}>
+                    Clear
+                  </Button>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-muted-foreground w-20">DWT</span>
@@ -468,26 +542,53 @@ export default function MarketReports() {
             </Alert>
           )}
 
+          {/* Dirty / Clean / All sub-tabs */}
+          <div className="flex items-center gap-1 border-b">
+            {([
+              { key: "all" as const, label: "All", count: displayedCount },
+              { key: "dirty" as const, label: "Dirty (Crude/DPP)", count: dirtyCount },
+              { key: "clean" as const, label: "Clean (CPP/Chem/LPG)", count: cleanCount },
+            ]).map(({ key, label, count }) => (
+              <button
+                key={key}
+                onClick={() => setCargoTab(key)}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors",
+                  cargoTab === key
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {label}
+                <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-1.5">
+                  {count}
+                </Badge>
+              </button>
+            ))}
+          </div>
+
           {/* Fixture tables */}
           {loading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : totalFixtures === 0 ? (
+          ) : displayedCount === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-40" />
               <p className="text-sm">
-                {hasActiveFilters ? "No fixtures match your filters." : "No fixtures yet."}
+                {hasActiveFilters || cargoTab !== "all"
+                  ? "No fixtures match your filters."
+                  : "No fixtures yet."}
               </p>
               <p className="text-xs mt-1">
-                {hasActiveFilters
+                {hasActiveFilters || cargoTab !== "all"
                   ? "Try adjusting or clearing filters."
                   : "Go to the Import tab to upload broker reports."}
               </p>
             </div>
           ) : (
             <div className="space-y-6">
-              {VESSEL_CLASSES.map(
+              {[...VESSEL_CLASSES, "Other"].map(
                 (cls) =>
                   grouped[cls] &&
                   grouped[cls].length > 0 && (
@@ -500,14 +601,6 @@ export default function MarketReports() {
                       onResolve={setResolveTarget}
                     />
                   )
-              )}
-              {grouped["Other"] && grouped["Other"].length > 0 && (
-                <FixtureTable
-                  vesselClass="Other"
-                  fixtures={grouped["Other"]}
-                  fixtureFieldMap={fixtureFieldMap}
-                  vesselDiscrepancies={vesselDiscrepancies}
-                />
               )}
             </div>
           )}
