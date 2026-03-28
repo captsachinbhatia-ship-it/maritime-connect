@@ -1,6 +1,6 @@
 // supabase/functions/parse-market-report/index.ts
-// Accepts a PDF upload, extracts fixture rows via Claude API,
-// and inserts structured rows into market_data.
+// Accepts a PDF upload, auto-detects source & date, extracts fixture
+// rows via Claude API, and inserts structured rows into market_data.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -44,6 +44,8 @@ interface FixtureRow {
 }
 
 interface ClaudeExtractionResponse {
+  report_source: string;
+  report_date: string;
   fixtures: FixtureRow[];
 }
 
@@ -51,11 +53,23 @@ interface ClaudeExtractionResponse {
 
 const EXTRACTION_PROMPT = `You are a maritime fixture data extraction engine.
 
-You will receive the text content of a daily tanker broker report (one of: Meiwa VLCC, Meiwa Dirty, Presco, Gibson, Vantage DPP).
+You will receive a daily tanker broker report PDF. Your job is to:
 
-Extract EVERY fixture and enquiry row into structured JSON. Each row represents one vessel fixture or market enquiry.
+1. IDENTIFY the report source and date automatically:
+   - Report source must be one of: meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp
+   - Look at the header, logo, title, or footer to determine the source
+   - Find the report date from the document (usually in the header or title)
+   - If you cannot determine the source, use "unknown"
+   - Format the date as YYYY-MM-DD
 
-Return a JSON object with a single key "fixtures" containing an array of objects. Each object must have these fields (use null for missing values):
+2. EXTRACT every fixture and enquiry row into structured data.
+
+Return a JSON object with these top-level keys:
+- "report_source": string — one of: meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, unknown
+- "report_date": string — the report date in YYYY-MM-DD format
+- "fixtures": array of objects
+
+Each fixture object must have these fields (use null for missing values):
 
 - vessel_name: string — vessel name (e.g. "FRONT DEFENDER")
 - vessel_class: string — one of: VLCC, Suezmax, Aframax, MR, LR1, LR2 (infer from DWT or report section if not explicit)
@@ -90,14 +104,12 @@ Vessel class inference rules:
 - LR1: 55,000–79,999 DWT (clean/CPP cargo)
 - MR: 25,000–54,999 DWT
 
-Date inference: If the report only says "5/4" or "Apr 5", interpret relative to the report date provided. Convert to YYYY-MM-DD.
+Date inference: If the report only says "5/4" or "Apr 5", interpret relative to the report date. Convert to YYYY-MM-DD.
 
 Respond with ONLY valid JSON, no markdown fences, no commentary.`;
 
 async function extractFixturesFromPdf(
-  pdfBase64: string,
-  reportSource: string,
-  reportDate: string
+  pdfBase64: string
 ): Promise<ClaudeExtractionResponse> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -123,7 +135,7 @@ async function extractFixturesFromPdf(
             },
             {
               type: "text",
-              text: `This is a "${reportSource}" broker report dated ${reportDate}.\n\n${EXTRACTION_PROMPT}`,
+              text: EXTRACTION_PROMPT,
             },
           ],
         },
@@ -161,16 +173,12 @@ Deno.serve(async (req: Request) => {
     // Support both JSON (from supabase.functions.invoke) and form data
     const contentType = req.headers.get("content-type") ?? "";
     let base64: string;
-    let reportSource: string;
-    let reportDate: string;
     let uploadedBy: string | null;
     let fileName: string;
 
     if (contentType.includes("application/json")) {
       const body = await req.json();
       base64 = body.file_base64;
-      reportSource = body.report_source ?? "unknown";
-      reportDate = body.report_date ?? new Date().toISOString().slice(0, 10);
       uploadedBy = body.uploaded_by ?? null;
       fileName = body.file_name ?? "upload.pdf";
 
@@ -186,10 +194,6 @@ Deno.serve(async (req: Request) => {
     } else {
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
-      reportSource = (formData.get("report_source") as string) ?? "unknown";
-      reportDate =
-        (formData.get("report_date") as string) ??
-        new Date().toISOString().slice(0, 10);
       uploadedBy = formData.get("uploaded_by") as string | null;
 
       if (!file || file.type !== "application/pdf") {
@@ -208,18 +212,20 @@ Deno.serve(async (req: Request) => {
       base64 = btoa(String.fromCharCode(...uint8));
     }
 
-    // Extract fixtures via Claude
-    const extraction = await extractFixturesFromPdf(
-      base64,
-      reportSource,
-      reportDate
-    );
+    // Extract fixtures via Claude (auto-detects source & date)
+    const extraction = await extractFixturesFromPdf(base64);
+
+    const reportSource = extraction.report_source ?? "unknown";
+    const reportDate =
+      extraction.report_date ?? new Date().toISOString().slice(0, 10);
 
     if (!extraction.fixtures || extraction.fixtures.length === 0) {
       return new Response(
         JSON.stringify({
           success: true,
           inserted: 0,
+          report_source: reportSource,
+          report_date: reportDate,
           message: "No fixtures found in the report",
         }),
         {
@@ -276,6 +282,8 @@ Deno.serve(async (req: Request) => {
         success: true,
         inserted: data?.length ?? 0,
         fixtures: extraction.fixtures.length,
+        report_source: reportSource,
+        report_date: reportDate,
         sample: extraction.fixtures.slice(0, 3),
       }),
       {

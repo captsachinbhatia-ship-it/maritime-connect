@@ -11,23 +11,8 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { uploadMarketReport } from "@/services/marketData";
-
-const REPORT_SOURCES = [
-  { value: "meiwa_vlcc", label: "Meiwa VLCC" },
-  { value: "meiwa_dirty", label: "Meiwa Dirty" },
-  { value: "presco", label: "Presco" },
-  { value: "gibson", label: "Gibson" },
-  { value: "vantage_dpp", label: "Vantage DPP" },
-] as const;
 
 interface Props {
   open: boolean;
@@ -42,40 +27,51 @@ export function UploadReportDialog({
   onUploaded,
   uploadedBy,
 }: Props) {
-  const [file, setFile] = useState<File | null>(null);
-  const [source, setSource] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [files, setFiles] = useState<FileList | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState("");
 
   const handleUpload = async () => {
-    if (!file || !source || !date) return;
+    if (!files || files.length === 0) return;
     setUploading(true);
 
-    const { inserted, error } = await uploadMarketReport(
-      file,
-      source,
-      date,
-      uploadedBy
-    );
+    let totalInserted = 0;
+    const results: string[] = [];
 
-    setUploading(false);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setProgress(`Processing ${i + 1} of ${files.length}: ${file.name}…`);
 
-    if (error) {
-      toast({
-        title: "Upload failed",
-        description: error,
-        variant: "destructive",
-      });
-      return;
+      const { inserted, reportSource, reportDate, error } =
+        await uploadMarketReport(file, uploadedBy);
+
+      if (error) {
+        results.push(`${file.name}: failed — ${error}`);
+      } else {
+        totalInserted += inserted;
+        results.push(
+          `${file.name}: ${inserted} fixtures (${reportSource}, ${reportDate})`
+        );
+      }
     }
 
-    toast({
-      title: "Report parsed",
-      description: `${inserted} fixture${inserted !== 1 ? "s" : ""} extracted and saved.`,
-    });
+    setUploading(false);
+    setProgress("");
 
-    setFile(null);
-    setSource("");
+    if (totalInserted > 0) {
+      toast({
+        title: "Reports parsed",
+        description: `${totalInserted} fixture${totalInserted !== 1 ? "s" : ""} extracted from ${files.length} file${files.length !== 1 ? "s" : ""}.`,
+      });
+    } else {
+      toast({
+        title: "No fixtures extracted",
+        description: results.join("\n"),
+        variant: "destructive",
+      });
+    }
+
+    setFiles(null);
     onOpenChange(false);
     onUploaded();
   };
@@ -84,52 +80,32 @@ export function UploadReportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload Broker Report</DialogTitle>
+          <DialogTitle>Upload Broker Reports</DialogTitle>
           <DialogDescription>
-            Upload a daily PDF report. Fixtures will be extracted automatically.
+            Drop one or more PDF reports. Source and date are detected
+            automatically.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Report Source</Label>
-            <Select value={source} onValueChange={setSource}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select report…" />
-              </SelectTrigger>
-              <SelectContent>
-                {REPORT_SOURCES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Report Date</Label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>PDF File</Label>
+            <Label>PDF Files</Label>
             <Input
               type="file"
               accept="application/pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              multiple
+              onChange={(e) => setFiles(e.target.files)}
             />
           </div>
+          {uploading && progress && (
+            <p className="text-xs text-muted-foreground">{progress}</p>
+          )}
         </div>
 
         <DialogFooter>
           <Button
             onClick={handleUpload}
-            disabled={!file || !source || !date || uploading}
+            disabled={!files || files.length === 0 || uploading}
           >
             {uploading ? (
               <>

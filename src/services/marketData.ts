@@ -78,10 +78,13 @@ export async function fetchAvailableDates(): Promise<{
 
 export async function uploadMarketReport(
   file: File,
-  reportSource: string,
-  reportDate: string,
   uploadedBy: string | null
-): Promise<{ inserted: number; error: string | null }> {
+): Promise<{
+  inserted: number;
+  reportSource: string | null;
+  reportDate: string | null;
+  error: string | null;
+}> {
   try {
     // Read file as base64 to send via JSON (avoids multipart CORS issues)
     const arrayBuffer = await file.arrayBuffer();
@@ -98,8 +101,6 @@ export async function uploadMarketReport(
         body: {
           file_base64: base64,
           file_name: file.name,
-          report_source: reportSource,
-          report_date: reportDate,
           uploaded_by: uploadedBy,
         },
       }
@@ -108,14 +109,23 @@ export async function uploadMarketReport(
     if (error) {
       return {
         inserted: 0,
+        reportSource: null,
+        reportDate: null,
         error: error.message ?? "Upload failed",
       };
     }
 
-    return { inserted: data?.inserted ?? 0, error: null };
+    return {
+      inserted: data?.inserted ?? 0,
+      reportSource: data?.report_source ?? null,
+      reportDate: data?.report_date ?? null,
+      error: null,
+    };
   } catch (err) {
     return {
       inserted: 0,
+      reportSource: null,
+      reportDate: null,
       error: err instanceof Error ? err.message : "Unknown error",
     };
   }
