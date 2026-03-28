@@ -228,8 +228,22 @@ export function FixtureTable({
                 </TableCell>
               </TableRow>
             )}
-            {sorted.map((row) => {
+            {(() => {
+              // Track which vessel groups have shown "Resolve" button
+              const resolvedVessels = new Set<string>();
+              return sorted.map((row) => {
               const hasDisc = fixtureFieldMap.has(row.id);
+              // Find vessel discrepancy for this row
+              let disc: VesselDiscrepancy | null = null;
+              if (hasDisc) {
+                for (const d of vesselDiscrepancies.values()) {
+                  if (d.fixtureIds.includes(row.id)) { disc = d; break; }
+                }
+              }
+              const isFirstInGroup = disc && !resolvedVessels.has(disc.vesselKey);
+              if (disc && isFirstInGroup) resolvedVessels.add(disc.vesselKey);
+              const sourceCount = disc ? disc.fixtureIds.length : 0;
+
               return (
                 <TableRow
                   key={row.id}
@@ -247,35 +261,27 @@ export function FixtureTable({
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="text-xs font-semibold">
-                              Cross-report discrepancy
+                              Cross-report discrepancy ({sourceCount} sources)
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Fields:{" "}
                               {[...fixtureFieldMap.get(row.id)!].join(", ")}
                             </p>
                             {onResolve && (
-                              <p className="text-xs text-primary mt-1">Click to resolve</p>
+                              <p className="text-xs text-primary mt-1">Click Resolve to settle all {sourceCount} at once</p>
                             )}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     )}
-                    {hasDisc && onResolve && (() => {
-                      // Find the VesselDiscrepancy for this row
-                      for (const disc of vesselDiscrepancies.values()) {
-                        if (disc.fixtureIds.includes(row.id)) {
-                          return (
-                            <button
-                              className="ml-1 text-[10px] text-amber-600 hover:text-amber-800 underline"
-                              onClick={() => onResolve(disc)}
-                            >
-                              Resolve
-                            </button>
-                          );
-                        }
-                      }
-                      return null;
-                    })()}
+                    {isFirstInGroup && onResolve && disc && (
+                      <button
+                        className="ml-1 text-[10px] text-amber-600 hover:text-amber-800 underline"
+                        onClick={() => onResolve(disc!)}
+                      >
+                        Resolve ({sourceCount})
+                      </button>
+                    )}
                     {row.is_repeat && (
                       <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-orange-50 text-orange-600 border-orange-200">repeat</Badge>
                     )}
@@ -366,7 +372,8 @@ export function FixtureTable({
                   </TableCell>
                 </TableRow>
               );
-            })}
+            });
+            })()}
           </TableBody>
         </Table>
       </div>
