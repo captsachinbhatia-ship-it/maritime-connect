@@ -108,9 +108,65 @@ Date inference: If the report only says "5/4" or "Apr 5", interpret relative to 
 
 Respond with ONLY valid JSON, no markdown fences, no commentary.`;
 
-async function extractFixturesFromPdf(
-  pdfBase64: string
+// Map file extensions / MIME types to Claude API content block types
+const IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+]);
+
+const DOCUMENT_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",       // .xlsx
+  "text/csv",
+  "application/msword",     // .doc
+  "application/vnd.ms-excel", // .xls
+]);
+
+function detectMediaType(fileName: string, providedType?: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  const extMap: Record<string, string> = {
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    doc: "application/msword",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    xls: "application/vnd.ms-excel",
+    csv: "text/csv",
+  };
+  return extMap[ext] ?? providedType ?? "application/octet-stream";
+}
+
+function buildContentBlock(
+  base64: string,
+  mediaType: string
+): Record<string, unknown> {
+  if (IMAGE_TYPES.has(mediaType)) {
+    return {
+      type: "image",
+      source: { type: "base64", media_type: mediaType, data: base64 },
+    };
+  }
+  // PDFs, Word, Excel, CSV — all sent as document type
+  return {
+    type: "document",
+    source: { type: "base64", media_type: mediaType, data: base64 },
+  };
+}
+
+async function extractFixtures(
+  fileBase64: string,
+  mediaType: string
 ): Promise<ClaudeExtractionResponse> {
+  const fileBlock = buildContentBlock(fileBase64, mediaType);
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -125,14 +181,7 @@ async function extractFixturesFromPdf(
         {
           role: "user",
           content: [
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: pdfBase64,
-              },
-            },
+            fileBlock,
             {
               type: "text",
               text: EXTRACTION_PROMPT,
@@ -196,9 +245,9 @@ Deno.serve(async (req: Request) => {
       const file = formData.get("file") as File | null;
       uploadedBy = formData.get("uploaded_by") as string | null;
 
-      if (!file || file.type !== "application/pdf") {
+      if (!file) {
         return new Response(
-          JSON.stringify({ error: "A PDF file is required" }),
+          JSON.stringify({ error: "A file is required" }),
           {
             status: 400,
             headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
@@ -212,8 +261,11 @@ Deno.serve(async (req: Request) => {
       base64 = btoa(String.fromCharCode(...uint8));
     }
 
+    // Detect media type from file name
+    const mediaType = detectMediaType(fileName);
+
     // Extract fixtures via Claude (auto-detects source & date)
-    const extraction = await extractFixturesFromPdf(base64);
+    const extraction = await extractFixtures(base64, mediaType);
 
     const reportSource = extraction.report_source ?? "unknown";
     const reportDate =

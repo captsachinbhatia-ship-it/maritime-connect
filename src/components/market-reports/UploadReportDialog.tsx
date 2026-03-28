@@ -83,17 +83,17 @@ export function UploadReportDialog({
         <DialogHeader>
           <DialogTitle>Upload Broker Reports</DialogTitle>
           <DialogDescription>
-            Drop one or more PDF reports. Source and date are detected
-            automatically.
+            Drop one or more report files (PDF, images, Word, Excel, CSV).
+            Source and date are detected automatically.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>PDF Files</Label>
+            <Label>Report Files</Label>
             <Input
               type="file"
-              accept="application/pdf"
+              accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv"
               multiple
               onChange={(e) => setFiles(e.target.files)}
             />
