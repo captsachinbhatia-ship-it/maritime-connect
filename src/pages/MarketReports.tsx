@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Search,
   X,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,25 @@ const VESSEL_CLASS_OPTIONS = [
   ...VESSEL_CLASSES.map((c) => ({ value: c, label: c })),
 ];
 
+const CARGO_TYPE_OPTIONS = [
+  { value: "all", label: "All Cargo Types" },
+  { value: "Crude", label: "Crude" },
+  { value: "CPP", label: "CPP" },
+  { value: "DPP", label: "DPP" },
+  { value: "Chemical", label: "Chemical" },
+  { value: "LPG", label: "LPG" },
+];
+
+/** Extract unique non-null values from fixtures for a given field */
+function uniqueValues(fixtures: MarketFixture[], field: keyof MarketFixture): string[] {
+  const set = new Set<string>();
+  for (const f of fixtures) {
+    const v = f[field];
+    if (v != null && String(v).trim()) set.add(String(v).trim());
+  }
+  return [...set].sort();
+}
+
 export default function MarketReports() {
   const { crmUserId } = useCrmUser();
 
@@ -62,14 +82,27 @@ export default function MarketReports() {
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
   const [filterSource, setFilterSource] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterVesselClass, setFilterVesselClass] = useState("all");
+  const [filterCargoType, setFilterCargoType] = useState("all");
+  const [filterLoadRegion, setFilterLoadRegion] = useState("all");
+  const [filterDischRegion, setFilterDischRegion] = useState("all");
+  const [filterLoadPort, setFilterLoadPort] = useState("all");
+  const [filterDischPort, setFilterDischPort] = useState("all");
+  const [filterVesselName, setFilterVesselName] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [laycanFrom, setLaycanFrom] = useState("");
+  const [laycanTo, setLaycanTo] = useState("");
+  const [dwtMin, setDwtMin] = useState("");
+  const [dwtMax, setDwtMax] = useState("");
+  const [qtyMin, setQtyMin] = useState("");
+  const [qtyMax, setQtyMax] = useState("");
 
   // Fetch all fixtures (with optional date range)
   const loadFixtures = useCallback(async () => {
@@ -96,11 +129,12 @@ export default function MarketReports() {
     loadFixtures();
   }, [loadFixtures]);
 
-  // Clear date range
-  const clearDateRange = () => {
-    setDateFrom("");
-    setDateTo("");
-  };
+  // Dynamic filter options derived from loaded data
+  const loadRegions = useMemo(() => uniqueValues(fixtures, "load_region"), [fixtures]);
+  const dischRegions = useMemo(() => uniqueValues(fixtures, "discharge_region"), [fixtures]);
+  const loadPorts = useMemo(() => uniqueValues(fixtures, "load_port"), [fixtures]);
+  const dischPorts = useMemo(() => uniqueValues(fixtures, "discharge_port"), [fixtures]);
+  const vesselNames = useMemo(() => uniqueValues(fixtures, "vessel_name"), [fixtures]);
 
   // Filtered fixtures
   const filtered = useMemo(() => {
@@ -109,11 +143,40 @@ export default function MarketReports() {
         return false;
       if (filterStatus !== "all" && f.fixture_status !== filterStatus)
         return false;
-      if (
-        filterVesselClass !== "all" &&
-        f.vessel_class !== filterVesselClass
-      )
+      if (filterVesselClass !== "all" && f.vessel_class !== filterVesselClass)
         return false;
+      if (filterCargoType !== "all" && f.cargo_type !== filterCargoType)
+        return false;
+      if (filterLoadRegion !== "all" && f.load_region !== filterLoadRegion)
+        return false;
+      if (filterDischRegion !== "all" && f.discharge_region !== filterDischRegion)
+        return false;
+      if (filterLoadPort !== "all" && f.load_port !== filterLoadPort)
+        return false;
+      if (filterDischPort !== "all" && f.discharge_port !== filterDischPort)
+        return false;
+      if (filterVesselName !== "all" && f.vessel_name !== filterVesselName)
+        return false;
+
+      // Laycan date range
+      if (laycanFrom && f.laycan_from && f.laycan_from < laycanFrom)
+        return false;
+      if (laycanTo && f.laycan_to && f.laycan_to > laycanTo)
+        return false;
+
+      // DWT range
+      if (dwtMin && f.dwt != null && f.dwt < Number(dwtMin))
+        return false;
+      if (dwtMax && f.dwt != null && f.dwt > Number(dwtMax))
+        return false;
+
+      // Cargo quantity range
+      if (qtyMin && f.quantity_mt != null && f.quantity_mt < Number(qtyMin))
+        return false;
+      if (qtyMax && f.quantity_mt != null && f.quantity_mt > Number(qtyMax))
+        return false;
+
+      // Search
       if (searchTerm) {
         const s = searchTerm.toLowerCase();
         const haystack = [
@@ -124,6 +187,9 @@ export default function MarketReports() {
           f.discharge_port,
           f.owner,
           f.broker,
+          f.cargo_type,
+          f.load_region,
+          f.discharge_region,
         ]
           .filter(Boolean)
           .join(" ")
@@ -132,7 +198,12 @@ export default function MarketReports() {
       }
       return true;
     });
-  }, [fixtures, filterSource, filterStatus, filterVesselClass, searchTerm]);
+  }, [
+    fixtures, filterSource, filterStatus, filterVesselClass, filterCargoType,
+    filterLoadRegion, filterDischRegion, filterLoadPort, filterDischPort,
+    filterVesselName, laycanFrom, laycanTo, dwtMin, dwtMax, qtyMin, qtyMax,
+    searchTerm,
+  ]);
 
   // Group by vessel class
   const grouped = useMemo(() => {
@@ -162,13 +233,63 @@ export default function MarketReports() {
   const sourcesCount = new Set(filtered.map((f) => f.report_source)).size;
   const dateCount = new Set(filtered.map((f) => f.report_date)).size;
 
+  const clearAll = () => {
+    setSearchTerm("");
+    setFilterSource("all");
+    setFilterStatus("all");
+    setFilterVesselClass("all");
+    setFilterCargoType("all");
+    setFilterLoadRegion("all");
+    setFilterDischRegion("all");
+    setFilterLoadPort("all");
+    setFilterDischPort("all");
+    setFilterVesselName("all");
+    setDateFrom("");
+    setDateTo("");
+    setLaycanFrom("");
+    setLaycanTo("");
+    setDwtMin("");
+    setDwtMax("");
+    setQtyMin("");
+    setQtyMax("");
+  };
+
   const hasActiveFilters =
     filterSource !== "all" ||
     filterStatus !== "all" ||
     filterVesselClass !== "all" ||
+    filterCargoType !== "all" ||
+    filterLoadRegion !== "all" ||
+    filterDischRegion !== "all" ||
+    filterLoadPort !== "all" ||
+    filterDischPort !== "all" ||
+    filterVesselName !== "all" ||
     searchTerm !== "" ||
     dateFrom !== "" ||
-    dateTo !== "";
+    dateTo !== "" ||
+    laycanFrom !== "" ||
+    laycanTo !== "" ||
+    dwtMin !== "" ||
+    dwtMax !== "" ||
+    qtyMin !== "" ||
+    qtyMax !== "";
+
+  const activeFilterCount = [
+    filterSource !== "all",
+    filterStatus !== "all",
+    filterVesselClass !== "all",
+    filterCargoType !== "all",
+    filterLoadRegion !== "all",
+    filterDischRegion !== "all",
+    filterLoadPort !== "all",
+    filterDischPort !== "all",
+    filterVesselName !== "all",
+    searchTerm !== "",
+    dateFrom !== "" || dateTo !== "",
+    laycanFrom !== "" || laycanTo !== "",
+    dwtMin !== "" || dwtMax !== "",
+    qtyMin !== "" || qtyMax !== "",
+  ].filter(Boolean).length;
 
   return (
     <div className="space-y-4">
@@ -214,15 +335,15 @@ export default function MarketReports() {
         )}
       </div>
 
-      {/* Filters */}
+      {/* Primary filters row */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search vessel, charterer, cargo…"
-            className="pl-8 w-64 h-8 text-xs"
+            placeholder="Search vessel, charterer, cargo, port…"
+            className="pl-8 w-72 h-8 text-xs"
           />
         </div>
         <Select value={filterSource} onValueChange={setFilterSource}>
@@ -249,6 +370,18 @@ export default function MarketReports() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={filterCargoType} onValueChange={setFilterCargoType}>
+          <SelectTrigger className="w-36 h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CARGO_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
           <SelectTrigger className="w-32 h-8 text-xs">
             <SelectValue />
@@ -261,51 +394,174 @@ export default function MarketReports() {
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1">
-          <Input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            placeholder="From"
-            className="w-32 h-8 text-xs"
-          />
-          <span className="text-xs text-muted-foreground">to</span>
-          <Input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            placeholder="To"
-            className="w-32 h-8 text-xs"
-          />
-          {(dateFrom || dateTo) && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={clearDateRange}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
+        <Button
+          variant={showMoreFilters ? "secondary" : "outline"}
+          size="sm"
+          className="h-8 text-xs gap-1"
+          onClick={() => setShowMoreFilters((p) => !p)}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          More
+          {activeFilterCount > 5 && (
+            <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">
+              {activeFilterCount - 5}
+            </Badge>
           )}
-        </div>
+        </Button>
         {hasActiveFilters && (
           <Button
             variant="ghost"
             size="sm"
             className="h-8 text-xs"
-            onClick={() => {
-              setSearchTerm("");
-              setFilterSource("all");
-              setFilterStatus("all");
-              setFilterVesselClass("all");
-              setDateFrom("");
-              setDateTo("");
-            }}
+            onClick={clearAll}
           >
             Clear all
           </Button>
         )}
       </div>
+
+      {/* Expanded filters */}
+      {showMoreFilters && (
+        <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+          {/* Row 1: Vessel, Load/Discharge ports and regions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={filterVesselName} onValueChange={setFilterVesselName}>
+              <SelectTrigger className="w-44 h-8 text-xs">
+                <SelectValue placeholder="Vessel Name" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vessels</SelectItem>
+                {vesselNames.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterLoadPort} onValueChange={setFilterLoadPort}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <SelectValue placeholder="Load Port" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Load Ports</SelectItem>
+                {loadPorts.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterLoadRegion} onValueChange={setFilterLoadRegion}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectValue placeholder="Load Region" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Load Regions</SelectItem>
+                {loadRegions.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterDischPort} onValueChange={setFilterDischPort}>
+              <SelectTrigger className="w-40 h-8 text-xs">
+                <SelectValue placeholder="Disch Port" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Disch Ports</SelectItem>
+                {dischPorts.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterDischRegion} onValueChange={setFilterDischRegion}>
+              <SelectTrigger className="w-36 h-8 text-xs">
+                <SelectValue placeholder="Disch Region" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Disch Regions</SelectItem>
+                {dischRegions.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Row 2: Date ranges, DWT, Quantity */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground w-20">Report date</span>
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-32 h-8 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-32 h-8 text-xs"
+            />
+
+            <span className="text-xs text-muted-foreground w-16 ml-2">Laycan</span>
+            <Input
+              type="date"
+              value={laycanFrom}
+              onChange={(e) => setLaycanFrom(e.target.value)}
+              className="w-32 h-8 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              type="date"
+              value={laycanTo}
+              onChange={(e) => setLaycanTo(e.target.value)}
+              className="w-32 h-8 text-xs"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground w-20">DWT</span>
+            <Input
+              type="number"
+              value={dwtMin}
+              onChange={(e) => setDwtMin(e.target.value)}
+              placeholder="Min"
+              className="w-28 h-8 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              type="number"
+              value={dwtMax}
+              onChange={(e) => setDwtMax(e.target.value)}
+              placeholder="Max"
+              className="w-28 h-8 text-xs"
+            />
+
+            <span className="text-xs text-muted-foreground w-16 ml-2">Cargo MT</span>
+            <Input
+              type="number"
+              value={qtyMin}
+              onChange={(e) => setQtyMin(e.target.value)}
+              placeholder="Min"
+              className="w-28 h-8 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <Input
+              type="number"
+              value={qtyMax}
+              onChange={(e) => setQtyMax(e.target.value)}
+              placeholder="Max"
+              className="w-28 h-8 text-xs"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Error */}
       {error && (
