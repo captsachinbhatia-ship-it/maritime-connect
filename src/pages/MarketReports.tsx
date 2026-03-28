@@ -7,6 +7,7 @@ import {
   Search,
   SlidersHorizontal,
   FileUp,
+  FileDown,
   TableProperties,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,12 +26,16 @@ import { cn } from "@/lib/utils";
 import { useCrmUser } from "@/hooks/useCrmUser";
 import {
   fetchMarketData,
+  type MarketRecord,
   type MarketFixture,
 } from "@/services/marketData";
 import { FixtureTable } from "@/components/market-reports/FixtureTable";
+import { BalticRoutesTable } from "@/components/market-reports/BalticRoutesTable";
+import { BunkerPricesTable } from "@/components/market-reports/BunkerPricesTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
 import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
 import { ResolveDiscrepancyDialog } from "@/components/market-reports/ResolveDiscrepancyDialog";
+import { generateMarketReportPdf } from "@/lib/generateMarketReportPdf";
 import { detectDiscrepancies, type VesselDiscrepancy } from "@/lib/discrepancies";
 import {
   VESSEL_CLASSES,
@@ -211,15 +216,21 @@ export default function MarketReports() {
     [fixtures]
   );
 
-  // Apply quick filter + cargo tab
+  // Split by record type
+  const fixtureRecords = useMemo(() => filtered.filter((r) => r.record_type === "FIXTURE" || !r.record_type), [filtered]);
+  const enquiryRecords = useMemo(() => filtered.filter((r) => r.record_type === "ENQUIRY"), [filtered]);
+  const balticRecords = useMemo(() => fixtures.filter((r) => r.record_type === "BALTIC"), [fixtures]);
+  const bunkerRecords = useMemo(() => fixtures.filter((r) => r.record_type === "BUNKER"), [fixtures]);
+
+  // Apply quick filter + cargo tab (only to fixtures)
   const displayed = useMemo(() => {
-    let result = filtered;
+    let result = fixtureRecords;
     if (quickFilter === "fixed") result = result.filter((f) => f.fixture_status === "fixed");
     if (quickFilter === "discrepancies") result = result.filter((f) => fixtureFieldMap.has(f.id));
     if (cargoTab === "dirty") result = result.filter((f) => classifyCargo(f.cargo_type) === "dirty");
     if (cargoTab === "clean") result = result.filter((f) => classifyCargo(f.cargo_type) === "clean");
     return result;
-  }, [filtered, quickFilter, fixtureFieldMap, cargoTab]);
+  }, [fixtureRecords, quickFilter, fixtureFieldMap, cargoTab]);
 
   // Regroup after quick filter
   const grouped = useMemo(() => {
@@ -233,14 +244,21 @@ export default function MarketReports() {
     return map;
   }, [displayed]);
 
-  const totalFixtures = filtered.length;
+  const totalFixtures = fixtureRecords.length;
   const displayedCount = displayed.length;
-  const fixedCount = filtered.filter((f) => f.fixture_status === "fixed").length;
-  const sourcesCount = new Set(filtered.map((f) => f.report_source)).size;
-  const dateCount = new Set(filtered.map((f) => f.report_date)).size;
-  const discrepancyFixtureCount = filtered.filter((f) => fixtureFieldMap.has(f.id)).length;
-  const dirtyCount = filtered.filter((f) => classifyCargo(f.cargo_type) === "dirty").length;
-  const cleanCount = filtered.filter((f) => classifyCargo(f.cargo_type) === "clean").length;
+  const fixedCount = fixtureRecords.filter((f) => f.fixture_status === "fixed").length;
+  const sourcesCount = new Set(fixtureRecords.map((f) => f.report_source)).size;
+  const dateCount = new Set(fixtureRecords.map((f) => f.report_date)).size;
+  const discrepancyFixtureCount = fixtureRecords.filter((f) => fixtureFieldMap.has(f.id)).length;
+  const dirtyCount = fixtureRecords.filter((f) => classifyCargo(f.cargo_type) === "dirty").length;
+  const cleanCount = fixtureRecords.filter((f) => classifyCargo(f.cargo_type) === "clean").length;
+
+  const handleGeneratePdf = (type: "DPP" | "CPP") => {
+    const relevantRecords = fixtures.filter((r) => r.report_type === type);
+    if (relevantRecords.length === 0) return;
+    const latestDate = relevantRecords[0]?.report_date ?? new Date().toISOString().slice(0, 10);
+    generateMarketReportPdf({ reportType: type, reportDate: latestDate, records: relevantRecords });
+  };
 
   const toggleQuickFilter = (filter: string) => {
     setQuickFilter((prev) => (prev === filter ? null : filter));
@@ -557,12 +575,39 @@ export default function MarketReports() {
             ))}
           </div>
 
+          {/* Generate PDF buttons */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1"
+              onClick={() => handleGeneratePdf("DPP")}
+              disabled={fixtures.filter((r) => r.report_type === "DPP").length === 0}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              Download DPP Report
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1"
+              onClick={() => handleGeneratePdf("CPP")}
+              disabled={fixtures.filter((r) => r.report_type === "CPP").length === 0}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              Download CPP Report
+            </Button>
+          </div>
+
+          {/* Baltic Routes */}
+          {!loading && <BalticRoutesTable records={balticRecords} />}
+
           {/* Fixture tables */}
           {loading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : displayedCount === 0 ? (
+          ) : displayedCount === 0 && enquiryRecords.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-40" />
               <p className="text-sm">
@@ -578,6 +623,7 @@ export default function MarketReports() {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Fixtures grouped by vessel class */}
               {[...VESSEL_CLASSES, "Other"].map(
                 (cls) =>
                   grouped[cls] &&
@@ -592,8 +638,51 @@ export default function MarketReports() {
                     />
                   )
               )}
+
+              {/* Enquiries section */}
+              {enquiryRecords.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold">Enquiries</h3>
+                    <Badge variant="secondary" className="text-xs">{enquiryRecords.length}</Badge>
+                  </div>
+                  <div className="rounded-lg border overflow-auto max-h-[40vh]">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left px-3 py-1.5 font-medium">Segment</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Charterer</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Qty (kt)</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Cargo</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Laycan</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Load</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Discharge</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {enquiryRecords.map((e) => (
+                          <tr key={e.id} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="px-3 py-1.5">{e.vessel_class ?? "—"}</td>
+                            <td className="px-3 py-1.5">{e.charterer ?? "—"}</td>
+                            <td className="px-3 py-1.5 tabular-nums">{e.quantity_mt ? (e.quantity_mt / 1000).toFixed(0) : "—"}</td>
+                            <td className="px-3 py-1.5 uppercase">{e.cargo_grade ?? e.cargo_type ?? "—"}</td>
+                            <td className="px-3 py-1.5">{e.raw_text ?? "—"}</td>
+                            <td className="px-3 py-1.5 uppercase">{e.load_port ?? "—"}</td>
+                            <td className="px-3 py-1.5 uppercase">{e.discharge_port ?? "—"}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground">{e.source_broker ?? e.report_source}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+          {/* Bunker Prices */}
+          {!loading && <BunkerPricesTable records={bunkerRecords} />}
         </TabsContent>
 
         {/* ====== IMPORT TAB ====== */}

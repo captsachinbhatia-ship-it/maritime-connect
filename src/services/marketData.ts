@@ -1,9 +1,15 @@
 import { supabase } from "@/lib/supabaseClient";
 
-export interface MarketFixture {
+// ---------- Types ----------
+
+export interface MarketRecord {
   id: string;
   report_source: string;
   report_date: string;
+  report_type: string | null;
+  record_type: string | null;
+  source_broker: string | null;
+  // Fixture / Enquiry fields
   vessel_name: string | null;
   vessel_class: string | null;
   dwt: number | null;
@@ -25,44 +31,66 @@ export interface MarketFixture {
   fixture_status: string | null;
   broker: string | null;
   coating: string | null;
+  raw_text: string | null;
   confidence: number | null;
   pdf_filename: string | null;
+  // Baltic fields
+  baltic_route: string | null;
+  baltic_description: string | null;
+  baltic_size: string | null;
+  world_scale: number | null;
+  tc_earnings: number | null;
+  // Bunker fields
+  bunker_region: string | null;
+  vlsfo_price: number | null;
+  vlsfo_change: number | null;
+  ifo380_price: number | null;
+  ifo380_change: number | null;
+  mgo_price: number | null;
+  mgo_change: number | null;
+  // Meta
   created_at: string;
 }
+
+// Backward compat alias
+export type MarketFixture = MarketRecord;
+
+const ALL_COLUMNS = `id, report_source, report_date, report_type, record_type, source_broker,
+  vessel_name, vessel_class, dwt, built_year, owner, charterer, cargo_grade, cargo_type,
+  quantity_mt, load_port, load_region, discharge_port, discharge_region,
+  laycan_from, laycan_to, rate_type, rate_value, rate_numeric, fixture_status,
+  broker, coating, raw_text, confidence, pdf_filename,
+  baltic_route, baltic_description, baltic_size, world_scale, tc_earnings,
+  bunker_region, vlsfo_price, vlsfo_change, ifo380_price, ifo380_change, mgo_price, mgo_change,
+  created_at`;
+
+// ---------- Fetch ----------
 
 export async function fetchMarketData(filters?: {
   dateFrom?: string;
   dateTo?: string;
+  reportType?: string;
 }): Promise<{
-  data: MarketFixture[] | null;
+  data: MarketRecord[] | null;
   error: string | null;
 }> {
   try {
     let query = supabase
       .from("market_data")
-      .select(
-        "id, report_source, report_date, vessel_name, vessel_class, dwt, built_year, owner, charterer, cargo_grade, cargo_type, quantity_mt, load_port, load_region, discharge_port, discharge_region, laycan_from, laycan_to, rate_type, rate_value, rate_numeric, fixture_status, broker, coating, confidence, pdf_filename, created_at"
-      )
+      .select(ALL_COLUMNS)
       .order("report_date", { ascending: false })
       .order("vessel_class", { ascending: true })
       .order("created_at", { ascending: false });
 
-    if (filters?.dateFrom) {
-      query = query.gte("report_date", filters.dateFrom);
-    }
-    if (filters?.dateTo) {
-      query = query.lte("report_date", filters.dateTo);
-    }
+    if (filters?.dateFrom) query = query.gte("report_date", filters.dateFrom);
+    if (filters?.dateTo) query = query.lte("report_date", filters.dateTo);
+    if (filters?.reportType) query = query.eq("report_type", filters.reportType);
 
     const { data, error } = await query;
-
     if (error) return { data: null, error: error.message };
-    return { data: data as MarketFixture[], error: null };
+    return { data: data as MarketRecord[], error: null };
   } catch (err) {
-    return {
-      data: null,
-      error: err instanceof Error ? err.message : "Unknown error",
-    };
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
@@ -76,18 +104,15 @@ export async function fetchAvailableDates(): Promise<{
       .select("report_date")
       .order("report_date", { ascending: false })
       .limit(60);
-
     if (error) return { data: null, error: error.message };
-
     const unique = [...new Set((data ?? []).map((r) => r.report_date))];
     return { data: unique, error: null };
   } catch (err) {
-    return {
-      data: null,
-      error: err instanceof Error ? err.message : "Unknown error",
-    };
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
+
+// ---------- Report history ----------
 
 export interface ReportSummary {
   report_source: string;
@@ -107,12 +132,10 @@ export async function fetchReportHistory(): Promise<{
       .from("market_data")
       .select("report_source, pdf_filename, report_date, created_at")
       .order("created_at", { ascending: false });
-
     if (error) return { data: null, error: error.message };
 
-    // Group by source — one row per source
     const map = new Map<string, ReportSummary>();
-    const uploadTracker = new Map<string, Set<string>>(); // source -> set of filename|date combos
+    const uploadTracker = new Map<string, Set<string>>();
 
     for (const row of data ?? []) {
       const src = row.report_source;
@@ -120,15 +143,9 @@ export async function fetchReportHistory(): Promise<{
       const existing = map.get(src);
       if (existing) {
         existing.fixture_count++;
-        if (row.created_at > existing.latest_uploaded_at) {
-          existing.latest_uploaded_at = row.created_at;
-        }
-        if (row.report_date > existing.latest_report_date) {
-          existing.latest_report_date = row.report_date;
-        }
-        if (row.pdf_filename && !existing.filenames.includes(row.pdf_filename)) {
-          existing.filenames.push(row.pdf_filename);
-        }
+        if (row.created_at > existing.latest_uploaded_at) existing.latest_uploaded_at = row.created_at;
+        if (row.report_date > existing.latest_report_date) existing.latest_report_date = row.report_date;
+        if (row.pdf_filename && !existing.filenames.includes(row.pdf_filename)) existing.filenames.push(row.pdf_filename);
         uploadTracker.get(src)!.add(uploadKey);
       } else {
         map.set(src, {
@@ -142,20 +159,16 @@ export async function fetchReportHistory(): Promise<{
         uploadTracker.set(src, new Set([uploadKey]));
       }
     }
-
-    // Set upload_count from tracker
     for (const [src, summary] of map) {
       summary.upload_count = uploadTracker.get(src)?.size ?? 1;
     }
-
     return { data: [...map.values()], error: null };
   } catch (err) {
-    return {
-      data: null,
-      error: err instanceof Error ? err.message : "Unknown error",
-    };
+    return { data: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
+
+// ---------- Upload ----------
 
 export async function uploadMarketReport(
   file: File,
@@ -165,37 +178,24 @@ export async function uploadMarketReport(
   skipped: number;
   reportSource: string | null;
   reportDate: string | null;
+  reportType: string | null;
+  counts: { baltic: number; fixtures: number; enquiries: number; bunker: number } | null;
   error: string | null;
 }> {
   try {
-    // Read file as base64 to send via JSON (avoids multipart CORS issues)
     const arrayBuffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
     let binary = "";
-    for (let i = 0; i < uint8.length; i++) {
-      binary += String.fromCharCode(uint8[i]);
-    }
+    for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
     const base64 = btoa(binary);
 
     const { data, error } = await supabase.functions.invoke(
       "parse-market-report",
-      {
-        body: {
-          file_base64: base64,
-          file_name: file.name,
-          uploaded_by: uploadedBy,
-        },
-      }
+      { body: { file_base64: base64, file_name: file.name, uploaded_by: uploadedBy } }
     );
 
     if (error) {
-      return {
-        inserted: 0,
-        skipped: 0,
-        reportSource: null,
-        reportDate: null,
-        error: error.message ?? "Upload failed",
-      };
+      return { inserted: 0, skipped: 0, reportSource: null, reportDate: null, reportType: null, counts: null, error: error.message ?? "Upload failed" };
     }
 
     return {
@@ -203,20 +203,16 @@ export async function uploadMarketReport(
       skipped: data?.skipped ?? 0,
       reportSource: data?.report_source ?? null,
       reportDate: data?.report_date ?? null,
+      reportType: data?.report_type ?? null,
+      counts: data?.counts ?? null,
       error: null,
     };
   } catch (err) {
-    return {
-      inserted: 0,
-      skipped: 0,
-      reportSource: null,
-      reportDate: null,
-      error: err instanceof Error ? err.message : "Unknown error",
-    };
+    return { inserted: 0, skipped: 0, reportSource: null, reportDate: null, reportType: null, counts: null, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }
 
-// ---------- Discrepancy resolutions ----------
+// ---------- Resolutions ----------
 
 export interface Resolution {
   id: string;
@@ -256,7 +252,6 @@ export async function resolveDiscrepancy(params: {
   resolvedByName: string;
 }): Promise<{ error: string | null }> {
   try {
-    // Upsert — update if same vessel+date+field exists
     const { data: existing } = await supabase
       .from("market_data_resolutions")
       .select("id")
