@@ -253,11 +253,11 @@ export default function MarketReports() {
   const dirtyCount = fixtureRecords.filter((f) => classifyCargo(f.cargo_type) === "dirty").length;
   const cleanCount = fixtureRecords.filter((f) => classifyCargo(f.cargo_type) === "clean").length;
 
-  const handleGeneratePdf = (type: "DPP" | "CPP") => {
+  const handleGeneratePdf = async (type: "DPP" | "CPP") => {
     const relevantRecords = fixtures.filter((r) => r.report_type === type);
     if (relevantRecords.length === 0) return;
     const latestDate = relevantRecords[0]?.report_date ?? new Date().toISOString().slice(0, 10);
-    generateMarketReportPdf({ reportType: type, reportDate: latestDate, records: relevantRecords });
+    await generateMarketReportPdf({ reportType: type, reportDate: latestDate, records: relevantRecords });
   };
 
   const toggleQuickFilter = (filter: string) => {
