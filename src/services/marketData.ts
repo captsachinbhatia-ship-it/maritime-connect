@@ -76,6 +76,56 @@ export async function fetchAvailableDates(): Promise<{
   }
 }
 
+export interface ReportSummary {
+  report_source: string;
+  pdf_filename: string | null;
+  report_date: string;
+  fixture_count: number;
+  uploaded_at: string;
+}
+
+export async function fetchReportHistory(): Promise<{
+  data: ReportSummary[] | null;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from("market_data")
+      .select("report_source, pdf_filename, report_date, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) return { data: null, error: error.message };
+
+    // Group by source + date + filename
+    const map = new Map<string, ReportSummary>();
+    for (const row of data ?? []) {
+      const key = `${row.report_source}|${row.report_date}|${row.pdf_filename ?? ""}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.fixture_count++;
+        if (row.created_at > existing.uploaded_at) {
+          existing.uploaded_at = row.created_at;
+        }
+      } else {
+        map.set(key, {
+          report_source: row.report_source,
+          pdf_filename: row.pdf_filename,
+          report_date: row.report_date,
+          fixture_count: 1,
+          uploaded_at: row.created_at,
+        });
+      }
+    }
+
+    return { data: [...map.values()], error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
+}
+
 export async function uploadMarketReport(
   file: File,
   uploadedBy: string | null

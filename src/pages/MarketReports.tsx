@@ -28,6 +28,7 @@ import {
 } from "@/services/marketData";
 import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
+import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
 import { detectDiscrepancies } from "@/lib/discrepancies";
 
 const VESSEL_CLASSES = ["VLCC", "Suezmax", "Aframax", "LR2", "LR1", "MR"];
@@ -62,6 +63,7 @@ export default function MarketReports() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -300,11 +302,17 @@ export default function MarketReports() {
         </div>
       )}
 
+      {/* Report history */}
+      <ReportHistoryTable refreshKey={historyRefresh} />
+
       {/* Upload dialog */}
       <UploadReportDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
-        onUploaded={loadFixtures}
+        onUploaded={() => {
+          loadFixtures();
+          setHistoryRefresh((p) => p + 1);
+        }}
         uploadedBy={crmUserId}
       />
     </div>
