@@ -42,7 +42,8 @@ type SortCol =
   | "discharge_port"
   | "rate_numeric"
   | "fixture_status"
-  | "report_source";
+  | "report_source"
+  | "report_date";
 
 interface Props {
   fixtures: MarketFixture[];
@@ -209,13 +210,14 @@ export function FixtureTable({
               <SortHeader col="rate_numeric">Rate</SortHeader>
               <SortHeader col="fixture_status">Status</SortHeader>
               <SortHeader col="report_source">Source</SortHeader>
+              <SortHeader col="report_date">Report Date</SortHeader>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={11}
+                  colSpan={12}
                   className="text-center text-muted-foreground py-6 text-xs"
                 >
                   No fixtures for {vesselClass}
@@ -323,6 +325,9 @@ export function FixtureTable({
                   </DiscrepantCell>
                   <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                     {SOURCE_LABELS[row.report_source] ?? row.report_source}
+                  </TableCell>
+                  <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
+                    {row.report_date ?? "—"}
                   </TableCell>
                 </TableRow>
               );

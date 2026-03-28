@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { format } from "date-fns";
 import {
   BarChart3,
   Upload,
   Loader2,
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   Search,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +21,6 @@ import {
 import { useCrmUser } from "@/hooks/useCrmUser";
 import {
   fetchMarketData,
-  fetchAvailableDates,
   type MarketFixture,
 } from "@/services/marketData";
 import { FixtureTable } from "@/components/market-reports/FixtureTable";
@@ -51,14 +48,15 @@ const STATUS_OPTIONS = [
   { value: "withdrawn", label: "Withdrawn" },
 ];
 
+const VESSEL_CLASS_OPTIONS = [
+  { value: "all", label: "All Vessel Types" },
+  ...VESSEL_CLASSES.map((c) => ({ value: c, label: c })),
+];
+
 export default function MarketReports() {
   const { crmUserId } = useCrmUser();
 
   // State
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [fixtures, setFixtures] = useState<MarketFixture[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,20 +67,22 @@ export default function MarketReports() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterSource, setFilterSource] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterVesselClass, setFilterVesselClass] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
-  // Fetch available dates on mount
-  useEffect(() => {
-    fetchAvailableDates().then(({ data }) => {
-      if (data) setAvailableDates(data);
-    });
-  }, []);
-
-  // Fetch fixtures for selected date
+  // Fetch all fixtures (with optional date range)
   const loadFixtures = useCallback(async () => {
     setLoading(true);
     setError(null);
 
-    const { data, error: err } = await fetchMarketData(selectedDate);
+    const filters: { dateFrom?: string; dateTo?: string } = {};
+    if (dateFrom) filters.dateFrom = dateFrom;
+    if (dateTo) filters.dateTo = dateTo;
+
+    const { data, error: err } = await fetchMarketData(
+      Object.keys(filters).length > 0 ? filters : undefined
+    );
     if (err) {
       console.warn("[MarketReports] fetch error:", err);
       setError(err);
@@ -90,17 +90,16 @@ export default function MarketReports() {
       setFixtures(data ?? []);
     }
     setLoading(false);
-  }, [selectedDate]);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     loadFixtures();
   }, [loadFixtures]);
 
-  // Date navigation
-  const navigateDate = (direction: -1 | 1) => {
-    const d = new Date(selectedDate);
-    d.setDate(d.getDate() + direction);
-    setSelectedDate(d.toISOString().slice(0, 10));
+  // Clear date range
+  const clearDateRange = () => {
+    setDateFrom("");
+    setDateTo("");
   };
 
   // Filtered fixtures
@@ -109,6 +108,11 @@ export default function MarketReports() {
       if (filterSource !== "all" && f.report_source !== filterSource)
         return false;
       if (filterStatus !== "all" && f.fixture_status !== filterStatus)
+        return false;
+      if (
+        filterVesselClass !== "all" &&
+        f.vessel_class !== filterVesselClass
+      )
         return false;
       if (searchTerm) {
         const s = searchTerm.toLowerCase();
@@ -128,7 +132,7 @@ export default function MarketReports() {
       }
       return true;
     });
-  }, [fixtures, filterSource, filterStatus, searchTerm]);
+  }, [fixtures, filterSource, filterStatus, filterVesselClass, searchTerm]);
 
   // Group by vessel class
   const grouped = useMemo(() => {
@@ -156,6 +160,15 @@ export default function MarketReports() {
     (f) => f.fixture_status === "fixed"
   ).length;
   const sourcesCount = new Set(filtered.map((f) => f.report_source)).size;
+  const dateCount = new Set(filtered.map((f) => f.report_date)).size;
+
+  const hasActiveFilters =
+    filterSource !== "all" ||
+    filterStatus !== "all" ||
+    filterVesselClass !== "all" ||
+    searchTerm !== "" ||
+    dateFrom !== "" ||
+    dateTo !== "";
 
   return (
     <div className="space-y-4">
@@ -173,25 +186,6 @@ export default function MarketReports() {
         </Button>
       </div>
 
-      {/* Date picker + navigation */}
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" onClick={() => navigateDate(-1)}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="w-40"
-        />
-        <Button variant="outline" size="icon" onClick={() => navigateDate(1)}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <span className="text-sm text-muted-foreground ml-2">
-          {format(new Date(selectedDate + "T00:00:00"), "EEEE, d MMMM yyyy")}
-        </span>
-      </div>
-
       {/* Stats row */}
       <div className="flex items-center gap-4">
         <Badge variant="secondary" className="text-xs">
@@ -205,6 +199,9 @@ export default function MarketReports() {
         </Badge>
         <Badge variant="outline" className="text-xs">
           {sourcesCount} source{sourcesCount !== 1 ? "s" : ""}
+        </Badge>
+        <Badge variant="outline" className="text-xs">
+          {dateCount} date{dateCount !== 1 ? "s" : ""}
         </Badge>
         {vesselDiscrepancies.size > 0 && (
           <Badge
@@ -240,6 +237,18 @@ export default function MarketReports() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={filterVesselClass} onValueChange={setFilterVesselClass}>
+          <SelectTrigger className="w-40 h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {VESSEL_CLASS_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
           <SelectTrigger className="w-32 h-8 text-xs">
             <SelectValue />
@@ -252,6 +261,50 @@ export default function MarketReports() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-1">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            placeholder="From"
+            className="w-32 h-8 text-xs"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            placeholder="To"
+            className="w-32 h-8 text-xs"
+          />
+          {(dateFrom || dateTo) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={clearDateRange}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => {
+              setSearchTerm("");
+              setFilterSource("all");
+              setFilterStatus("all");
+              setFilterVesselClass("all");
+              setDateFrom("");
+              setDateTo("");
+            }}
+          >
+            Clear all
+          </Button>
+        )}
       </div>
 
       {/* Error */}
@@ -270,9 +323,15 @@ export default function MarketReports() {
       ) : totalFixtures === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-40" />
-          <p className="text-sm">No fixtures for this date.</p>
+          <p className="text-sm">
+            {hasActiveFilters
+              ? "No fixtures match your filters."
+              : "No fixtures yet."}
+          </p>
           <p className="text-xs mt-1">
-            Upload a broker report to get started.
+            {hasActiveFilters
+              ? "Try adjusting or clearing filters."
+              : "Upload a broker report to get started."}
           </p>
         </div>
       ) : (
@@ -290,7 +349,6 @@ export default function MarketReports() {
                 />
               )
           )}
-          {/* Show "Other" if any fixtures don't match known classes */}
           {grouped["Other"] && grouped["Other"].length > 0 && (
             <FixtureTable
               vesselClass="Other"

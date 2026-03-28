@@ -29,19 +29,31 @@ export interface MarketFixture {
   created_at: string;
 }
 
-export async function fetchMarketData(date: string): Promise<{
+export async function fetchMarketData(filters?: {
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<{
   data: MarketFixture[] | null;
   error: string | null;
 }> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("market_data")
       .select(
         "id, report_source, report_date, vessel_name, vessel_class, dwt, built_year, owner, charterer, cargo_grade, cargo_type, quantity_mt, load_port, load_region, discharge_port, discharge_region, laycan_from, laycan_to, rate_type, rate_value, rate_numeric, fixture_status, broker, confidence, pdf_filename, created_at"
       )
-      .eq("report_date", date)
+      .order("report_date", { ascending: false })
       .order("vessel_class", { ascending: true })
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false });
+
+    if (filters?.dateFrom) {
+      query = query.gte("report_date", filters.dateFrom);
+    }
+    if (filters?.dateTo) {
+      query = query.lte("report_date", filters.dateTo);
+    }
+
+    const { data, error } = await query;
 
     if (error) return { data: null, error: error.message };
     return { data: data as MarketFixture[], error: null };
