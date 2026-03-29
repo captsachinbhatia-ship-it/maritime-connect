@@ -8,7 +8,6 @@ import {
   SlidersHorizontal,
   FileUp,
   FileDown,
-  Fuel,
   TableProperties,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -234,8 +233,6 @@ export default function MarketReports() {
   // Split by record type
   const fixtureRecords = useMemo(() => filtered.filter((r) => r.record_type === "FIXTURE" || !r.record_type), [filtered]);
   const enquiryRecords = useMemo(() => filtered.filter((r) => r.record_type === "ENQUIRY"), [filtered]);
-  const balticRecords = useMemo(() => fixtures.filter((r) => r.record_type === "BALTIC"), [fixtures]);
-  const bunkerRecords = useMemo(() => fixtures.filter((r) => r.record_type === "BUNKER"), [fixtures]);
 
   // Apply quick filter + cargo tab (only to fixtures)
   const displayed = useMemo(() => {
@@ -693,8 +690,6 @@ export default function MarketReports() {
             </div>
           )}
 
-          {/* Bunker Prices */}
-          {!loading && <BunkerPricesTable records={bunkerRecords} />}
         </TabsContent>
 
         {/* ====== IMPORT TAB ====== */}
