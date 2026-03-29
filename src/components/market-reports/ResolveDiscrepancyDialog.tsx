@@ -44,6 +44,8 @@ export function ResolveDiscrepancyDialog({
 }: Props) {
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [useCustom, setUseCustom] = useState<Record<string, boolean>>({});
   const [remark, setRemark] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -98,6 +100,8 @@ export function ResolveDiscrepancyDialog({
     toast({ title: "Discrepancy resolved", description: `${discrepancy.vesselKey} — by ${resolvedByName}` });
     setSelections({});
     setDisplayNames({});
+    setCustomValues({});
+    setUseCustom({});
     setRemark("");
     onOpenChange(false);
     onResolved();
@@ -124,17 +128,20 @@ export function ResolveDiscrepancyDialog({
 
                 {/* Source values as radio buttons */}
                 <RadioGroup
-                  value={selections[fd.field] ?? ""}
-                  onValueChange={(val) =>
-                    setSelections((prev) => {
-                      const next = { ...prev, [fd.field]: val };
-                      // Auto-fill display name if not already set
-                      if (!displayNames[fd.field]) {
-                        setDisplayNames((dp) => ({ ...dp, [fd.field]: val }));
+                  value={useCustom[fd.field] ? "__custom__" : (selections[fd.field] ?? "")}
+                  onValueChange={(val) => {
+                    if (val === "__custom__") {
+                      setUseCustom((prev) => ({ ...prev, [fd.field]: true }));
+                      setSelections((prev) => ({ ...prev, [fd.field]: customValues[fd.field] ?? "" }));
+                      setDisplayNames((prev) => ({ ...prev, [fd.field]: customValues[fd.field] ?? "" }));
+                    } else {
+                      setUseCustom((prev) => ({ ...prev, [fd.field]: false }));
+                      setSelections((prev) => ({ ...prev, [fd.field]: val }));
+                      if (!displayNames[fd.field] || useCustom[fd.field]) {
+                        setDisplayNames((prev) => ({ ...prev, [fd.field]: val }));
                       }
-                      return next;
-                    })
-                  }
+                    }
+                  }}
                   className="space-y-1"
                 >
                   {Object.entries(fd.values).map(([src, val]) => (
@@ -142,7 +149,7 @@ export function ResolveDiscrepancyDialog({
                       key={src}
                       className={cn(
                         "flex items-center gap-2 rounded-md border px-3 py-1.5 cursor-pointer",
-                        selections[fd.field] === String(val ?? "")
+                        !useCustom[fd.field] && selections[fd.field] === String(val ?? "")
                           ? "border-primary bg-primary/5"
                           : "border-muted hover:bg-muted/50"
                       )}
@@ -156,23 +163,61 @@ export function ResolveDiscrepancyDialog({
                       </label>
                     </div>
                   ))}
+
+                  {/* Custom value option */}
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 rounded-md border px-3 py-1.5 cursor-pointer",
+                      useCustom[fd.field]
+                        ? "border-primary bg-primary/5"
+                        : "border-muted hover:bg-muted/50"
+                    )}
+                  >
+                    <RadioGroupItem value="__custom__" id={`${fd.field}-custom`} />
+                    <label htmlFor={`${fd.field}-custom`} className="flex-1 text-xs cursor-pointer">
+                      <Badge variant="outline" className="text-[10px] mr-2 bg-blue-50 text-blue-700 border-blue-200">
+                        Custom
+                      </Badge>
+                      <span className="text-muted-foreground">Enter your own value</span>
+                    </label>
+                  </div>
                 </RadioGroup>
 
-                {/* Display name for PDF */}
-                <div className="flex items-center gap-2 mt-2">
-                  <Label className="text-[10px] text-muted-foreground whitespace-nowrap">
-                    Display in PDF as:
-                  </Label>
-                  <Input
-                    value={displayNames[fd.field] ?? ""}
-                    onChange={(e) =>
-                      setDisplayNames((prev) => ({ ...prev, [fd.field]: e.target.value }))
-                    }
-                    placeholder={selections[fd.field] || "e.g. South Korea, Singapore..."}
-                    className="h-7 text-xs flex-1"
-                  />
-                </div>
-                {displayNames[fd.field] && selections[fd.field] && displayNames[fd.field] !== selections[fd.field] && (
+                {/* Custom value input — only shown when Custom is selected */}
+                {useCustom[fd.field] && (
+                  <div className="ml-6 mt-1">
+                    <Input
+                      value={customValues[fd.field] ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setCustomValues((prev) => ({ ...prev, [fd.field]: v }));
+                        setSelections((prev) => ({ ...prev, [fd.field]: v }));
+                        setDisplayNames((prev) => ({ ...prev, [fd.field]: v }));
+                      }}
+                      placeholder="Type your own value for this field…"
+                      className="h-7 text-xs"
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {/* Display name for PDF — shown when a source option is picked */}
+                {!useCustom[fd.field] && selections[fd.field] && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Label className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      Display in PDF as:
+                    </Label>
+                    <Input
+                      value={displayNames[fd.field] ?? ""}
+                      onChange={(e) =>
+                        setDisplayNames((prev) => ({ ...prev, [fd.field]: e.target.value }))
+                      }
+                      placeholder={selections[fd.field] || "e.g. South Korea, Singapore..."}
+                      className="h-7 text-xs flex-1"
+                    />
+                  </div>
+                )}
+                {!useCustom[fd.field] && displayNames[fd.field] && selections[fd.field] && displayNames[fd.field] !== selections[fd.field] && (
                   <p className="text-[10px] text-muted-foreground">
                     Source says <span className="font-mono">"{selections[fd.field]}"</span> → PDF will show <span className="font-mono font-semibold">"{displayNames[fd.field]}"</span>
                   </p>
