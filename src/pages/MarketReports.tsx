@@ -703,36 +703,6 @@ export default function MarketReports() {
             </div>
           </div>
 
-          {/* Bunker prices */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Bunker Prices</h2>
-                <p className="text-sm text-muted-foreground">
-                  Fetch today's bunker prices from Ship & Bunker (Fujairah, Singapore, Rotterdam, Houston).
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  const { fetchBunkerPrices } = await import("@/services/marketData");
-                  const { inserted, skipped, error: err } = await fetchBunkerPrices();
-                  if (err) {
-                    toast({ title: "Bunker fetch failed", description: err, variant: "destructive" });
-                  } else if (skipped) {
-                    toast({ title: "Already fetched", description: "Bunker prices already imported today." });
-                  } else {
-                    toast({ title: "Bunker prices imported", description: `${inserted} port prices saved.` });
-                    loadFixtures();
-                  }
-                }}
-              >
-                <Fuel className="h-4 w-4 mr-2" />
-                Fetch Bunker Prices
-              </Button>
-            </div>
-          </div>
-
           {/* Report history */}
           <ReportHistoryTable refreshKey={historyRefresh} />
         </TabsContent>
