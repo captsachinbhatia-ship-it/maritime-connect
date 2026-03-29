@@ -34,8 +34,10 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = 210, H = 297, ML = 12, MR_ = 12;
   const CW = W - ML - MR_;
-  const FOOTER_H = 26;
+  const FOOTER_H = 28;
   const BOT = H - FOOTER_H;
+  // autoTable bottom margin — prevents tables rendering into footer zone
+  const TABLE_MARGIN = { left: ML, right: MR_, bottom: FOOTER_H + 2 };
 
   const isDirty = reportType === "DPP";
   const theme = isDirty ? DPP : CPP;
@@ -118,7 +120,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     const freshHead = [["Charterer", "Qty", "CGO", "LC", "Load", "Discharge", "Vessel", "Rate", "Status"]];
     autoTable(doc, {
       startY: y,
-      margin: { left: ML, right: MR_ },
+      margin: TABLE_MARGIN,
       head: freshHead,
       body: fixtures.map((f) => [
         f.charterer.toUpperCase(),
@@ -186,7 +188,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     y = needPage(y, 7);
     autoTable(doc, {
       startY: y,
-      margin: { left: ML, right: MR_ },
+      margin: TABLE_MARGIN,
       body: [[{ content: msg, colSpan: 6, styles: { halign: "center", fontStyle: "italic", textColor: COMMON.grey99, fontSize: 8, cellPadding: 2, minCellHeight: 5 } }]],
       tableLineColor: theme.border, tableLineWidth: 0.18,
       theme: "grid",
@@ -201,7 +203,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
       // Sub-header + no fresh
       autoTable(doc, {
         startY: y,
-        margin: { left: ML, right: MR_ },
+        margin: TABLE_MARGIN,
         head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"].slice()],
         body: [[{ content: "No fresh enquiry to report", colSpan: 6, styles: { halign: "center", fontStyle: "italic", textColor: COMMON.grey99, fontSize: 8, cellPadding: 2, minCellHeight: 5 } }]],
         headStyles: {
@@ -215,7 +217,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
 
     autoTable(doc, {
       startY: y,
-      margin: { left: ML, right: MR_ },
+      margin: TABLE_MARGIN,
       head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"].slice()],
       body: enquiries.map((e) => [
         e.charterer.toUpperCase(),
@@ -255,7 +257,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
       // Title row
       autoTable(doc, {
         startY: Y,
-        margin: { left: ML, right: MR_ },
+        margin: TABLE_MARGIN,
         head: [["Route", "Description", "Size", "World Scale", "TC Earnings ($/day)"]],
         body: bRoutes.map((r: Record<string, unknown>) => {
           const ws = Number(r.worldscale ?? r.world_scale ?? 0);
@@ -361,7 +363,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
 
     autoTable(doc, {
       startY: Y,
-      margin: { left: ML, right: MR_ },
+      margin: TABLE_MARGIN,
       head: [["Region", "VLSFO", "+/-", "IFO 380", "+/-", "MGO", "+/-"]],
       body: bunkerRecords.map((r) => [
         r.bunker_region ?? "",

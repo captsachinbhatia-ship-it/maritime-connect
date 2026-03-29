@@ -35,6 +35,7 @@ const PORT_ALIASES: Record<string, string> = {
   "S.AFRICA": "South Africa", "SAFRICA": "South Africa",
   PHILI: "Philippines", PHIL: "Philippines",
   SKOREA: "South Korea", "S.KOREA": "South Korea", SKOR: "South Korea", KOREA: "South Korea",
+  HKG: "Hong Kong", HONGKONG: "Hong Kong", "HONG KONG": "Hong Kong",
   JPN: "Japan", TWN: "Taiwan",
   YOKO: "Yokohama", CHB: "Chiba",
 };
@@ -154,7 +155,27 @@ function parseRate(rate: string | null): ParsedRate {
   if (u === "RNR" || u === "TBN" || u === "-" || u === "DNR")
     return { ws: null, lumpsum: null, display: u, demurrage };
 
-  // WS range: W515-525 or WS515-525
+  // Dual rate: W295-7.0M or W295-$7.0M (WS + lumpsum in one string)
+  // Lumpsum wins per resolution rule
+  const dualMatch = u.match(/^W[S]?\s?(\d+\.?\d*)\s*[-–]\s*\$?(\d+\.?\d*)\s*M$/);
+  if (dualMatch) {
+    const wsVal = parseFloat(dualMatch[1]);
+    const lsVal = parseFloat(dualMatch[2]) * 1_000_000;
+    const displayVal = `$${(lsVal / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
+    return { ws: wsVal, lumpsum: lsVal, display: displayVal, demurrage };
+  }
+
+  // Multi-leg with lumpsum: W295-W450-$7.0M — extract lumpsum
+  const multiMatch = u.match(/\$(\d+\.?\d*)\s*M/);
+  if (multiMatch && u.startsWith("W")) {
+    const lsVal = parseFloat(multiMatch[1]) * 1_000_000;
+    const wsFirstMatch = u.match(/^W[S]?\s?(\d+\.?\d*)/);
+    const wsVal = wsFirstMatch ? parseFloat(wsFirstMatch[1]) : null;
+    const displayVal = `$${(lsVal / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
+    return { ws: wsVal, lumpsum: lsVal, display: displayVal, demurrage };
+  }
+
+  // WS range: W515-525 or WS515-525 (both numbers are WS — no M suffix)
   const wsRangeMatch = u.match(/^W[S]?\s?(\d+\.?\d*)\s*[-–]\s*(\d+\.?\d*)$/);
   if (wsRangeMatch) {
     const low = parseFloat(wsRangeMatch[1]);
