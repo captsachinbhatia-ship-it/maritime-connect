@@ -14,6 +14,7 @@ import {
   Globe,
   Newspaper,
   Anchor,
+  MessageSquare,
 } from 'lucide-react';
 import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
@@ -46,6 +47,7 @@ const navItems = [
   { title: 'Documents', url: '/documents', icon: FolderOpen },
   { title: 'Performance', url: '/performance', icon: TrendingUp },
   { title: 'Map View', url: '/map', icon: Globe },
+  { title: 'WhatsApp Parser', url: '/whatsapp-parser', icon: MessageSquare },
 ];
 
 const adminNavItems = [
