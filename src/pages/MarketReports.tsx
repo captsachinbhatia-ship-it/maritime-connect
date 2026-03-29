@@ -36,9 +36,7 @@ import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
 import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
 import { ResolveDiscrepancyDialog } from "@/components/market-reports/ResolveDiscrepancyDialog";
-import { BunkerPricesTable } from "@/components/market-reports/BunkerPricesTable";
 import { generateMarketReportPdf } from "@/lib/generateMarketReportPdf";
-import { mergeResolvedFixtures, type MergedFixture } from "@/lib/mergeResolvedFixtures";
 import { detectDiscrepancies, type VesselDiscrepancy } from "@/lib/discrepancies";
 import {
   VESSEL_CLASSES,
@@ -175,21 +173,15 @@ export default function MarketReports() {
     loadFixtures();
   }, [loadFixtures]);
 
-  // Merge resolved discrepancies into single rows
-  const mergedFixtures = useMemo(
-    () => mergeResolvedFixtures(fixtures, resolutions),
-    [fixtures, resolutions]
-  );
-
-  // Dynamic filter options (use merged)
-  const loadRegions = useMemo(() => uniqueValues(mergedFixtures, "load_region"), [mergedFixtures]);
-  const dischRegions = useMemo(() => uniqueValues(mergedFixtures, "discharge_region"), [mergedFixtures]);
-  const loadPorts = useMemo(() => uniqueValues(mergedFixtures, "load_port"), [mergedFixtures]);
-  const dischPorts = useMemo(() => uniqueValues(mergedFixtures, "discharge_port"), [mergedFixtures]);
-  const vesselNames = useMemo(() => uniqueValues(mergedFixtures, "vessel_name"), [mergedFixtures]);
+  // Dynamic filter options
+  const loadRegions = useMemo(() => uniqueValues(fixtures, "load_region"), [fixtures]);
+  const dischRegions = useMemo(() => uniqueValues(fixtures, "discharge_region"), [fixtures]);
+  const loadPorts = useMemo(() => uniqueValues(fixtures, "load_port"), [fixtures]);
+  const dischPorts = useMemo(() => uniqueValues(fixtures, "discharge_port"), [fixtures]);
+  const vesselNames = useMemo(() => uniqueValues(fixtures, "vessel_name"), [fixtures]);
 
   const filtered = useMemo(() => {
-    return mergedFixtures.filter((f) => {
+    return fixtures.filter((f) => {
       if (filterSource !== "all" && f.report_source !== filterSource) return false;
       if (filterStatus !== "all" && f.fixture_status !== filterStatus) return false;
       if (filterVesselClass !== "all" && f.vessel_class !== filterVesselClass) return false;
