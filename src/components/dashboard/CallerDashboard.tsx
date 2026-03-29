@@ -43,23 +43,17 @@ export function CallerDashboard({ isAdmin, isCEO }: CallerDashboardProps) {
           </div>
         </div>
 
-        {/* Row 1: Tasks + Notepad */}
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-8">
-            <TeamTasksWidget />
-          </div>
-          <div className="lg:col-span-4">
-            <NotepadCard />
-          </div>
-        </div>
-
-        {/* Row 2: Recent Interactions + Follow-ups Due */}
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-8">
+        {/* Interactions + Tasks side by side, Follow-ups under Interactions, Notes under Tasks */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Left column: Interactions → Follow-ups */}
+          <div className="space-y-6">
             <RecentInteractions />
-          </div>
-          <div className="lg:col-span-4">
             <FollowupsDueWidget />
+          </div>
+          {/* Right column: Tasks → Notes */}
+          <div className="space-y-6">
+            <TeamTasksWidget />
+            <NotepadCard />
           </div>
         </div>
 

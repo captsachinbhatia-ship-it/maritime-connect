@@ -6,7 +6,6 @@ import {
   FileText,
   BarChart3,
   LogOut,
-  CalendarClock,
   ClipboardCheck,
   UserCog,
   Activity,
@@ -32,21 +31,21 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { supabase } from '@/lib/supabaseClient';
+
+const marketItems = [
+  { title: 'Fixtures', url: '/market-reports', icon: Newspaper },
+  { title: 'Baltic & Rates', url: '/baltic-routes', icon: Anchor },
+  { title: 'Bunker Prices', url: '/market-reports/bunker', icon: Newspaper },
+];
 
 const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Companies', url: '/companies', icon: Building2 },
   { title: 'Contacts', url: '/contacts', icon: Users },
-  { title: 'Interactions', url: '/interactions', icon: Activity },
-  { title: 'Follow-ups', url: '/follow-ups', icon: CalendarClock },
   { title: 'Enquiries', url: '/enquiries', icon: FileText },
   { title: 'Documents', url: '/documents', icon: FolderOpen },
   { title: 'Performance', url: '/performance', icon: TrendingUp },
   { title: 'Map View', url: '/map', icon: Globe },
-  { title: 'Fixtures', url: '/market-reports', icon: Newspaper },
-  { title: 'Baltic & Rates', url: '/baltic-routes', icon: Anchor },
-  { title: 'Bunker Prices', url: '/market-reports/bunker', icon: Newspaper },
 ];
 
 const adminNavItems = [
@@ -75,21 +74,34 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* Market Intelligence — top of sidebar */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Market Intelligence</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {marketItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                    <NavLink to={item.url} className="flex items-center gap-3" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground">
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Navigation */}
         <SidebarGroup>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton 
-                    asChild
-                    isActive={isActive(item.url)}
-                  >
-                    <NavLink 
-                      to={item.url} 
-                      className="flex items-center gap-3"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
-                    >
+                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                    <NavLink to={item.url} className="flex items-center gap-3" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground">
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </NavLink>
@@ -108,11 +120,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive('/reporting')}>
-                    <NavLink
-                      to="/reporting"
-                      className="flex items-center gap-3"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
-                    >
+                    <NavLink to="/reporting" className="flex items-center gap-3" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground">
                       <BarChart3 className="h-4 w-4" />
                       <span>Reporting</span>
                     </NavLink>
@@ -131,15 +139,8 @@ export function AppSidebar() {
               <SidebarMenu>
                 {adminNavItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton 
-                      asChild
-                      isActive={isActive(item.url)}
-                    >
-                      <NavLink 
-                        to={item.url} 
-                        className="flex items-center gap-3"
-                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
-                      >
+                    <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                      <NavLink to={item.url} className="flex items-center gap-3" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground">
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </NavLink>
