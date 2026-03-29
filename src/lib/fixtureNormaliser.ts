@@ -91,22 +91,41 @@ function extractCargoCode(raw: string | null): string {
   return raw.trim();
 }
 
-// ── Laycan extraction ─────────────────────────────────────────
-function extractLaycan(raw: string | null): string {
+// ── Laycan formatting ─────────────────────────────────────────
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Format laycan from DB date fields or extract from raw text */
+function formatLaycan(laycanFrom: string | null, laycanTo: string | null, raw: string | null): string {
+  // Try DB date fields first (YYYY-MM-DD format)
+  if (laycanFrom) {
+    const from = new Date(laycanFrom + "T00:00:00");
+    const dFrom = from.getDate();
+    const mFrom = MONTH_NAMES[from.getMonth()];
+    if (laycanTo && laycanTo !== laycanFrom) {
+      const to = new Date(laycanTo + "T00:00:00");
+      const dTo = to.getDate();
+      const mTo = MONTH_NAMES[to.getMonth()];
+      if (mFrom === mTo) return `${dFrom}-${dTo}/${mFrom}`;
+      return `${dFrom}/${mFrom}-${dTo}/${mTo}`;
+    }
+    return `${dFrom}/${mFrom}`;
+  }
+
+  // Fallback: extract from raw text
   if (!raw) return "";
   const s = raw.trim();
-  // Match patterns: "14-15/Apr", "27/MAR", "Ely Apr", "DNR", "28-29/MAR"
   const dateMatch = s.match(
-    /(?:Ely\s+\w+|\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s*\/\s*[A-Za-z]{3,}|DNR)/i
+    /(?:Ely\s+\w+|Early\s+\w+|\d{1,2}(?:\s*[-–]\s*\d{1,2})?\s*\/\s*[A-Za-z]{3,}|\d{1,2}\s*-\s*[A-Za-z]{3}|DNR)/i
   );
   if (dateMatch) {
-    // Normalise month to title case
     return dateMatch[0].replace(
       /\/([A-Z]{3,})/i,
       (_, m: string) => `/${m.charAt(0).toUpperCase()}${m.slice(1).toLowerCase()}`
+    ).replace(
+      /-([A-Z]{3})/i,
+      (_, m: string) => `-${m.charAt(0).toUpperCase()}${m.slice(1).toLowerCase()}`
     );
   }
-  // If raw is short enough and looks like a date, return as-is
   if (s.length <= 12) return s;
   return "";
 }
@@ -361,7 +380,7 @@ export function normaliseForPdf(records: MarketRecord[], resolutions?: Resolutio
       charterer: getResolved(vn, "charterer", charterer),
       qty: extractQty(primary.quantity_mt, primary.raw_text),
       cargo: extractCargoCode(getResolved(vn, "cargo_grade", primary.cargo_grade ?? primary.cargo_type ?? "")),
-      laycan: extractLaycan(primary.raw_text),
+      laycan: formatLaycan(primary.laycan_from, primary.laycan_to, primary.raw_text),
       load: getResolved(vn, "load_port", load),
       discharge: getResolved(vn, "discharge_port", discharge),
       vessel: (primary.vessel_name ?? "TBN").toUpperCase(),
@@ -385,7 +404,7 @@ export function normaliseForPdf(records: MarketRecord[], resolutions?: Resolutio
     charterer: normaliseCharterer(e.charterer).toUpperCase(),
     qty: extractQty(e.quantity_mt, e.raw_text),
     cargo: extractCargoCode(e.cargo_grade ?? e.cargo_type ?? ""),
-    laycan: extractLaycan(e.raw_text),
+    laycan: formatLaycan(e.laycan_from, e.laycan_to, e.raw_text),
     load: normalisePort(e.load_port),
     discharge: normalisePort(e.discharge_port),
     vessel: "",

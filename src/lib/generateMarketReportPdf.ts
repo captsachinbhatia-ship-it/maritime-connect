@@ -114,10 +114,12 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
 
   // ── Fixture table ───────────────────────────────────────
   const drawFixtureTable = (y: number, fixtures: NormalisedFixture[]): number => {
+    // Fresh header array each call — jspdf-autotable mutates row objects
+    const freshHead = [["Charterer", "Qty", "CGO", "LC", "Load", "Discharge", "Vessel", "Rate", "Status"]];
     autoTable(doc, {
       startY: y,
       margin: { left: ML, right: MR_ },
-      head: [["Charterer", "Qty", "CGO", "LC", "Load", "Discharge", "Vessel", "Rate", "Status"]],
+      head: freshHead,
       body: fixtures.map((f) => [
         f.charterer.toUpperCase(),
         f.qty,
@@ -200,7 +202,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
       autoTable(doc, {
         startY: y,
         margin: { left: ML, right: MR_ },
-        head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"]],
+        head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"].slice()],
         body: [[{ content: "No fresh enquiry to report", colSpan: 6, styles: { halign: "center", fontStyle: "italic", textColor: COMMON.grey99, fontSize: 8, cellPadding: 2, minCellHeight: 5 } }]],
         headStyles: {
           fillColor: COMMON.subHdrBg, textColor: theme.headerTxt, fontSize: 8, fontStyle: "bold",
@@ -214,7 +216,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     autoTable(doc, {
       startY: y,
       margin: { left: ML, right: MR_ },
-      head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"]],
+      head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"].slice()],
       body: enquiries.map((e) => [
         e.charterer.toUpperCase(),
         e.qty,
@@ -308,7 +310,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
       const sKey = `${seg} \u2014 FIXTURES`;
       Y = drawBand(Y, sKey);
       Y = drawCommentary(Y, sKey);
-      Y = drawFixtureTable(Y, fixtures) + 1;
+      Y = drawFixtureTable(Y, fixtures) + 4;
       // Enquiries for this segment
       const segEnq = normEnquiries.filter((e) => e.segment === seg);
       Y = drawEnquiries(Y, segEnq) + 3;
@@ -329,7 +331,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         Y = drawCommentary(Y, sKey);
 
         if (regionFix.length > 0) {
-          Y = drawFixtureTable(Y, regionFix) + 1;
+          Y = drawFixtureTable(Y, regionFix) + 4;
         } else {
           Y = drawNoFresh(Y, "No fresh fixture to report");
         }
