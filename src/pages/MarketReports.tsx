@@ -37,6 +37,7 @@ import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
 import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
 import { ResolveDiscrepancyDialog } from "@/components/market-reports/ResolveDiscrepancyDialog";
+import { BunkerPricesTable } from "@/components/market-reports/BunkerPricesTable";
 import { generateMarketReportPdf } from "@/lib/generateMarketReportPdf";
 import { mergeResolvedFixtures, type MergedFixture } from "@/lib/mergeResolvedFixtures";
 import { detectDiscrepancies, type VesselDiscrepancy } from "@/lib/discrepancies";
