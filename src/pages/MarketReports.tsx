@@ -7,7 +7,6 @@ import {
   Search,
   SlidersHorizontal,
   FileUp,
-  FileDown,
   TableProperties,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
