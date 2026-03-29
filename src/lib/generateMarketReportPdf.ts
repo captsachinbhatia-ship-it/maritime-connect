@@ -319,34 +319,77 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     }
   }
 
-  // ── CLEAN REPORT: by region × segment ───────────────────
+  // ── Segment sub-header (lighter bar under region band) ──
+  const drawSegmentHeader = (y: number, text: string): number => {
+    y = needPage(y, 8);
+    doc.setFillColor(...theme.headerBg);
+    doc.rect(ML, y, CW, 4.8, "F");
+    doc.setDrawColor(...theme.border); doc.setLineWidth(0.15);
+    doc.line(ML, y + 4.8, ML + CW, y + 4.8);
+    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...theme.headerTxt);
+    doc.text(text, ML + 1.8, y + 3.2);
+    doc.setFont("helvetica", "normal");
+    return y + 5.5;
+  };
+
+  // ── CLEAN REPORT: region band → segments underneath ─────
   if (!isDirty) {
     for (const region of CLEAN_REGIONS) {
+      // Check if any segment has data in this region
+      let regionHasData = false;
       for (const seg of CLEAN_SEGMENTS) {
         const allFix = normFixtures.get(seg) ?? [];
         const regionFix = allFix.filter((f) => f.tradeRegion === region);
         const regionEnq = normEnquiries.filter((e) => e.segment === seg && e.tradeRegion === region);
-        if (regionFix.length === 0 && regionEnq.length === 0) continue;
+        if (regionFix.length > 0 || regionEnq.length > 0) { regionHasData = true; break; }
+      }
+      if (!regionHasData) continue;
+
+      // Region band (bold, full accent colour)
+      Y = drawBand(Y, region);
+
+      // Each segment under this region
+      for (const seg of CLEAN_SEGMENTS) {
+        const allFix = normFixtures.get(seg) ?? [];
+        const regionFix = allFix.filter((f) => f.tradeRegion === region);
+        const regionEnq = normEnquiries.filter((e) => e.segment === seg && e.tradeRegion === region);
+
+        // Segment sub-header (always shown)
+        Y = drawSegmentHeader(Y, seg);
 
         const sKey = `${seg} \u2014 ${region}`;
-        Y = drawBand(Y, sKey);
         Y = drawCommentary(Y, sKey);
 
+        // Fixtures
         if (regionFix.length > 0) {
-          Y = drawFixtureTable(Y, regionFix) + 4;
+          Y = drawFixtureTable(Y, regionFix) + 2;
         } else {
-          Y = drawNoFresh(Y, "No fresh fixture to report");
+          Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
         }
+
+        // Enquiries
         Y = drawEnquiries(Y, regionEnq) + 3;
       }
     }
 
-    // Other region fixtures
+    // Other region
+    let otherHasData = false;
     for (const seg of CLEAN_SEGMENTS) {
       const other = (normFixtures.get(seg) ?? []).filter((f) => f.tradeRegion === "OTHER");
-      if (other.length > 0) {
-        Y = drawBand(Y, `${seg} \u2014 OTHER`);
-        Y = drawFixtureTable(Y, other) + 3;
+      if (other.length > 0) { otherHasData = true; break; }
+    }
+    if (otherHasData) {
+      Y = drawBand(Y, "OTHER");
+      for (const seg of CLEAN_SEGMENTS) {
+        const other = (normFixtures.get(seg) ?? []).filter((f) => f.tradeRegion === "OTHER");
+        const otherEnq = normEnquiries.filter((e) => e.segment === seg && e.tradeRegion === "OTHER");
+        Y = drawSegmentHeader(Y, seg);
+        if (other.length > 0) {
+          Y = drawFixtureTable(Y, other) + 2;
+        } else {
+          Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
+        }
+        Y = drawEnquiries(Y, otherEnq) + 3;
       }
     }
   }
