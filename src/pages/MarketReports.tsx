@@ -66,6 +66,7 @@ const SOURCE_OPTIONS = [
   { value: "vantage_dpp", label: "Vantage DPP" },
   { value: "eastport", label: "Eastport" },
   { value: "alliance", label: "Alliance" },
+  { value: "bravo_tankers", label: "Bravo Tankers" },
 ];
 
 const STATUS_OPTIONS = [

@@ -65,6 +65,16 @@ interface BunkerPrice {
   mgo_change: number | null;
 }
 
+interface BalticIndexRow {
+  route: string;
+  description: string | null;
+  size: string | null;
+  worldscale: number | null;
+  ws_change: number | null;
+  tc_earnings: number | null;
+  tc_change: number | null;
+}
+
 interface ClaudeExtractionResponse {
   report_source: string;
   report_date: string;
@@ -73,6 +83,8 @@ interface ClaudeExtractionResponse {
   fixtures: FixtureRow[];
   enquiries: EnquiryRow[];
   bunker_prices: BunkerPrice[];
+  // Bravo-specific: full Baltic index table
+  baltic_index?: BalticIndexRow[];
 }
 
 // ---------- Claude extraction prompt ----------
@@ -82,7 +94,7 @@ const EXTRACTION_PROMPT = `You are a maritime broker report extraction engine.
 You will receive a daily tanker broker report. Your job is to:
 
 1. IDENTIFY the report automatically:
-   - report_source: one of meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, eastport, yamamoto, alliance, unknown
+   - report_source: one of meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, eastport, yamamoto, alliance, bravo_tankers, unknown
    - report_date: in YYYY-MM-DD format. The current year is 2026.
    - report_type: one of CPP, DPP, SNP, CHEMICAL
      * DPP sources: Meiwa VLCC, Meiwa Dirty, Presco (dirty sections), Gibson, Vantage DPP
@@ -134,6 +146,54 @@ Field rules:
 - confidence: 0.0-1.0 per fixture/enquiry
 
 Respond with ONLY valid JSON, no markdown fences, no commentary.`;
+
+// ---------- Bravo Tankers specific prompt ----------
+const BRAVO_PROMPT = `You are a maritime broker report extraction engine parsing a BRAVO TANKERS daily crude fixtures report.
+
+This report contains TWO datasets:
+1. CRUDE FIXTURES organised by trade region (RSEA/AG, MED/B.SEA, WAFRICA, BALTIC/CONT, USG/CBS/S.AMERICA, INDO/F.EAST)
+2. BALTIC EXCHANGE INDEX TABLE with TC and TD route indices
+
+Return JSON:
+{
+  "report_source": "bravo_tankers",
+  "report_date": "YYYY-MM-DD",
+  "report_type": "DPP",
+  "baltic_routes": [],
+  "fixtures": [...],
+  "enquiries": [],
+  "bunker_prices": [],
+  "baltic_index": [
+    {"route":"TC5","description":"Clean MEG-Japan","size":"55,000","worldscale":424.38,"ws_change":-1.87,"tc_earnings":74741,"tc_change":1536},
+    {"route":"TD3C","description":"VLCC MEG-China","size":"270,000","worldscale":55.00,"ws_change":0.5,"tc_earnings":28000,"tc_change":500}
+  ]
+}
+
+FIXTURE EXTRACTION RULES:
+- Each region section starts with a header like "RSEA/AG" followed by dashes
+- Parse every fixture line: VESSEL QTY LAYCAN ROUTE RATE CHARTERER [STATUS/NOTES]
+- segment: infer from qty (260-270=VLCC, 130-145=Suezmax, 70-100=Aframax, 50-70=Panamax, 35=MR)
+- "FLD YDAY" or "FLD" → status = "FLD"
+- "MFA" (more firm awaited) → status = "-"
+- "OO" (on order) → status = "-"
+- "OLD" in Bravo means older fixture, NOT our status = map to "-"
+- "DEM 275K" → extract as demurrage, not part of rate
+- "HC" before qty = Heavy Crude cargo
+- "FO" before qty = Fuel Oil cargo
+- Otherwise cargo = NHC (Non Heavy Crude) for crude fixtures
+- rate: store exactly as shown. If "W450-17.95M" = dual rate, store full string
+- qty in thousands (130 = 130,000 MT)
+- laycan: keep as text "12-14 APR", "18-20 APR"
+
+BALTIC INDEX TABLE:
+- Starts after fixture sections, contains "Index Routes Size" header
+- Parse ALL rows starting with TC or TD
+- TC routes = clean tanker indices (TC5, TC8, TC12, TC17 etc.)
+- TD routes = dirty tanker indices (TD2, TD3C, TD6 etc.)
+- Extract: route, description, size, worldscale value, ws_change, tc_earnings_usd, tc_change
+- The table has columns for two dates — use the MOST RECENT date column values
+
+Respond with ONLY valid JSON, no markdown fences.`;
 
 // ---------- File handling ----------
 
@@ -225,7 +285,8 @@ async function extractTextFromFile(base64: string, mediaType: string): Promise<s
 
 async function extractFromFile(
   fileBase64: string,
-  mediaType: string
+  mediaType: string,
+  promptOverride?: string
 ): Promise<ClaudeExtractionResponse> {
   const content: Record<string, unknown>[] = [];
 
@@ -252,7 +313,7 @@ async function extractFromFile(
     });
   }
 
-  content.push({ type: "text", text: EXTRACTION_PROMPT });
+  content.push({ type: "text", text: promptOverride ?? EXTRACTION_PROMPT });
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -290,6 +351,7 @@ const SOURCE_PATTERNS: Record<string, string[]> = {
   eastport: ["eastport"],
   yamamoto: ["yamamoto"],
   alliance: ["alliance"],
+  bravo_tankers: ["bravo"],
 };
 
 function inferSourceFromFilename(fileName: string): string | null {
@@ -301,7 +363,7 @@ function inferSourceFromFilename(fileName: string): string | null {
 }
 
 // Infer report_type from source if Claude didn't detect it
-const DPP_SOURCES = new Set(["meiwa_vlcc", "meiwa_dirty", "gibson", "vantage_dpp"]);
+const DPP_SOURCES = new Set(["meiwa_vlcc", "meiwa_dirty", "gibson", "vantage_dpp", "bravo_tankers"]);
 const CPP_SOURCES = new Set(["eastport", "yamamoto", "alliance"]);
 
 function inferReportType(source: string, claudeType: string | null): string {
@@ -371,14 +433,19 @@ Deno.serve(async (req: Request) => {
 
     const mediaType = detectMediaType(fileName);
 
-    // Extract via Claude
-    const extraction = await extractFromFile(base64, mediaType);
+    // Detect if Bravo Tankers from filename
+    const isBravo = fileName.toLowerCase().includes("bravo") ||
+                    fileName.toLowerCase().includes("daily crude");
+
+    // Extract via Claude (use Bravo prompt if detected)
+    const extraction = await extractFromFile(base64, mediaType, isBravo ? BRAVO_PROMPT : undefined);
 
     // Determine source
     let reportSource = extraction.report_source ?? "unknown";
     if (reportSource === "unknown") {
       reportSource = inferSourceFromFilename(fileName) ?? "unknown";
     }
+    if (isBravo && reportSource === "unknown") reportSource = "bravo_tankers";
 
     // Date sanity check
     let reportDate = extraction.report_date ?? new Date().toISOString().slice(0, 10);
@@ -562,6 +629,46 @@ Deno.serve(async (req: Request) => {
 
     if (error) {
       throw new Error(`Supabase insert error: ${error.message}`);
+    }
+
+    // Store Baltic index data from Bravo Tankers
+    if (extraction.baltic_index && extraction.baltic_index.length > 0) {
+      const tcRoutes = extraction.baltic_index.filter((r) => r.route.startsWith("TC"));
+      const tdRoutes = extraction.baltic_index.filter((r) => r.route.startsWith("TD"));
+
+      if (tcRoutes.length > 0) {
+        const tcRows = tcRoutes.map((r) => ({
+          report_date: reportDate,
+          route: r.route,
+          description: r.description,
+          size_mt: r.size,
+          worldscale: r.worldscale,
+          ws_change: r.ws_change,
+          tc_earnings_usd: r.tc_earnings,
+          tc_change: r.tc_change,
+          source_broker: reportSource,
+        }));
+        await supabaseAdmin.from("baltic_routes").upsert(tcRows, {
+          onConflict: "report_date,route,source_broker",
+        });
+      }
+
+      if (tdRoutes.length > 0) {
+        const tdRows = tdRoutes.map((r) => ({
+          report_date: reportDate,
+          route: r.route,
+          description: r.description,
+          size_mt: r.size,
+          worldscale: r.worldscale,
+          ws_change: r.ws_change,
+          tc_earnings_usd: r.tc_earnings,
+          tc_change: r.tc_change,
+          source_broker: reportSource,
+        }));
+        await supabaseAdmin.from("dirty_baltic_routes").upsert(tdRows, {
+          onConflict: "report_date,route,source_broker",
+        });
+      }
     }
 
     return new Response(
