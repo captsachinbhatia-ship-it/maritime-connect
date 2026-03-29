@@ -32,6 +32,7 @@ import MarketReports from "./pages/MarketReports";
 import MarketBaltic from "./pages/MarketBaltic";
 import MarketBunker from "./pages/MarketBunker";
 import { AdminRoute } from "./components/AdminRoute";
+import BalticRoutes from "./pages/BalticRoutes";
 
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
@@ -93,6 +94,7 @@ const App = () => {
                 <Route path="interactions" element={<AllInteractions />} />
                 <Route path="follow-ups" element={<AllFollowups />} />
                 <Route path="bulk-import" element={<Navigate to="/contacts/bulk-import" replace />} />
+                <Route path="baltic-routes" element={<BalticRoutes />} />
                 <Route path="account/security" element={<AccountSecurity />} />
               </Route>
               <Route path="*" element={<NotFound />} />

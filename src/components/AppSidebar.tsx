@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Globe,
   Newspaper,
+  Anchor,
 } from 'lucide-react';
 import aqMaritimeLogo from '@/assets/logo-aq-maritime.jpg';
 import { NavLink } from '@/components/NavLink';
@@ -44,7 +45,7 @@ const navItems = [
   { title: 'Performance', url: '/performance', icon: TrendingUp },
   { title: 'Map View', url: '/map', icon: Globe },
   { title: 'Fixtures', url: '/market-reports', icon: Newspaper },
-  { title: 'Baltic & Rates', url: '/market-reports/baltic', icon: Newspaper },
+  { title: 'Baltic & Rates', url: '/baltic-routes', icon: Anchor },
   { title: 'Bunker Prices', url: '/market-reports/bunker', icon: Newspaper },
 ];
 
