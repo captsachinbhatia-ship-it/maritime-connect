@@ -15,15 +15,15 @@ export const DPP = {
   altRow:     [245, 247, 250] as [number, number, number],  // #F5F7FA
 };
 
-// ── CPP (Clean) Theme — burnt orange ─────────────────────────
+// ── CPP (Clean) Theme — Claude logo orange ───────────────────
 export const CPP = {
-  accent:     [212, 80, 10]   as [number, number, number],  // #D4500A
+  accent:     [218, 119, 86]  as [number, number, number],  // #DA7756
   dark:       [26, 26, 46]    as [number, number, number],   // #1A1A2E
-  headerBg:   [253, 240, 232] as [number, number, number],  // #FDF0E8
-  headerTxt:  [139, 48, 8]    as [number, number, number],   // #8B3008
-  fldRow:     [254, 232, 214] as [number, number, number],  // #FEE8D6
-  fldTxt:     [139, 48, 8]    as [number, number, number],   // #8B3008
-  border:     [232, 196, 168] as [number, number, number],  // #E8C4A8
+  headerBg:   [251, 240, 236] as [number, number, number],  // #FBF0EC
+  headerTxt:  [160, 68, 42]   as [number, number, number],   // #A0442A
+  fldRow:     [250, 229, 221] as [number, number, number],  // #FAE5DD
+  fldTxt:     [160, 68, 42]   as [number, number, number],   // #A0442A
+  border:     [237, 203, 191] as [number, number, number],  // #EDCBBF
   altRow:     [253, 248, 245] as [number, number, number],  // #FDF8F5
 };
 
