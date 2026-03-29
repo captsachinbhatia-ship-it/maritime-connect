@@ -292,6 +292,23 @@ export function FixtureTable({
                     {row.vessel_type_mismatch && (
                       <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-blue-50 text-blue-600 border-blue-200">type?</Badge>
                     )}
+                    {(row as Record<string, unknown>).is_merged && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-green-50 text-green-700 border-green-200">
+                              Resolved ({(row as Record<string, unknown>).merged_count as number} sources)
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs font-semibold">Merged from: {((row as Record<string, unknown>).merged_sources as string[])?.join(", ")}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Resolved fields: {((row as Record<string, unknown>).resolved_fields as string[])?.join(", ") || "remark only"}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs tabular-nums">
                     {row.dwt ? row.dwt.toLocaleString() : "—"}
