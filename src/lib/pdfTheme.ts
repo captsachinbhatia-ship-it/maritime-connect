@@ -3,16 +3,16 @@
  * Single source of truth for both DPP and CPP generators.
  */
 
-// ── DPP (Dirty) Theme — navy ─────────────────────────────────
+// ── DPP (Dirty) Theme — Claude orange (same as CPP) ──────────
 export const DPP = {
-  accent:     [27, 58, 92]    as [number, number, number],  // #1B3A5C
-  dark:       [27, 58, 92]    as [number, number, number],
-  headerBg:   [232, 237, 242] as [number, number, number],  // #E8EDF2
-  headerTxt:  [27, 58, 92]    as [number, number, number],
-  fldRow:     [214, 228, 240] as [number, number, number],  // #D6E4F0
-  fldTxt:     [27, 58, 92]    as [number, number, number],
-  border:     [200, 212, 224] as [number, number, number],  // #C8D4E0
-  altRow:     [245, 247, 250] as [number, number, number],  // #F5F7FA
+  accent:     [218, 119, 86]  as [number, number, number],  // #DA7756
+  dark:       [26, 26, 46]    as [number, number, number],   // #1A1A2E
+  headerBg:   [251, 240, 236] as [number, number, number],  // #FBF0EC
+  headerTxt:  [160, 68, 42]   as [number, number, number],   // #A0442A
+  fldRow:     [250, 229, 221] as [number, number, number],  // #FAE5DD
+  fldTxt:     [160, 68, 42]   as [number, number, number],   // #A0442A
+  border:     [237, 203, 191] as [number, number, number],  // #EDCBBF
+  altRow:     [253, 248, 245] as [number, number, number],  // #FDF8F5
 };
 
 // ── CPP (Clean) Theme — Claude logo orange ───────────────────
