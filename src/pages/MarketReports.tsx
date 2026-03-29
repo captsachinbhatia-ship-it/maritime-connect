@@ -9,7 +9,6 @@ import {
   FileUp,
   FileDown,
   TableProperties,
-  Fuel,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -258,11 +257,17 @@ export default function MarketReports() {
   const dirtyCount = fixtureRecords.filter((f) => classifyCargo(f.cargo_type) === "dirty").length;
   const cleanCount = fixtureRecords.filter((f) => classifyCargo(f.cargo_type) === "clean").length;
 
+  const [downloadDate, setDownloadDate] = useState(new Date().toISOString().slice(0, 10));
+
   const handleGeneratePdf = async (type: "DPP" | "CPP") => {
-    const relevantRecords = fixtures.filter((r) => r.report_type === type);
-    if (relevantRecords.length === 0) return;
-    const latestDate = relevantRecords[0]?.report_date ?? new Date().toISOString().slice(0, 10);
-    await generateMarketReportPdf({ reportType: type, reportDate: latestDate, records: relevantRecords, resolutions });
+    // Filter to the selected download date
+    const relevantRecords = fixtures.filter((r) => r.report_type === type && r.report_date === downloadDate);
+    if (relevantRecords.length === 0) {
+      toast({ title: "No data", description: `No ${type} fixtures for ${downloadDate}`, variant: "destructive" });
+      return;
+    }
+    await generateMarketReportPdf({ reportType: type, reportDate: downloadDate, records: relevantRecords, resolutions });
+    toast({ title: "PDF downloaded", description: `${type} report for ${downloadDate}` });
   };
 
   const toggleQuickFilter = (filter: string) => {
@@ -580,27 +585,32 @@ export default function MarketReports() {
             ))}
           </div>
 
-          {/* Generate PDF buttons */}
-          <div className="flex items-center gap-2">
+          {/* Download report for specific date */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground">Download report for:</span>
+            <Input
+              type="date"
+              value={downloadDate}
+              onChange={(e) => setDownloadDate(e.target.value)}
+              className="w-36 h-8 text-xs"
+            />
             <Button
               variant="outline"
               size="sm"
               className="h-8 text-xs gap-1"
               onClick={() => handleGeneratePdf("DPP")}
-              disabled={fixtures.filter((r) => r.report_type === "DPP").length === 0}
             >
               <FileDown className="h-3.5 w-3.5" />
-              Download DPP Report
+              DPP Report
             </Button>
             <Button
               variant="outline"
               size="sm"
               className="h-8 text-xs gap-1"
               onClick={() => handleGeneratePdf("CPP")}
-              disabled={fixtures.filter((r) => r.report_type === "CPP").length === 0}
             >
               <FileDown className="h-3.5 w-3.5" />
-              Download CPP Report
+              CPP Report
             </Button>
           </div>
 
