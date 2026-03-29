@@ -34,9 +34,8 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = 210, H = 297, ML = 12, MR_ = 12;
   const CW = W - ML - MR_;
-  const FOOTER_H = 28;
+  const FOOTER_H = 32;  // ~72pt — exceeds 56pt footer + 16pt buffer
   const BOT = H - FOOTER_H;
-  // autoTable bottom margin — prevents tables rendering into footer zone
   const TABLE_MARGIN = { left: ML, right: MR_, bottom: FOOTER_H + 2 };
 
   const isDirty = reportType === "DPP";
@@ -114,21 +113,18 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     return y + 5;
   };
 
-  // ── Fixture table ───────────────────────────────────────
+  // ── Fixture table (merged Load+Discharge into Route) ────
   const drawFixtureTable = (y: number, fixtures: NormalisedFixture[]): number => {
-    // Fresh header array each call — jspdf-autotable mutates row objects
-    const freshHead = [["Charterer", "Qty", "CGO", "LC", "Load", "Discharge", "Vessel", "Rate", "Status"]];
     autoTable(doc, {
       startY: y,
       margin: TABLE_MARGIN,
-      head: freshHead,
+      head: [["Charterer", "Qty", "CGO", "LC", "Route", "Vessel", "Rate", "Status"].slice()],
       body: fixtures.map((f) => [
         f.charterer.toUpperCase(),
         f.qty,
         f.cargo,
         f.laycan,
-        f.load,
-        f.discharge,
+        f.load && f.discharge ? `${f.load} \u2192 ${f.discharge}` : f.load || f.discharge || "",
         f.vessel.toUpperCase(),
         f.demurrage ? `${f.rate} (${f.demurrage})` : f.rate,
         f.status,
@@ -151,31 +147,30 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         1: { halign: "right", cellWidth: c.qty },
         2: { halign: "center", cellWidth: c.cgo, overflow: "visible" },
         3: { halign: "center", cellWidth: c.lc },
-        4: { cellWidth: c.ld },
-        5: { cellWidth: c.dis },
-        6: { cellWidth: c.vsl },
-        7: { halign: "right", cellWidth: c.rate },
-        8: { halign: "center", cellWidth: c.st, overflow: "visible" },
+        4: { cellWidth: c.route },
+        5: { cellWidth: c.vsl },
+        6: { halign: "right", cellWidth: c.rate },
+        7: { halign: "center", cellWidth: c.st, overflow: "visible" },
       } as Record<number, object>,
       didParseCell: (data) => {
         if (data.section !== "body") return;
-        const status = String(data.row.raw?.[8] ?? "");
+        const status = String(data.row.raw?.[7] ?? "");
         if (status === "FLD") {
           data.cell.styles.fillColor = theme.fldRow;
           data.cell.styles.textColor = theme.fldTxt;
           data.cell.styles.fontStyle = "bold";
         }
-        if (data.column.index === 8) {
+        if (data.column.index === 7) {
           const ss = getStatusStyle(status, theme);
           data.cell.styles.textColor = ss.color;
           data.cell.styles.fontStyle = ss.style as "bold" | "italic" | "bolditalic" | "normal";
         }
-        if (data.column.index === 6) data.cell.text = [String(data.cell.raw ?? "").toUpperCase()];
+        if (data.column.index === 5) data.cell.text = [String(data.cell.raw ?? "").toUpperCase()];
         if (data.column.index === 0) {
           data.cell.text = [String(data.cell.raw ?? "").toUpperCase()];
           data.cell.styles.textColor = isDirty ? theme.accent : CPP.dark;
         }
-        if (data.column.index === 7 && String(data.cell.raw ?? "").includes("(DEM")) {
+        if (data.column.index === 6 && String(data.cell.raw ?? "").includes("(DEM")) {
           data.cell.styles.fontSize = 7;
         }
       },
@@ -205,7 +200,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         startY: y,
         margin: TABLE_MARGIN,
         head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"].slice()],
-        body: [[{ content: "No fresh enquiry to report", colSpan: 6, styles: { halign: "center", fontStyle: "italic", textColor: COMMON.grey99, fontSize: 8, cellPadding: 2, minCellHeight: 5 } }]],
+        body: [[{ content: "NOTHING FRESH TO REPORT", colSpan: 6, styles: { halign: "center", fontStyle: "italic", textColor: COMMON.grey99, fontSize: 8, cellPadding: 2, minCellHeight: 5 } }]],
         headStyles: {
           fillColor: COMMON.subHdrBg, textColor: theme.headerTxt, fontSize: 8, fontStyle: "bold",
           cellPadding: { top: 1, bottom: 1, left: 1.8, right: 1.8 },
@@ -249,17 +244,14 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     return getFinalY();
   };
 
-  // ── BALTIC ROUTES (clean report, top) ───────────────────
+  // ── BALTIC ROUTES (always shown for clean report) ───────
   if (!isDirty) {
     const bRoutes = balticRoutes.length > 0 ? balticRoutes : balticFromMd;
-    if (bRoutes.length > 0) {
-      Y = needPage(Y, 35);
-      // Title row
-      autoTable(doc, {
-        startY: Y,
-        margin: TABLE_MARGIN,
-        head: [["Route", "Description", "Size", "World Scale", "TC Earnings ($/day)"]],
-        body: bRoutes.map((r: Record<string, unknown>) => {
+    Y = needPage(Y, 35);
+
+    // Empty placeholder rows if no data
+    const balticBody = bRoutes.length > 0
+      ? bRoutes.map((r: Record<string, unknown>) => {
           const ws = Number(r.worldscale ?? r.world_scale ?? 0);
           const wsC = Number(r.ws_change ?? 0);
           const tc = Number(r.tc_earnings_usd ?? r.tc_earnings ?? 0);
@@ -273,35 +265,41 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
             wsStr,
             tcStr,
           ];
-        }),
-        headStyles: {
-          fillColor: CPP.headerBg, textColor: CPP.headerTxt, fontSize: 8, fontStyle: "bold",
-          cellPadding: { top: 1.5, bottom: 1.5, left: 1.8, right: 1.8 },
-          lineColor: CPP.accent, lineWidth: { bottom: 0.35 },
-        },
-        bodyStyles: {
-          fontSize: 8, cellPadding: { top: 2, bottom: 2, left: 1.8, right: 1.8 }, minCellHeight: 7,
-        },
-        alternateRowStyles: { fillColor: CPP.altRow },
-        tableLineColor: CPP.border, tableLineWidth: 0.18, theme: "grid",
-        columnStyles: {
-          0: { fontStyle: "bolditalic", textColor: CPP.accent as unknown as number[], cellWidth: 18 },
-          1: { fontStyle: "italic", textColor: COMMON.desc55 as unknown as number[], cellWidth: 68 },
-          2: { halign: "center", textColor: COMMON.txt44 as unknown as number[], cellWidth: 24 },
-          3: { fontStyle: "bold", cellWidth: 38 },
-          4: { fontStyle: "bold", cellWidth: 38 },
-        } as Record<number, object>,
-        didParseCell: (data) => {
-          if (data.section === "body" && (data.column.index === 3 || data.column.index === 4)) {
-            const raw = String(data.cell.raw ?? "");
-            if (raw.includes("(+")) data.cell.styles.textColor = COMMON.green;
-            else if (raw.includes("(-")) data.cell.styles.textColor = COMMON.red;
-            else data.cell.styles.textColor = CPP.dark;
-          }
-        },
-      });
-      Y = getFinalY() + 5;
-    }
+        })
+      : [["TC5", "", "", "", ""], ["TC8", "", "", "", ""], ["TC12", "", "", "", ""], ["TC17", "", "", "", ""]];
+
+    autoTable(doc, {
+      startY: Y,
+      margin: TABLE_MARGIN,
+      head: [["Route", "Description", "Size", "World Scale", "TC Earnings ($/day)"].slice()],
+      body: balticBody,
+      headStyles: {
+        fillColor: CPP.headerBg, textColor: CPP.headerTxt, fontSize: 8, fontStyle: "bold",
+        cellPadding: { top: 1.5, bottom: 1.5, left: 1.8, right: 1.8 },
+        lineColor: CPP.accent, lineWidth: { bottom: 0.35 },
+      },
+      bodyStyles: {
+        fontSize: 8, cellPadding: { top: 2, bottom: 2, left: 1.8, right: 1.8 }, minCellHeight: 7,
+      },
+      alternateRowStyles: { fillColor: CPP.altRow },
+      tableLineColor: CPP.border, tableLineWidth: 0.18, theme: "grid",
+      columnStyles: {
+        0: { fontStyle: "bolditalic", textColor: CPP.accent as unknown as number[], cellWidth: 18 },
+        1: { fontStyle: "italic", textColor: COMMON.desc55 as unknown as number[], cellWidth: 68 },
+        2: { halign: "center", textColor: COMMON.txt44 as unknown as number[], cellWidth: 24 },
+        3: { fontStyle: "bold", cellWidth: 38 },
+        4: { fontStyle: "bold", cellWidth: 38 },
+      } as Record<number, object>,
+      didParseCell: (data) => {
+        if (data.section === "body" && (data.column.index === 3 || data.column.index === 4)) {
+          const raw = String(data.cell.raw ?? "");
+          if (raw.includes("(+")) data.cell.styles.textColor = COMMON.green;
+          else if (raw.includes("(-")) data.cell.styles.textColor = COMMON.red;
+          else data.cell.styles.textColor = CPP.dark;
+        }
+      },
+    });
+    Y = getFinalY() + 5;
   }
 
   // ── DIRTY REPORT: by segment ────────────────────────────
@@ -309,7 +307,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     for (const seg of DIRTY_SEGMENTS) {
       const fixtures = normFixtures.get(seg);
       if (!fixtures || fixtures.length === 0) continue;
-      const sKey = `${seg} \u2014 FIXTURES`;
+      const sKey = `${seg} \u2013 FIXTURES`;
       Y = drawBand(Y, sKey);
       Y = drawCommentary(Y, sKey);
       Y = drawFixtureTable(Y, fixtures) + 4;
@@ -357,7 +355,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         // Segment sub-header (always shown)
         Y = drawSegmentHeader(Y, seg);
 
-        const sKey = `${seg} \u2014 ${region}`;
+        const sKey = `${seg} \u2013 ${region}`;
         Y = drawCommentary(Y, sKey);
 
         // Fixtures

@@ -107,16 +107,16 @@ function formatLaycan(laycanFrom: string | null, laycanTo: string | null, raw: s
   // Try DB date fields first (YYYY-MM-DD format)
   if (laycanFrom) {
     const from = new Date(laycanFrom + "T00:00:00");
-    const dFrom = from.getDate();
+    const dFrom = String(from.getDate()).padStart(2, "0");
     const mFrom = MONTH_NAMES[from.getMonth()];
     if (laycanTo && laycanTo !== laycanFrom) {
       const to = new Date(laycanTo + "T00:00:00");
-      const dTo = to.getDate();
+      const dTo = String(to.getDate()).padStart(2, "0");
       const mTo = MONTH_NAMES[to.getMonth()];
-      if (mFrom === mTo) return `${dFrom}-${dTo}/${mFrom}`;
-      return `${dFrom}/${mFrom}-${dTo}/${mTo}`;
+      if (mFrom === mTo) return `${dFrom}-${dTo}-${mFrom}`;
+      return `${dFrom}-${mFrom}-${dTo}-${mTo}`;
     }
-    return `${dFrom}/${mFrom}`;
+    return `${dFrom}-${mFrom}`;
   }
 
   // Fallback: extract from raw text

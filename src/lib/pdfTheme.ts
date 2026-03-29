@@ -45,13 +45,14 @@ export const COMMON = {
 };
 
 // ── Column widths (mm) — A4 portrait, 186mm usable ────────────
+// Merged Load+Discharge into single Route column
 export const COL_WIDTHS = {
-  ch: 32, qty: 9, cgo: 14, lc: 16, ld: 24, dis: 24, vsl: 36, rate: 19, st: 12,
+  ch: 30, qty: 9, cgo: 12, lc: 16, route: 44, vsl: 38, rate: 22, st: 15,
   // Total: 186mm
 };
 
 export const ENQ_COL_WIDTHS = {
-  ch: 32, qty: 9, cgo: 14, lc: 16, route: 55, comments: 60,
+  ch: 30, qty: 9, cgo: 12, lc: 16, route: 55, comments: 64,
   // Total: 186mm
 };
 
