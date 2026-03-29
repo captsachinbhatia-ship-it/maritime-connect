@@ -197,19 +197,12 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
   const drawEnquiries = (y: number, enquiries: NormalisedFixture[]): number => {
     const ec = ENQ_COL_WIDTHS;
     if (enquiries.length === 0) {
-      // Sub-header + no fresh
-      autoTable(doc, {
-        startY: y,
-        margin: TABLE_MARGIN,
-        head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"].slice()],
-        body: [[{ content: "NOTHING FRESH TO REPORT", colSpan: 6, styles: { halign: "center", fontStyle: "italic", textColor: COMMON.grey99, fontSize: 8, cellPadding: 2, minCellHeight: 5 } }]],
-        headStyles: {
-          fillColor: COMMON.subHdrBg, textColor: theme.headerTxt, fontSize: 8, fontStyle: "bold",
-          cellPadding: { top: 1, bottom: 1, left: 1.8, right: 1.8 },
-        },
-        tableLineColor: theme.border, tableLineWidth: 0.18, theme: "grid",
-      });
-      return getFinalY() + 2;
+      // Smaller, indented "no enquiries" message
+      y = needPage(y, 6);
+      doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); doc.setTextColor(...COMMON.grey99);
+      doc.text("No enquiries to report", ML + 6, y + 3);
+      doc.setFont("helvetica", "normal");
+      return y + 5;
     }
 
     autoTable(doc, {
@@ -322,12 +315,12 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
   // ── Segment sub-header (lighter bar under region band) ──
   const drawSegmentHeader = (y: number, text: string): number => {
     y = needPage(y, 8);
-    doc.setFillColor(...theme.headerBg);
+    doc.setFillColor(...COMMON.segBandBg);
     doc.rect(ML, y, CW, 4.8, "F");
     doc.setDrawColor(...theme.border); doc.setLineWidth(0.15);
     doc.line(ML, y + 4.8, ML + CW, y + 4.8);
-    doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(...theme.headerTxt);
-    doc.text(text, ML + 1.8, y + 3.2);
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...theme.headerTxt);
+    doc.text(text, ML + 1.8, y + 3.3);
     doc.setFont("helvetica", "normal");
     return y + 5.5;
   };
@@ -360,15 +353,18 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         const sKey = `${seg} \u2013 ${region}`;
         Y = drawCommentary(Y, sKey);
 
-        // Fixtures
-        if (regionFix.length > 0) {
-          Y = drawFixtureTable(Y, regionFix) + 2;
+        // Fixtures + Enquiries
+        if (regionFix.length === 0 && regionEnq.length === 0) {
+          // Single message when both empty
+          Y = drawNoFresh(Y, "NOTHING FRESH TO REPORT");
         } else {
-          Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
+          if (regionFix.length > 0) {
+            Y = drawFixtureTable(Y, regionFix) + 2;
+          } else {
+            Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
+          }
+          Y = drawEnquiries(Y, regionEnq) + 3;
         }
-
-        // Enquiries
-        Y = drawEnquiries(Y, regionEnq) + 3;
       }
     }
 
@@ -384,12 +380,16 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         const other = (normFixtures.get(seg) ?? []).filter((f) => f.tradeRegion === "OTHER");
         const otherEnq = normEnquiries.filter((e) => e.segment === seg && e.tradeRegion === "OTHER");
         Y = drawSegmentHeader(Y, seg);
-        if (other.length > 0) {
-          Y = drawFixtureTable(Y, other) + 2;
+        if (other.length === 0 && otherEnq.length === 0) {
+          Y = drawNoFresh(Y, "NOTHING FRESH TO REPORT");
         } else {
-          Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
+          if (other.length > 0) {
+            Y = drawFixtureTable(Y, other) + 2;
+          } else {
+            Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
+          }
+          Y = drawEnquiries(Y, otherEnq) + 3;
         }
-        Y = drawEnquiries(Y, otherEnq) + 3;
       }
     }
   }

@@ -42,6 +42,7 @@ export const COMMON = {
   txt44:      [68, 68, 68]    as [number, number, number],
   subHdrBg:   [240, 244, 248] as [number, number, number],  // #F0F4F8
   commentBg:  [254, 249, 245] as [number, number, number],  // #FEF9F5
+  segBandBg:  [245, 213, 200] as [number, number, number],  // #F5D5C8 light orange tint for sub-sections
 };
 
 // ── Column widths (mm) — A4 portrait, 186mm usable ────────────

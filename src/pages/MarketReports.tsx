@@ -66,7 +66,8 @@ const SOURCE_OPTIONS = [
   { value: "vantage_dpp", label: "Vantage DPP" },
   { value: "eastport", label: "Eastport" },
   { value: "alliance", label: "Alliance" },
-  { value: "bravo_tankers", label: "Bravo Tankers" },
+  { value: "bravo_tankers", label: "Bravo Tankers (Fixtures)" },
+  { value: "bravo_rates", label: "Bravo Rates Grid" },
 ];
 
 const STATUS_OPTIONS = [

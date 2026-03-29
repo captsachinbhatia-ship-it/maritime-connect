@@ -75,6 +75,18 @@ interface BalticIndexRow {
   tc_change: number | null;
 }
 
+interface RateAssessmentRow {
+  size_kt: number;
+  route_raw: string;
+  load_port: string | null;
+  discharge_port: string | null;
+  rate_ws: number | null;
+  rate_lumpsum: number | null;
+  rate_type: string;
+  confidence: string;
+  notes: string | null;
+}
+
 interface ClaudeExtractionResponse {
   report_source: string;
   report_date: string;
@@ -83,8 +95,9 @@ interface ClaudeExtractionResponse {
   fixtures: FixtureRow[];
   enquiries: EnquiryRow[];
   bunker_prices: BunkerPrice[];
-  // Bravo-specific: full Baltic index table
+  // Bravo-specific
   baltic_index?: BalticIndexRow[];
+  rates_assessment?: RateAssessmentRow[];
 }
 
 // ---------- Claude extraction prompt ----------
@@ -148,11 +161,12 @@ Field rules:
 Respond with ONLY valid JSON, no markdown fences, no commentary.`;
 
 // ---------- Bravo Tankers specific prompt ----------
-const BRAVO_PROMPT = `You are a maritime broker report extraction engine parsing a BRAVO TANKERS daily crude fixtures report.
+const BRAVO_PROMPT = `You are a maritime broker report extraction engine parsing a BRAVO TANKERS email.
 
-This report contains TWO datasets:
-1. CRUDE FIXTURES organised by trade region (RSEA/AG, MED/B.SEA, WAFRICA, BALTIC/CONT, USG/CBS/S.AMERICA, INDO/F.EAST)
-2. BALTIC EXCHANGE INDEX TABLE with TC and TD route indices
+This report may contain up to THREE datasets:
+1. RATES GRID (market rate assessments by route) — starts after "RATES GRID" or "CRUDE DESK" header
+2. CRUDE FIXTURES by trade region (RSEA/AG, MED/B.SEA, WAFRICA, BALTIC/CONT, USG/CBS/S.AMERICA, INDO/F.EAST)
+3. BALTIC EXCHANGE INDEX TABLE with TC and TD route indices
 
 Return JSON:
 {
@@ -164,10 +178,27 @@ Return JSON:
   "enquiries": [],
   "bunker_prices": [],
   "baltic_index": [
-    {"route":"TC5","description":"Clean MEG-Japan","size":"55,000","worldscale":424.38,"ws_change":-1.87,"tc_earnings":74741,"tc_change":1536},
-    {"route":"TD3C","description":"VLCC MEG-China","size":"270,000","worldscale":55.00,"ws_change":0.5,"tc_earnings":28000,"tc_change":500}
+    {"route":"TC5","description":"Clean MEG-Japan","size":"55,000","worldscale":424.38,"ws_change":-1.87,"tc_earnings":74741,"tc_change":1536}
+  ],
+  "rates_assessment": [
+    {"size_kt":80,"route_raw":"CPC/MED","load_port":"CPC","discharge_port":"MED","rate_ws":710,"rate_lumpsum":null,"rate_type":"WS","confidence":"UNTESTED","notes":null},
+    {"size_kt":130,"route_raw":"RDAM/SPORE","load_port":"RDAM","discharge_port":"SPORE","rate_ws":null,"rate_lumpsum":15500000,"rate_type":"LUMPSUM","confidence":"FIRM","notes":"C/C"}
   ]
 }
+
+RATES GRID EXTRACTION:
+- Lines like: "80KT CPC/MED WS 710 UNTESTED" or "130KT RDAM/SPORE $15.5M FIRM (C/C)"
+- size_kt: number before KT (80, 130, 140, 145, 260, 270)
+- route_raw: the route string (e.g. "CPC/MED")
+- load_port: text before "/" in route
+- discharge_port: text after "/" in route
+- rate_ws: number after "WS" if WS rate (null if lumpsum)
+- rate_lumpsum: dollar value in full (e.g. $15.5M = 15500000) if lumpsum (null if WS)
+- rate_type: "WS" or "LUMPSUM"
+- confidence: "FIRM", "FIRM_TO_BE_TESTED" (for "FIRM/TO BE TESTED"), or "UNTESTED"
+- notes: text in parentheses like "(C/C)" or "(S/S)" — null if none
+- If WS has no number (just "WS" with blank value), set rate_ws = null, rate_type = "WS"
+- If rates grid section is not present, return empty array
 
 FIXTURE EXTRACTION RULES:
 - Each region section starts with a header like "RSEA/AG" followed by dashes
@@ -434,8 +465,10 @@ Deno.serve(async (req: Request) => {
     const mediaType = detectMediaType(fileName);
 
     // Detect if Bravo Tankers from filename
-    const isBravo = fileName.toLowerCase().includes("bravo") ||
-                    fileName.toLowerCase().includes("daily crude");
+    const fnLower = fileName.toLowerCase();
+    const isBravo = fnLower.includes("bravo") || fnLower.includes("daily crude") || fnLower.includes("rates grid");
+    const bravoEmailType = fnLower.includes("rates grid") || fnLower.includes("crude desk")
+      ? "rates_grid" : "fixtures";
 
     // Extract via Claude (use Bravo prompt if detected)
     const extraction = await extractFromFile(base64, mediaType, isBravo ? BRAVO_PROMPT : undefined);
@@ -632,43 +665,66 @@ Deno.serve(async (req: Request) => {
     }
 
     // Store Baltic index data from Bravo Tankers
+    // Store Baltic index data (from Bravo or any source that provides it)
     if (extraction.baltic_index && extraction.baltic_index.length > 0) {
+      const emailType = isBravo ? bravoEmailType : null;
       const tcRoutes = extraction.baltic_index.filter((r) => r.route.startsWith("TC"));
       const tdRoutes = extraction.baltic_index.filter((r) => r.route.startsWith("TD"));
 
       if (tcRoutes.length > 0) {
-        const tcRows = tcRoutes.map((r) => ({
-          report_date: reportDate,
-          route: r.route,
-          description: r.description,
-          size_mt: r.size,
-          worldscale: r.worldscale,
-          ws_change: r.ws_change,
-          tc_earnings_usd: r.tc_earnings,
-          tc_change: r.tc_change,
-          source_broker: reportSource,
-        }));
-        await supabaseAdmin.from("baltic_routes").upsert(tcRows, {
-          onConflict: "report_date,route,source_broker",
-        });
+        await supabaseAdmin.from("baltic_routes").upsert(
+          tcRoutes.map((r) => ({
+            report_date: reportDate, route: r.route, description: r.description,
+            size_mt: r.size, worldscale: r.worldscale, ws_change: r.ws_change,
+            tc_earnings_usd: r.tc_earnings, tc_change: r.tc_change,
+            source_broker: reportSource, source_email: emailType,
+          })),
+          { onConflict: "report_date,route,source_broker" }
+        );
       }
 
       if (tdRoutes.length > 0) {
-        const tdRows = tdRoutes.map((r) => ({
-          report_date: reportDate,
-          route: r.route,
-          description: r.description,
-          size_mt: r.size,
-          worldscale: r.worldscale,
-          ws_change: r.ws_change,
-          tc_earnings_usd: r.tc_earnings,
-          tc_change: r.tc_change,
-          source_broker: reportSource,
-        }));
-        await supabaseAdmin.from("dirty_baltic_routes").upsert(tdRows, {
-          onConflict: "report_date,route,source_broker",
-        });
+        await supabaseAdmin.from("dirty_baltic_routes").upsert(
+          tdRoutes.map((r) => ({
+            report_date: reportDate, route: r.route, description: r.description,
+            size_mt: r.size, worldscale: r.worldscale, ws_change: r.ws_change,
+            tc_earnings_usd: r.tc_earnings, tc_change: r.tc_change,
+            source_broker: reportSource, source_email: emailType,
+          })),
+          { onConflict: "report_date,route,source_broker" }
+        );
       }
+    }
+
+    // Store rates assessment data (from Bravo rates grid)
+    if (extraction.rates_assessment && extraction.rates_assessment.length > 0) {
+      const sizeToClass = (kt: number): string => {
+        if (kt >= 260) return "VLCC";
+        if (kt >= 130) return "Suezmax";
+        if (kt >= 70) return "Aframax";
+        if (kt >= 50) return "Panamax";
+        return "MR";
+      };
+
+      const rateRows = extraction.rates_assessment.map((r) => ({
+        report_date: reportDate,
+        source: reportSource,
+        source_email: isBravo ? bravoEmailType : null,
+        size_kt: r.size_kt,
+        vessel_class: sizeToClass(r.size_kt),
+        load_port: r.load_port,
+        discharge_port: r.discharge_port,
+        route_raw: r.route_raw,
+        rate_ws: r.rate_ws,
+        rate_lumpsum: r.rate_lumpsum,
+        rate_type: r.rate_type,
+        confidence: r.confidence,
+        notes: r.notes,
+      }));
+
+      await supabaseAdmin.from("rates_assessment").upsert(rateRows, {
+        onConflict: "report_date,source,size_kt,route_raw",
+      });
     }
 
     return new Response(
