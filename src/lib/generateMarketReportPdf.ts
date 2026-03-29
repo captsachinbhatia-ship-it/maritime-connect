@@ -164,7 +164,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         if (data.column.index === 8) {
           const ss = getStatusStyle(status, theme);
           data.cell.styles.textColor = ss.color;
-          data.cell.styles.fontStyle = ss.style;
+          data.cell.styles.fontStyle = ss.style as "bold" | "italic" | "bolditalic" | "normal";
         }
         if (data.column.index === 6) data.cell.text = [String(data.cell.raw ?? "").toUpperCase()];
         if (data.column.index === 0) {

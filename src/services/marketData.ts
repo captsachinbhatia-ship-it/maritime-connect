@@ -48,6 +48,12 @@ export interface MarketRecord {
   ifo380_change: number | null;
   mgo_price: number | null;
   mgo_change: number | null;
+  // Derived / optional flags
+  is_repeat?: boolean;
+  status_discrepancy?: boolean;
+  vessel_type_mismatch?: boolean;
+  rate_ws?: number | null;
+  rate_lumpsum?: number | null;
   // Meta
   created_at: string;
 }
