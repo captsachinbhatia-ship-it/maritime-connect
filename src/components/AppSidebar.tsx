@@ -43,7 +43,9 @@ const navItems = [
   { title: 'Documents', url: '/documents', icon: FolderOpen },
   { title: 'Performance', url: '/performance', icon: TrendingUp },
   { title: 'Map View', url: '/map', icon: Globe },
-  { title: 'Market Reports', url: '/market-reports', icon: Newspaper },
+  { title: 'Fixtures', url: '/market-reports', icon: Newspaper },
+  { title: 'Baltic & Rates', url: '/market-reports/baltic', icon: Newspaper },
+  { title: 'Bunker Prices', url: '/market-reports/bunker', icon: Newspaper },
 ];
 
 const adminNavItems = [

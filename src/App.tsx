@@ -29,6 +29,8 @@ import Documents from "./pages/Documents";
 import Performance from "./pages/Performance";
 import MapView from "./pages/MapView";
 import MarketReports from "./pages/MarketReports";
+import MarketBaltic from "./pages/MarketBaltic";
+import MarketBunker from "./pages/MarketBunker";
 import { AdminRoute } from "./components/AdminRoute";
 
 import CompleteProfile from "./pages/CompleteProfile";
@@ -82,6 +84,9 @@ const App = () => {
                 <Route path="performance" element={<Performance />} />
                 <Route path="map" element={<MapView />} />
                 <Route path="market-reports" element={<MarketReports />} />
+                <Route path="market-reports/fixtures" element={<MarketReports />} />
+                <Route path="market-reports/baltic" element={<MarketBaltic />} />
+                <Route path="market-reports/bunker" element={<MarketBunker />} />
                 <Route element={<AdminRoute />}>
                   <Route path="reporting" element={<Reporting />} />
                 </Route>
