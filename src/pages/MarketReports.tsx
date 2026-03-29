@@ -8,6 +8,7 @@ import {
   SlidersHorizontal,
   FileUp,
   FileDown,
+  Fuel,
   TableProperties,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 import { useCrmUser } from "@/hooks/useCrmUser";
 import {
   fetchMarketData,
@@ -704,6 +706,36 @@ export default function MarketReports() {
               <Button onClick={() => setUploadOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Report
+              </Button>
+            </div>
+          </div>
+
+          {/* Bunker prices */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Bunker Prices</h2>
+                <p className="text-sm text-muted-foreground">
+                  Fetch today's bunker prices from Ship & Bunker (Fujairah, Singapore, Rotterdam, Houston).
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  const { fetchBunkerPrices } = await import("@/services/marketData");
+                  const { inserted, skipped, error: err } = await fetchBunkerPrices();
+                  if (err) {
+                    toast({ title: "Bunker fetch failed", description: err, variant: "destructive" });
+                  } else if (skipped) {
+                    toast({ title: "Already fetched", description: "Bunker prices already imported today." });
+                  } else {
+                    toast({ title: "Bunker prices imported", description: `${inserted} port prices saved.` });
+                    loadFixtures();
+                  }
+                }}
+              >
+                <Fuel className="h-4 w-4 mr-2" />
+                Fetch Bunker Prices
               </Button>
             </div>
           </div>

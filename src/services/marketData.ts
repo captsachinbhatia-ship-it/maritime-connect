@@ -218,6 +218,26 @@ export async function uploadMarketReport(
   }
 }
 
+// ---------- Bunker prices from Ship & Bunker ----------
+
+export async function fetchBunkerPrices(): Promise<{
+  inserted: number;
+  skipped: boolean;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase.functions.invoke("fetch-bunker-prices", { body: {} });
+    if (error) return { inserted: 0, skipped: false, error: error.message ?? "Failed" };
+    return {
+      inserted: data?.inserted ?? 0,
+      skipped: data?.skipped ?? false,
+      error: null,
+    };
+  } catch (err) {
+    return { inserted: 0, skipped: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 // ---------- Resolutions ----------
 
 export interface Resolution {
