@@ -36,6 +36,13 @@ const PORT_ALIASES: Record<string, string> = {
   PHILI: "Philippines", PHIL: "Philippines",
   SKOREA: "South Korea", "S.KOREA": "South Korea", SKOR: "South Korea", KOREA: "South Korea",
   HKG: "Hong Kong", HONGKONG: "Hong Kong", "HONG KONG": "Hong Kong",
+  HCM: "Ho Chi Minh", "HO CHI MINH": "Ho Chi Minh",
+  DALIAN: "Dalian", NINGBO: "Ningbo",
+  COVENAS: "Covenas",
+  CEYHAN: "Ceyhan",
+  MUARA: "Muara",
+  SOHAR: "Sohar",
+  "E-S.AFR": "East-South Africa", "ES.AFR": "East-South Africa",
   JPN: "Japan", TWN: "Taiwan",
   YOKO: "Yokohama", CHB: "Chiba",
 };
@@ -154,6 +161,8 @@ function parseRate(rate: string | null): ParsedRate {
   const u = r.toUpperCase();
   if (u === "RNR" || u === "TBN" || u === "-" || u === "DNR")
     return { ws: null, lumpsum: null, display: u, demurrage };
+  if (u === "O/P" || u === "OWN" || u === "OWN PROGRAMME" || u === "OWN PROGRAM")
+    return { ws: null, lumpsum: null, display: "O/P", demurrage };
 
   // Dual rate: W295-7.0M or W295-$7.0M (WS + lumpsum in one string)
   // Lumpsum wins per resolution rule
@@ -255,6 +264,8 @@ function extractQty(qtyMt: number | null, raw: string | null): string {
 // ── Dedup key ─────────────────────────────────────────────────
 function fixtureKey(f: MarketRecord): string {
   const vessel = (f.vessel_name ?? "").trim().toLowerCase();
+  // Skip TBN vessels from dedup — they are different enquiries
+  if (vessel === "tbn" || vessel === "tba" || vessel === "") return `__skip_${f.id}`;
   const load = normalisePort(f.load_port).toLowerCase();
   const disch = normalisePort(f.discharge_port).toLowerCase();
   return `${vessel}|${load}|${disch}`;
