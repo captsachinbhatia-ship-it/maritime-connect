@@ -564,7 +564,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         if (data.section === "body" && [2, 4, 6].includes(data.column.index)) {
           const val = parseFloat(String(data.cell.raw ?? "0").replace("+", ""));
           if (!isNaN(val)) {
-            data.cell.styles.textColor = val > 0 ? COMMON.red : val < 0 ? COMMON.green : COMMON.grey66;
+            data.cell.styles.textColor = val > 0 ? COMMON.green : val < 0 ? COMMON.red : COMMON.grey66;
             data.cell.styles.fontStyle = "bold";
           }
         }
