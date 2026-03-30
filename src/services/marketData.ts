@@ -238,6 +238,26 @@ export async function fetchBunkerPrices(): Promise<{
   }
 }
 
+// ---------- Oil prices from oilprice.com ----------
+
+export async function fetchOilPrices(): Promise<{
+  inserted: number;
+  skipped: boolean;
+  error: string | null;
+}> {
+  try {
+    const { data, error } = await supabase.functions.invoke("fetch-oil-prices", { body: {} });
+    if (error) return { inserted: 0, skipped: false, error: error.message ?? "Failed" };
+    return {
+      inserted: data?.inserted ?? 0,
+      skipped: data?.skipped ?? false,
+      error: null,
+    };
+  } catch (err) {
+    return { inserted: 0, skipped: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 // ---------- Resolutions ----------
 
 export interface Resolution {
