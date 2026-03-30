@@ -282,14 +282,18 @@ const SE_FE_ASIA_PORTS = new Set([
   "taiwan", "yokohama", "chiba", "philippines", "thailand",
   "vietnam", "indonesia", "malaysia", "busan",
 ]);
-const MED_UKC_WAFR_PORTS = new Set([
+const WAF_USG_PORTS = new Set([
+  "west africa", "lagos", "bonny", "houston", "us gulf",
+  "caribbean", "brazil", "east coast s. america", "covenas",
+  "corpus christi", "galveston",
+]);
+const MED_UKC_PORTS = new Set([
   "uk continent", "uk continent-med", "mediterranean", "rotterdam",
-  "amsterdam", "west africa", "lagos", "bonny", "houston", "us gulf",
-  "caribbean", "brazil", "east coast s. america", "black sea",
-  "novorossiysk", "east africa", "south africa",
+  "amsterdam", "black sea", "novorossiysk", "ceyhan",
+  "east africa", "south africa",
 ]);
 
-export function inferTradeRegion(load: string, discharge: string): string {
+export function inferTradeRegion(load: string, discharge: string, reportType?: string): string {
   const l = load.toLowerCase();
   const d = discharge.toLowerCase();
   // Cross Singapore
@@ -298,7 +302,11 @@ export function inferTradeRegion(load: string, discharge: string): string {
   for (const p of [l, d]) {
     if ([...MEG_RSEA_INDIA_PORTS].some((k) => p.includes(k))) return "MEG - RSEA - INDIA";
     if ([...SE_FE_ASIA_PORTS].some((k) => p.includes(k))) return "SOUTHEAST-FAR EAST ASIA";
-    if ([...MED_UKC_WAFR_PORTS].some((k) => p.includes(k))) return "MED-UKC-WAFR";
+    if ([...WAF_USG_PORTS].some((k) => p.includes(k))) {
+      // DPP gets its own WAF-USG region; CPP groups them into MED-UKC-WAFR
+      return reportType === "DPP" ? "WAF - US GULF" : "MED-UKC-WAFR";
+    }
+    if ([...MED_UKC_PORTS].some((k) => p.includes(k))) return "MED-UKC-WAFR";
   }
   return "OTHER";
 }
@@ -330,7 +338,7 @@ export interface NormalisedReport {
 }
 
 // ── Main normalisation ────────────────────────────────────────
-export function normaliseForPdf(records: MarketRecord[], resolutions?: Resolution[]): NormalisedReport {
+export function normaliseForPdf(records: MarketRecord[], resolutions?: Resolution[], reportType?: string): NormalisedReport {
   const resolutionMap = new Map<string, string>();
   for (const r of resolutions ?? []) {
     if (r.display_name) {
@@ -363,7 +371,7 @@ export function normaliseForPdf(records: MarketRecord[], resolutions?: Resolutio
     const charterer = normaliseCharterer(primary.charterer);
     const load = normalisePort(primary.load_port);
     const discharge = normalisePort(primary.discharge_port);
-    const tradeRegion = inferTradeRegion(load, discharge);
+    const tradeRegion = inferTradeRegion(load, discharge, reportType);
 
     // Rate conflict resolution
     const rates = group.map((f) => parseRate(f.rate_value));
@@ -444,7 +452,7 @@ export function normaliseForPdf(records: MarketRecord[], resolutions?: Resolutio
     demurrage: null,
     status: "-",
     segment: e.vessel_class ?? "Other",
-    tradeRegion: inferTradeRegion(normalisePort(e.load_port), normalisePort(e.discharge_port)),
+    tradeRegion: inferTradeRegion(normalisePort(e.load_port), normalisePort(e.discharge_port), reportType),
     rateConflict: false,
     vesselTypeMismatch: false,
     possibleRepeat: false,

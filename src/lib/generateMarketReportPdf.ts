@@ -11,7 +11,10 @@ import logoJpg from "@/assets/logo-aq-maritime.jpg";
 // ── Segment / region order ────────────────────────────────────
 const DIRTY_SEGMENTS = ["VLCC", "ULCC", "Suezmax", "Aframax", "Panamax", "LR2", "LR1", "MR"];
 const CLEAN_SEGMENTS = ["MR", "LR1", "LR2"];
-const REPORT_REGIONS = ["MEG - RSEA - INDIA", "SOUTHEAST-FAR EAST ASIA", "CROSS SINGAPORE", "MED-UKC-WAFR"];
+const COMMON_REGIONS = ["MEG - RSEA - INDIA", "SOUTHEAST-FAR EAST ASIA", "CROSS SINGAPORE", "MED-UKC-WAFR"];
+const DIRTY_EXTRA_REGIONS = ["WAF - US GULF"];
+const DIRTY_REGIONS = [...COMMON_REGIONS, ...DIRTY_EXTRA_REGIONS];
+const CLEAN_REGIONS = COMMON_REGIONS;
 
 // ── Footer contacts ───────────────────────────────────────────
 const TEAM = [
@@ -42,7 +45,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
   const theme = isDirty ? DPP : CPP;
 
   // Normalise
-  const { fixtures: normFixtures, enquiries: normEnquiries } = normaliseForPdf(records, resolutions);
+  const { fixtures: normFixtures, enquiries: normEnquiries } = normaliseForPdf(records, resolutions, reportType);
 
   // Fetch baltic routes from dedicated tables
   const { data: balticClean } = await supabase
@@ -311,9 +314,9 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     Y = getFinalY() + 5;
   }
 
-  // ── DIRTY REPORT: by region → segment (same format as CPP) ──
+  // ── DIRTY REPORT: by region → segment (same format as CPP + WAF-USG) ──
   if (isDirty) {
-    for (const region of REPORT_REGIONS) {
+    for (const region of DIRTY_REGIONS) {
       let regionHasData = false;
       for (const seg of DIRTY_SEGMENTS) {
         const allFix = normFixtures.get(seg) ?? [];
@@ -382,7 +385,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
 
   // ── CLEAN REPORT: region band → segments underneath ─────
   if (!isDirty) {
-    for (const region of REPORT_REGIONS) {
+    for (const region of CLEAN_REGIONS) {
       // Check if any segment has data in this region
       let regionHasData = false;
       for (const seg of CLEAN_SEGMENTS) {
