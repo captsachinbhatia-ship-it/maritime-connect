@@ -150,7 +150,7 @@ export default function WhatsAppParser() {
 
     try {
       // Add source_group to track WhatsApp origin
-      const withSource = rows.map((r: Record<string, unknown>) => ({
+      const withSource = rows.map((r: any) => ({
         ...r,
         source_group: 'whatsapp_import',
       }));
