@@ -29,6 +29,7 @@ import { useCrmUser } from "@/hooks/useCrmUser";
 import {
   fetchMarketData,
   fetchResolutions,
+  resolveDiscrepancy,
   type MarketRecord,
   type MarketFixture,
   type Resolution,
@@ -666,7 +667,33 @@ export default function MarketReports() {
                       fixtures={grouped[cls]}
                       fixtureFieldMap={fixtureFieldMap}
                       vesselDiscrepancies={vesselDiscrepancies}
+                      resolutions={resolutions}
                       onResolve={setResolveTarget}
+                      onResolveGroup={(g) => {
+                        const disc = vesselDiscrepancies.get(g.vesselKey);
+                        if (disc) setResolveTarget(disc);
+                      }}
+                      onAutoResolveGroup={async (g) => {
+                        // Auto-resolve: for each unresolved conflict, pick best value and save
+                        for (const field of Object.keys(g.conflicts)) {
+                          if (g.resolved[field as keyof typeof g.resolved]) continue;
+                          const val = g.merged[field as keyof typeof g.merged];
+                          if (val == null) continue;
+                          await resolveDiscrepancy({
+                            vesselName: g.vesselKey,
+                            reportDate: g.merged.report_date ?? "",
+                            fieldName: field,
+                            resolvedValue: String(val),
+                            displayName: String(val),
+                            remark: "Auto-resolved",
+                            resolvedBy: crmUserId,
+                            resolvedByName: crmUser?.full_name ?? "System",
+                          });
+                        }
+                        loadFixtures();
+                        fetchResolutions().then(({ data }) => setResolutions(data ?? []));
+                        toast({ title: "Auto-resolved", description: `${g.vesselName} — all conflicts resolved automatically` });
+                      }}
                       onEdit={(f) => { setEditFixture(f); setAddFixtureOpen(true); }}
                     />
                   )

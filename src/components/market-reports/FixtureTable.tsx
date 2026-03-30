@@ -16,8 +16,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { MarketFixture } from "@/services/marketData";
+import type { MarketFixture, Resolution } from "@/services/marketData";
 import type { VesselDiscrepancy } from "@/lib/discrepancies";
+import { groupFixtures, type FixtureGroup } from "@/lib/fixtureGrouping";
+import { GroupedFixtureRow } from "./GroupedFixtureRow";
 
 const STATUS_COLORS: Record<string, string> = {
   fixed: "bg-green-100 text-green-800 border-green-300",
@@ -53,7 +55,10 @@ interface Props {
   vesselClass: string;
   fixtureFieldMap: Map<string, Set<string>>;
   vesselDiscrepancies: Map<string, VesselDiscrepancy>;
+  resolutions?: Resolution[];
   onResolve?: (disc: VesselDiscrepancy) => void;
+  onResolveGroup?: (group: FixtureGroup) => void;
+  onAutoResolveGroup?: (group: FixtureGroup) => void;
   onEdit?: (fixture: MarketFixture) => void;
 }
 
@@ -63,7 +68,10 @@ export function FixtureTable({
   fixtureFieldMap,
   vesselDiscrepancies,
   onResolve,
+  onResolveGroup,
+  onAutoResolveGroup,
   onEdit,
+  resolutions = [],
 }: Props) {
   const [sortCol, setSortCol] = useState<SortCol>("vessel_name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -94,6 +102,15 @@ export function FixtureTable({
     });
     return arr;
   }, [fixtures, sortCol, sortAsc]);
+
+  // Group fixtures by vessel name — multi-source vessels become collapsible groups
+  const { singles, groups } = useMemo(
+    () => groupFixtures(sorted, resolutions),
+    [sorted, resolutions]
+  );
+
+  // Sort singles the same way as the full list
+  const sortedSingles = singles;
 
   const SortHeader = ({
     col,
@@ -182,22 +199,31 @@ export function FixtureTable({
     );
   };
 
-  const discrepancyCount = sorted.filter((r) => fixtureFieldMap.has(r.id)).length;
+  const groupedCount = groups.length;
+  const totalUnresolved = groups.reduce((sum, g) => sum + g.unresolvedCount, 0);
+  const totalConflicts = groups.reduce((sum, g) => sum + Object.keys(g.conflicts).length, 0);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-semibold">{vesselClass}</h3>
         <Badge variant="secondary" className="text-xs">
-          {fixtures.length}
+          {singles.length + groups.length} vessel{singles.length + groups.length !== 1 ? "s" : ""}
         </Badge>
-        {discrepancyCount > 0 && (
-          <Badge
-            variant="outline"
-            className="text-xs bg-amber-50 text-amber-700 border-amber-200"
-          >
+        {groupedCount > 0 && (
+          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+            {groupedCount} grouped
+          </Badge>
+        )}
+        {totalUnresolved > 0 && (
+          <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
             <AlertTriangle className="h-3 w-3 mr-1" />
-            {discrepancyCount} discrepanc{discrepancyCount === 1 ? "y" : "ies"}
+            {totalUnresolved} unresolved
+          </Badge>
+        )}
+        {totalConflicts > 0 && totalUnresolved === 0 && (
+          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+            All resolved
           </Badge>
         )}
       </div>
@@ -232,180 +258,64 @@ export function FixtureTable({
                 </TableCell>
               </TableRow>
             )}
-            {(() => {
-              // Track which vessel groups have shown "Resolve" button
-              const resolvedVessels = new Set<string>();
-              return sorted.map((row) => {
-              const hasDisc = fixtureFieldMap.has(row.id);
-              // Find vessel discrepancy for this row
-              let disc: VesselDiscrepancy | null = null;
-              if (hasDisc) {
-                for (const d of vesselDiscrepancies.values()) {
-                  if (d.fixtureIds.includes(row.id)) { disc = d; break; }
-                }
-              }
-              const isFirstInGroup = disc && !resolvedVessels.has(disc.vesselKey);
-              if (disc && isFirstInGroup) resolvedVessels.add(disc.vesselKey);
-              const sourceCount = disc ? disc.fixtureIds.length : 0;
 
-              return (
-                <TableRow
-                  key={row.id}
-                  className={cn(
-                    hasDisc && "border-l-2 border-l-amber-400 bg-amber-50/30"
-                  )}
-                >
-                  <TableCell className="text-xs font-medium whitespace-nowrap">
-                    {row.vessel_name || "TBN"}
-                    {hasDisc && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <AlertTriangle className="inline h-3 w-3 ml-1 text-amber-500" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs font-semibold">
-                              Cross-report discrepancy ({sourceCount} sources)
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Fields:{" "}
-                              {[...fixtureFieldMap.get(row.id)!].join(", ")}
-                            </p>
-                            {onResolve && (
-                              <p className="text-xs text-primary mt-1">Click Resolve to settle all {sourceCount} at once</p>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                    {isFirstInGroup && onResolve && disc && (
-                      <button
-                        className="ml-1 text-[10px] text-amber-600 hover:text-amber-800 underline"
-                        onClick={() => onResolve(disc!)}
-                      >
-                        Resolve ({sourceCount})
-                      </button>
-                    )}
-                    {row.is_repeat && (
-                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-orange-50 text-orange-600 border-orange-200">repeat</Badge>
-                    )}
-                    {row.status_discrepancy && (
-                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-yellow-50 text-yellow-700 border-yellow-200">status</Badge>
-                    )}
-                    {row.vessel_type_mismatch && (
-                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-blue-50 text-blue-600 border-blue-200">type?</Badge>
-                    )}
-                    {(row as unknown as Record<string, unknown>).is_merged && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-green-50 text-green-700 border-green-200">
-                              Resolved ({(row as unknown as Record<string, unknown>).merged_count as number} sources)
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs font-semibold">Merged from: {((row as unknown as Record<string, unknown>).merged_sources as string[])?.join(", ")}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Resolved fields: {((row as unknown as Record<string, unknown>).resolved_fields as string[])?.join(", ") || "remark only"}
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">
-                    {row.dwt ? row.dwt.toLocaleString() : "—"}
-                  </TableCell>
-                  <DiscrepantCell
-                    fixtureId={row.id}
-                    field="charterer"
-                    className="text-xs"
-                  >
-                    {row.charterer || "—"}
-                  </DiscrepantCell>
-                  <DiscrepantCell
-                    fixtureId={row.id}
-                    field="cargo_grade"
-                    className="text-xs uppercase"
-                  >
-                    {row.cargo_grade || row.cargo_type || "—"}
-                  </DiscrepantCell>
-                  <TableCell className="text-xs tabular-nums">
-                    {row.quantity_mt ? row.quantity_mt.toLocaleString() : "—"}
-                  </TableCell>
-                  <DiscrepantCell
-                    fixtureId={row.id}
-                    field="load_port"
-                    className="text-xs uppercase whitespace-nowrap"
-                  >
-                    {row.load_port || "—"}
-                    {row.load_region && (
-                      <span className="text-muted-foreground ml-1">
-                        ({row.load_region})
-                      </span>
-                    )}
-                  </DiscrepantCell>
-                  <DiscrepantCell
-                    fixtureId={row.id}
-                    field="discharge_port"
-                    className="text-xs uppercase whitespace-nowrap"
-                  >
-                    {row.discharge_port || "—"}
-                    {row.discharge_region && (
-                      <span className="text-muted-foreground ml-1">
-                        ({row.discharge_region})
-                      </span>
-                    )}
-                  </DiscrepantCell>
-                  <TableCell className="text-xs whitespace-nowrap">
-                    {formatLaycan(row.laycan_from, row.laycan_to)}
-                  </TableCell>
-                  <DiscrepantCell
-                    fixtureId={row.id}
-                    field="rate_value"
-                    className="text-xs font-mono whitespace-nowrap"
-                  >
-                    {row.rate_value || "—"}
-                    {row.rate_ws != null && row.rate_lumpsum != null && (
-                      <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 bg-yellow-50 text-yellow-700 border-yellow-200">WS+LS</Badge>
-                    )}
-                  </DiscrepantCell>
-                  <DiscrepantCell
-                    fixtureId={row.id}
-                    field="fixture_status"
-                    className=""
-                  >
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px]",
-                        STATUS_COLORS[row.fixture_status ?? ""] ?? ""
-                      )}
+            {/* Grouped rows (multi-source vessels) — collapsible */}
+            {groups.map((group) => (
+              <GroupedFixtureRow
+                key={group.vesselKey}
+                group={group}
+                onResolve={(g) => {
+                  // Find the matching VesselDiscrepancy and call onResolve
+                  const disc = vesselDiscrepancies.get(g.vesselKey);
+                  if (disc && onResolve) onResolve(disc);
+                  else if (onResolveGroup) onResolveGroup(g);
+                }}
+                onAutoResolve={(g) => {
+                  if (onAutoResolveGroup) onAutoResolveGroup(g);
+                }}
+                onEdit={onEdit}
+                hasEditCol={!!onEdit}
+              />
+            ))}
+
+            {/* Single rows (one source only) — standard rendering */}
+            {sortedSingles.map((row) => (
+              <TableRow key={row.id}>
+                <TableCell className="text-xs font-medium whitespace-nowrap">
+                  {row.vessel_name || "TBN"}
+                </TableCell>
+                <TableCell className="text-xs tabular-nums">
+                  {row.dwt ? row.dwt.toLocaleString() : "—"}
+                </TableCell>
+                <TableCell className="text-xs">{row.charterer || "—"}</TableCell>
+                <TableCell className="text-xs uppercase">{row.cargo_grade || row.cargo_type || "—"}</TableCell>
+                <TableCell className="text-xs tabular-nums">{row.quantity_mt ? row.quantity_mt.toLocaleString() : "—"}</TableCell>
+                <TableCell className="text-xs uppercase whitespace-nowrap">{row.load_port || "—"}</TableCell>
+                <TableCell className="text-xs uppercase whitespace-nowrap">{row.discharge_port || "—"}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{formatLaycan(row.laycan_from, row.laycan_to)}</TableCell>
+                <TableCell className="text-xs font-mono whitespace-nowrap">{row.rate_value || "—"}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={cn("text-[10px]", STATUS_COLORS[row.fixture_status ?? ""] ?? "")}>
+                    {row.fixture_status ?? "—"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                  {SOURCE_LABELS[row.report_source] ?? row.report_source}
+                </TableCell>
+                <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{row.report_date ?? "—"}</TableCell>
+                {onEdit && (
+                  <TableCell className="text-center">
+                    <button
+                      className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                      onClick={() => onEdit(row)}
+                      title="Edit fixture"
                     >
-                      {row.fixture_status ?? "—"}
-                    </Badge>
-                  </DiscrepantCell>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {SOURCE_LABELS[row.report_source] ?? row.report_source}
+                      <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                    </button>
                   </TableCell>
-                  <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
-                    {row.report_date ?? "—"}
-                  </TableCell>
-                  {onEdit && (
-                    <TableCell className="text-center">
-                      <button
-                        className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
-                        onClick={() => onEdit(row)}
-                        title="Edit fixture"
-                      >
-                        <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                      </button>
-                    </TableCell>
-                  )}
-                </TableRow>
-              );
-            });
-            })()}
+                )}
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>
