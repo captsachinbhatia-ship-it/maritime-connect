@@ -11,7 +11,7 @@ import logoJpg from "@/assets/logo-aq-maritime.jpg";
 // ── Segment / region order ────────────────────────────────────
 const DIRTY_SEGMENTS = ["VLCC", "ULCC", "Suezmax", "Aframax", "Panamax", "LR2", "LR1", "MR"];
 const CLEAN_SEGMENTS = ["MR", "LR1", "LR2"];
-const CLEAN_REGIONS = ["MEG - RSEA - INDIA", "SOUTHEAST-FAR EAST ASIA", "CROSS SINGAPORE", "MED-UKC-WAFR"];
+const REPORT_REGIONS = ["MEG - RSEA - INDIA", "SOUTHEAST-FAR EAST ASIA", "CROSS SINGAPORE", "MED-UKC-WAFR"];
 
 // ── Footer contacts ───────────────────────────────────────────
 const TEAM = [
@@ -44,13 +44,20 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
   // Normalise
   const { fixtures: normFixtures, enquiries: normEnquiries } = normaliseForPdf(records, resolutions);
 
-  // Fetch baltic routes from dedicated table
-  const { data: balticData } = await supabase
+  // Fetch baltic routes from dedicated tables
+  const { data: balticClean } = await supabase
     .from("baltic_routes")
     .select("*")
     .eq("report_date", reportDate)
     .order("route");
-  const balticRoutes = balticData ?? [];
+
+  const { data: balticDirty } = await supabase
+    .from("dirty_baltic_routes")
+    .select("*")
+    .eq("report_date", reportDate)
+    .order("route");
+
+  const balticRoutes = isDirty ? (balticDirty ?? []) : (balticClean ?? []);
 
   // Fallback: use market_data BALTIC records if dedicated table empty
   const balticFromMd = records.filter((r) => r.record_type === "BALTIC");
@@ -239,12 +246,16 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     return getFinalY();
   };
 
-  // ── BALTIC ROUTES (always shown for clean report) ───────
-  if (!isDirty) {
+  // ── BALTIC ROUTES (shown for both CPP and DPP) ─────────
+  {
     const bRoutes = balticRoutes.length > 0 ? balticRoutes : balticFromMd;
     Y = needPage(Y, 35);
 
     // Empty placeholder rows if no data
+    const placeholderRoutes = isDirty
+      ? [["TD2", "", "", "", ""], ["TD3C", "", "", "", ""], ["TD6", "", "", "", ""], ["TD7", "", "", "", ""]]
+      : [["TC5", "", "", "", ""], ["TC8", "", "", "", ""], ["TC12", "", "", "", ""], ["TC17", "", "", "", ""]];
+
     const balticBody = bRoutes.length > 0
       ? bRoutes.map((r: Record<string, unknown>) => {
           const ws = Number(r.worldscale ?? r.world_scale ?? 0);
@@ -261,7 +272,10 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
             tcStr,
           ];
         })
-      : [["TC5", "", "", "", ""], ["TC8", "", "", "", ""], ["TC12", "", "", "", ""], ["TC17", "", "", "", ""]];
+      : placeholderRoutes;
+
+    const balticTitle = isDirty ? "DIRTY TANKER BALTIC ROUTES" : "CLEAN TANKER BALTIC ROUTES";
+    Y = drawBand(Y, balticTitle);
 
     autoTable(doc, {
       startY: Y,
@@ -269,17 +283,17 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
       head: [["Route", "Description", "Size", "World Scale", "TC Earnings ($/day)"].slice()],
       body: balticBody,
       headStyles: {
-        fillColor: CPP.headerBg, textColor: CPP.headerTxt, fontSize: 8, fontStyle: "bold",
+        fillColor: theme.headerBg, textColor: theme.headerTxt, fontSize: 8, fontStyle: "bold",
         cellPadding: { top: 1.5, bottom: 1.5, left: 1.8, right: 1.8 },
-        lineColor: CPP.accent, lineWidth: { bottom: 0.35 },
+        lineColor: theme.accent, lineWidth: { bottom: 0.35 },
       },
       bodyStyles: {
         fontSize: 8, cellPadding: { top: 2, bottom: 2, left: 1.8, right: 1.8 }, minCellHeight: 7,
       },
-      alternateRowStyles: { fillColor: CPP.altRow },
-      tableLineColor: CPP.border, tableLineWidth: 0.18, theme: "grid",
+      alternateRowStyles: { fillColor: theme.altRow },
+      tableLineColor: theme.border, tableLineWidth: 0.18, theme: "grid",
       columnStyles: {
-        0: { fontStyle: "bolditalic", textColor: CPP.accent as unknown as number[], cellWidth: 18 },
+        0: { fontStyle: "bolditalic", textColor: theme.accent as unknown as number[], cellWidth: 18 },
         1: { fontStyle: "italic", textColor: COMMON.desc55 as unknown as number[], cellWidth: 68 },
         2: { halign: "center", textColor: COMMON.txt44 as unknown as number[], cellWidth: 24 },
         3: { fontStyle: "bold", cellWidth: 38 },
@@ -290,25 +304,66 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
           const raw = String(data.cell.raw ?? "");
           if (raw.includes("(+")) data.cell.styles.textColor = COMMON.green;
           else if (raw.includes("(-")) data.cell.styles.textColor = COMMON.red;
-          else data.cell.styles.textColor = CPP.dark;
+          else data.cell.styles.textColor = theme.dark;
         }
       },
     });
     Y = getFinalY() + 5;
   }
 
-  // ── DIRTY REPORT: by segment ────────────────────────────
+  // ── DIRTY REPORT: by region → segment (same format as CPP) ──
   if (isDirty) {
+    for (const region of REPORT_REGIONS) {
+      let regionHasData = false;
+      for (const seg of DIRTY_SEGMENTS) {
+        const allFix = normFixtures.get(seg) ?? [];
+        const regionFix = allFix.filter((f) => f.tradeRegion === region);
+        const regionEnq = normEnquiries.filter((e) => e.segment === seg && e.tradeRegion === region);
+        if (regionFix.length > 0 || regionEnq.length > 0) { regionHasData = true; break; }
+      }
+      if (!regionHasData) continue;
+
+      Y = drawBand(Y, region);
+
+      for (const seg of DIRTY_SEGMENTS) {
+        const allFix = normFixtures.get(seg) ?? [];
+        const regionFix = allFix.filter((f) => f.tradeRegion === region);
+        const regionEnq = normEnquiries.filter((e) => e.segment === seg && e.tradeRegion === region);
+        if (regionFix.length === 0 && regionEnq.length === 0) continue;
+
+        Y = drawSegmentHeader(Y, seg);
+        const sKey = `${seg} \u2013 ${region}`;
+        Y = drawCommentary(Y, sKey);
+
+        if (regionFix.length > 0) {
+          Y = drawFixtureTable(Y, regionFix) + 2;
+        } else {
+          Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
+        }
+        Y = drawEnquiries(Y, regionEnq) + 3;
+      }
+    }
+
+    // Other region for dirty
+    let otherHasData = false;
     for (const seg of DIRTY_SEGMENTS) {
-      const fixtures = normFixtures.get(seg);
-      if (!fixtures || fixtures.length === 0) continue;
-      const sKey = `${seg} \u2013 FIXTURES`;
-      Y = drawBand(Y, sKey);
-      Y = drawCommentary(Y, sKey);
-      Y = drawFixtureTable(Y, fixtures) + 4;
-      // Enquiries for this segment
-      const segEnq = normEnquiries.filter((e) => e.segment === seg);
-      Y = drawEnquiries(Y, segEnq) + 3;
+      const other = (normFixtures.get(seg) ?? []).filter((f) => f.tradeRegion === "OTHER");
+      if (other.length > 0) { otherHasData = true; break; }
+    }
+    if (otherHasData) {
+      Y = drawBand(Y, "OTHER");
+      for (const seg of DIRTY_SEGMENTS) {
+        const other = (normFixtures.get(seg) ?? []).filter((f) => f.tradeRegion === "OTHER");
+        const otherEnq = normEnquiries.filter((e) => e.segment === seg && e.tradeRegion === "OTHER");
+        if (other.length === 0 && otherEnq.length === 0) continue;
+        Y = drawSegmentHeader(Y, seg);
+        if (other.length > 0) {
+          Y = drawFixtureTable(Y, other) + 2;
+        } else {
+          Y = drawNoFresh(Y, "NO FRESH FIXTURE TO REPORT");
+        }
+        Y = drawEnquiries(Y, otherEnq) + 3;
+      }
     }
   }
 
@@ -327,7 +382,7 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
 
   // ── CLEAN REPORT: region band → segments underneath ─────
   if (!isDirty) {
-    for (const region of CLEAN_REGIONS) {
+    for (const region of REPORT_REGIONS) {
       // Check if any segment has data in this region
       let regionHasData = false;
       for (const seg of CLEAN_SEGMENTS) {
@@ -391,6 +446,75 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
           Y = drawEnquiries(Y, otherEnq) + 3;
         }
       }
+    }
+  }
+
+  // ── OIL / PRODUCT PRICES ─────────────────────────────────
+  const oilRecords = records.filter((r) => r.record_type === "OIL_PRICE");
+
+  // Also fetch from DB if not in records
+  let oilPrices = oilRecords;
+  if (oilPrices.length === 0) {
+    const { data: oilData } = await supabase
+      .from("market_data")
+      .select("*")
+      .eq("record_type", "OIL_PRICE")
+      .eq("report_date", reportDate);
+    oilPrices = (oilData ?? []) as MarketRecord[];
+  }
+
+  if (oilPrices.length > 0) {
+    // DPP: WTI Crude, Brent Crude
+    // CPP: Gasoil, Gasoline, Naphtha (East Suez)
+    const targetProducts = isDirty
+      ? ["WTI Crude", "Brent Crude"]
+      : ["Gasoline", "Gasoil", "Heating Oil", "Natural Gas"];
+
+    const filtered = oilPrices.filter((r) =>
+      targetProducts.some((t) => (r.cargo_grade ?? "").toLowerCase().includes(t.toLowerCase()))
+    );
+
+    if (filtered.length > 0) {
+      Y = needPage(Y, 30);
+      const priceTitle = isDirty ? "CRUDE OIL PRICES" : "CLEAN PRODUCT PRICES";
+      Y = drawBand(Y, priceTitle);
+
+      autoTable(doc, {
+        startY: Y,
+        margin: TABLE_MARGIN,
+        head: [["Product", "Price (USD)", "Change", "% Change"]],
+        body: filtered.map((r) => [
+          r.cargo_grade ?? "",
+          r.rate_numeric != null ? `$${Number(r.rate_numeric).toFixed(2)}` : "",
+          r.rate_value ?? "",
+          r.rate_type ?? "",
+        ]),
+        headStyles: {
+          fillColor: theme.headerBg, textColor: theme.headerTxt, fontSize: 8, fontStyle: "bold",
+          cellPadding: { top: 1.5, bottom: 1.5, left: 1.8, right: 1.8 },
+          lineColor: theme.accent, lineWidth: { bottom: 0.35 },
+        },
+        bodyStyles: {
+          fontSize: 8, cellPadding: { top: 2, bottom: 2, left: 1.8, right: 1.8 }, minCellHeight: 7,
+        },
+        alternateRowStyles: { fillColor: theme.altRow },
+        tableLineColor: theme.border, tableLineWidth: 0.18, theme: "grid",
+        columnStyles: {
+          0: { fontStyle: "bold", textColor: (isDirty ? theme.accent : CPP.dark) as unknown as number[], cellWidth: 50 },
+          1: { halign: "right", fontStyle: "bold", cellWidth: 40 },
+          2: { halign: "right", cellWidth: 40 },
+          3: { halign: "right", cellWidth: 40 },
+        } as Record<number, object>,
+        didParseCell: (data) => {
+          if (data.section === "body" && (data.column.index === 2 || data.column.index === 3)) {
+            const raw = String(data.cell.raw ?? "");
+            if (raw.startsWith("+")) data.cell.styles.textColor = COMMON.red;
+            else if (raw.startsWith("-")) data.cell.styles.textColor = COMMON.green;
+            data.cell.styles.fontStyle = "bold";
+          }
+        },
+      });
+      Y = getFinalY() + 5;
     }
   }
 
