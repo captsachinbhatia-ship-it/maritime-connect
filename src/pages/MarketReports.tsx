@@ -9,6 +9,7 @@ import {
   FileUp,
   FileDown,
   TableProperties,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ import { FixtureTable } from "@/components/market-reports/FixtureTable";
 import { UploadReportDialog } from "@/components/market-reports/UploadReportDialog";
 import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
 import { ResolveDiscrepancyDialog } from "@/components/market-reports/ResolveDiscrepancyDialog";
+import { AddFixtureDialog } from "@/components/market-reports/AddFixtureDialog";
 import { generateMarketReportPdf } from "@/lib/generateMarketReportPdf";
 import { detectDiscrepancies, type VesselDiscrepancy } from "@/lib/discrepancies";
 import {
@@ -125,6 +127,8 @@ export default function MarketReports() {
   const [resolveTarget, setResolveTarget] = useState<VesselDiscrepancy | null>(null);
   const [cargoTab, setCargoTab] = useState<"all" | "dirty" | "clean">("all");
   const [resolutions, setResolutions] = useState<Resolution[]>([]);
+  const [addFixtureOpen, setAddFixtureOpen] = useState(false);
+  const [editFixture, setEditFixture] = useState<MarketRecord | null>(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState("");
@@ -619,6 +623,15 @@ export default function MarketReports() {
               <FileDown className="h-3.5 w-3.5" />
               CPP Report
             </Button>
+            <div className="w-px h-5 bg-border" />
+            <Button
+              size="sm"
+              className="h-8 text-xs gap-1"
+              onClick={() => { setEditFixture(null); setAddFixtureOpen(true); }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Fixture
+            </Button>
           </div>
 
           {/* Fixture tables */}
@@ -654,6 +667,7 @@ export default function MarketReports() {
                       fixtureFieldMap={fixtureFieldMap}
                       vesselDiscrepancies={vesselDiscrepancies}
                       onResolve={setResolveTarget}
+                      onEdit={(f) => { setEditFixture(f); setAddFixtureOpen(true); }}
                     />
                   )
               )}
@@ -748,6 +762,14 @@ export default function MarketReports() {
           onResolved={() => { loadFixtures(); fetchResolutions().then(({ data }) => setResolutions(data ?? [])); }}
         />
       )}
+
+      {/* Add / Edit fixture dialog */}
+      <AddFixtureDialog
+        open={addFixtureOpen}
+        onOpenChange={setAddFixtureOpen}
+        onSaved={loadFixtures}
+        editRecord={editFixture}
+      />
     </div>
   );
 }

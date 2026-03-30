@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowUpDown, AlertTriangle } from "lucide-react";
+import { ArrowUpDown, AlertTriangle, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -54,6 +54,7 @@ interface Props {
   fixtureFieldMap: Map<string, Set<string>>;
   vesselDiscrepancies: Map<string, VesselDiscrepancy>;
   onResolve?: (disc: VesselDiscrepancy) => void;
+  onEdit?: (fixture: MarketFixture) => void;
 }
 
 export function FixtureTable({
@@ -62,6 +63,7 @@ export function FixtureTable({
   fixtureFieldMap,
   vesselDiscrepancies,
   onResolve,
+  onEdit,
 }: Props) {
   const [sortCol, setSortCol] = useState<SortCol>("vessel_name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -216,13 +218,14 @@ export function FixtureTable({
               <SortHeader col="fixture_status">Status</SortHeader>
               <SortHeader col="report_source">Source</SortHeader>
               <SortHeader col="report_date">Report Date</SortHeader>
+              {onEdit && <TableHead className="text-xs w-10"></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={12}
+                  colSpan={onEdit ? 13 : 12}
                   className="text-center text-muted-foreground py-6 text-xs"
                 >
                   No fixtures for {vesselClass}
@@ -388,6 +391,17 @@ export function FixtureTable({
                   <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
                     {row.report_date ?? "—"}
                   </TableCell>
+                  {onEdit && (
+                    <TableCell className="text-center">
+                      <button
+                        className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                        onClick={() => onEdit(row)}
+                        title="Edit fixture"
+                      >
+                        <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                      </button>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             });
