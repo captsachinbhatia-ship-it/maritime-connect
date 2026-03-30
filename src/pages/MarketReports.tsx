@@ -260,14 +260,21 @@ export default function MarketReports() {
   const [downloadDate, setDownloadDate] = useState(new Date().toISOString().slice(0, 10));
 
   const handleGeneratePdf = async (type: "DPP" | "CPP") => {
-    // Filter to the selected download date
-    const relevantRecords = fixtures.filter((r) => r.report_type === type && r.report_date === downloadDate);
-    if (relevantRecords.length === 0) {
-      toast({ title: "No data", description: `No ${type} fixtures for ${downloadDate}`, variant: "destructive" });
-      return;
+    try {
+      // Include fixtures for this report type + bunker/oil records for the date
+      const relevantRecords = fixtures.filter(
+        (r) => r.report_date === downloadDate && (r.report_type === type || r.record_type === "BUNKER" || r.record_type === "OIL_PRICE")
+      );
+      if (relevantRecords.length === 0) {
+        toast({ title: "No data", description: `No ${type} fixtures for ${downloadDate}`, variant: "destructive" });
+        return;
+      }
+      await generateMarketReportPdf({ reportType: type, reportDate: downloadDate, records: relevantRecords, resolutions });
+      toast({ title: "PDF downloaded", description: `${type} report for ${downloadDate}` });
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      toast({ title: "PDF failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     }
-    await generateMarketReportPdf({ reportType: type, reportDate: downloadDate, records: relevantRecords, resolutions });
-    toast({ title: "PDF downloaded", description: `${type} report for ${downloadDate}` });
   };
 
   const toggleQuickFilter = (filter: string) => {

@@ -314,6 +314,19 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     Y = getFinalY() + 5;
   }
 
+  // ── Segment sub-header (lighter bar under region band) ──
+  const drawSegmentHeader = (y: number, text: string): number => {
+    y = needPage(y, 8);
+    doc.setFillColor(...COMMON.segBandBg);
+    doc.rect(ML, y, CW, 4.8, "F");
+    doc.setDrawColor(...theme.border); doc.setLineWidth(0.15);
+    doc.line(ML, y + 4.8, ML + CW, y + 4.8);
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...theme.headerTxt);
+    doc.text(text, ML + 1.8, y + 3.3);
+    doc.setFont("helvetica", "normal");
+    return y + 5.5;
+  };
+
   // ── DIRTY REPORT: by region → segment (same format as CPP + WAF-USG) ──
   if (isDirty) {
     for (const region of DIRTY_REGIONS) {
@@ -369,19 +382,6 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
       }
     }
   }
-
-  // ── Segment sub-header (lighter bar under region band) ──
-  const drawSegmentHeader = (y: number, text: string): number => {
-    y = needPage(y, 8);
-    doc.setFillColor(...COMMON.segBandBg);
-    doc.rect(ML, y, CW, 4.8, "F");
-    doc.setDrawColor(...theme.border); doc.setLineWidth(0.15);
-    doc.line(ML, y + 4.8, ML + CW, y + 4.8);
-    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...theme.headerTxt);
-    doc.text(text, ML + 1.8, y + 3.3);
-    doc.setFont("helvetica", "normal");
-    return y + 5.5;
-  };
 
   // ── CLEAN REPORT: region band → segments underneath ─────
   if (!isDirty) {
