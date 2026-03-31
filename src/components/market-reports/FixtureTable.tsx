@@ -32,6 +32,8 @@ const SOURCE_LABELS: Record<string, string> = {
   eastport: "Eastport",
   alliance: "Alliance",
   bravo_tankers: "Bravo",
+  ssy: "SSY",
+  aq_maritime: "AQ Maritime",
   aq_manual: "AQ Manual",
 };
 

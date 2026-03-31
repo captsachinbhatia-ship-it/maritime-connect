@@ -68,6 +68,9 @@ const SOURCE_OPTIONS = [
   { value: "alliance", label: "Alliance" },
   { value: "bravo_tankers", label: "Bravo Tankers (Fixtures)" },
   { value: "bravo_rates", label: "Bravo Rates Grid" },
+  { value: "ssy", label: "SSY" },
+  { value: "aq_maritime", label: "AQ Maritime" },
+  { value: "aq_manual", label: "AQ Manual" },
 ];
 
 const STATUS_OPTIONS = [

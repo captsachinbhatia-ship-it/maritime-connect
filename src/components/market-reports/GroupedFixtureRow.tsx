@@ -18,7 +18,7 @@ const SOURCE_LABELS: Record<string, string> = {
   meiwa_vlcc: "Meiwa VLCC", meiwa_dirty: "Meiwa Dirty",
   presco: "Presco", gibson: "Gibson", vantage_dpp: "Vantage DPP",
   eastport: "Eastport", yamamoto: "Yamamoto", alliance: "Alliance",
-  bravo_tankers: "Bravo", aq_manual: "AQ Manual",
+  bravo_tankers: "Bravo", ssy: "SSY", aq_maritime: "AQ Maritime", aq_manual: "AQ Manual",
 };
 
 const STATUS_COLORS: Record<string, string> = {

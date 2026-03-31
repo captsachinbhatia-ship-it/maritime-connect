@@ -107,7 +107,7 @@ const EXTRACTION_PROMPT = `You are a maritime broker report extraction engine.
 You will receive a daily tanker broker report. Your job is to:
 
 1. IDENTIFY the report automatically:
-   - report_source: one of meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, eastport, yamamoto, alliance, bravo_tankers, unknown
+   - report_source: one of meiwa_vlcc, meiwa_dirty, presco, gibson, vantage_dpp, eastport, yamamoto, alliance, bravo_tankers, ssy, aq_maritime, unknown
    - report_date: in YYYY-MM-DD format. The current year is 2026.
    - report_type: one of CPP, DPP, SNP, CHEMICAL
      * DPP sources: Meiwa VLCC, Meiwa Dirty, Presco (dirty sections), Gibson, Vantage DPP
@@ -383,6 +383,8 @@ const SOURCE_PATTERNS: Record<string, string[]> = {
   yamamoto: ["yamamoto"],
   alliance: ["alliance"],
   bravo_tankers: ["bravo"],
+  ssy: ["ssy"],
+  aq_maritime: ["daily dpp market report"],
 };
 
 function inferSourceFromFilename(fileName: string): string | null {
@@ -394,7 +396,7 @@ function inferSourceFromFilename(fileName: string): string | null {
 }
 
 // Infer report_type from source if Claude didn't detect it
-const DPP_SOURCES = new Set(["meiwa_vlcc", "meiwa_dirty", "gibson", "vantage_dpp", "bravo_tankers"]);
+const DPP_SOURCES = new Set(["meiwa_vlcc", "meiwa_dirty", "gibson", "vantage_dpp", "bravo_tankers", "ssy", "aq_maritime"]);
 const CPP_SOURCES = new Set(["eastport", "yamamoto", "alliance"]);
 
 function inferReportType(source: string, claudeType: string | null): string {
