@@ -5,7 +5,7 @@
  */
 
 import type { MarketRecord, Resolution } from "@/services/marketData";
-import { normalisePort } from "@/lib/fixtureNormaliser";
+import { normalisePort, normaliseCharterer } from "@/lib/fixtureNormaliser";
 
 // Fields we compare across broker reports
 export const CONFLICT_FIELDS = [
@@ -204,9 +204,12 @@ export function groupFixtures(
         group.map((f) => {
           const raw = fieldVal(f, field);
           if (raw == null) return "__null__";
-          // Normalise ports so HKG/HONG KONG/HONGKONG don't flag as conflicts
+          // Normalise ports and charterers so aliases don't flag as conflicts
           if (field === "load_port" || field === "discharge_port") {
             return normalisePort(raw).toLowerCase();
+          }
+          if (field === "charterer") {
+            return normaliseCharterer(raw).toLowerCase();
           }
           return raw.toLowerCase();
         })

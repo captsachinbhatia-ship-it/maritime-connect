@@ -123,12 +123,12 @@ export function GroupedFixtureRow({ group, onResolve, onAutoResolve, onEdit, has
           )}
         </TableCell>
 
-        <ConflictCell field="charterer" group={group} className="text-xs">{merged.charterer || "—"}</ConflictCell>
+        <ConflictCell field="charterer" group={group} className="text-xs">{merged.charterer || <span className="text-red-400">—</span>}</ConflictCell>
         <ConflictCell field="cargo_grade" group={group} className="text-xs uppercase">{merged.cargo_grade || merged.cargo_type || "—"}</ConflictCell>
-        <ConflictCell field="quantity_mt" group={group} className="text-xs tabular-nums text-right">{merged.quantity_mt?.toLocaleString() ?? "—"}</ConflictCell>
-        <ConflictCell field="load_port" group={group} className="text-xs uppercase whitespace-nowrap">{merged.load_port || "—"}</ConflictCell>
-        <ConflictCell field="discharge_port" group={group} className="text-xs uppercase whitespace-nowrap">{merged.discharge_port || "—"}</ConflictCell>
-        <TableCell className="text-xs whitespace-nowrap">{formatLaycan(merged.laycan_from, merged.laycan_to)}</TableCell>
+        <ConflictCell field="quantity_mt" group={group} className="text-xs tabular-nums text-right">{merged.quantity_mt?.toLocaleString() ?? <span className="text-red-400">—</span>}</ConflictCell>
+        <ConflictCell field="load_port" group={group} className="text-xs uppercase whitespace-nowrap">{merged.load_port || <span className="text-red-400">—</span>}</ConflictCell>
+        <ConflictCell field="discharge_port" group={group} className="text-xs uppercase whitespace-nowrap">{merged.discharge_port || <span className="text-red-400">—</span>}</ConflictCell>
+        <TableCell className="text-xs whitespace-nowrap">{merged.laycan_from ? formatLaycan(merged.laycan_from, merged.laycan_to) : <span className="text-red-400">—</span>}</TableCell>
         <ConflictCell field="rate_value" group={group} className="text-xs font-mono whitespace-nowrap">{merged.rate_value || "—"}</ConflictCell>
         <ConflictCell field="fixture_status" group={group}>
           <Badge variant="outline" className={cn("text-[10px]", STATUS_COLORS[merged.fixture_status ?? ""] ?? "")}>

@@ -1,4 +1,5 @@
 import type { MarketFixture } from "@/services/marketData";
+import { normalisePort, normaliseCharterer } from "@/lib/fixtureNormaliser";
 
 export interface FieldDiscrepancy {
   field: string;
@@ -77,9 +78,14 @@ export function detectDiscrepancies(fixtures: MarketFixture[]): {
           | null;
       }
       const unique = new Set(
-        Object.values(values).map((v) =>
-          v == null ? "__null__" : String(v).trim().toLowerCase()
-        )
+        Object.values(values).map((v) => {
+          if (v == null) return "__null__";
+          const s = String(v).trim();
+          // Normalise ports and charterers before comparing
+          if (field === "load_port" || field === "discharge_port") return normalisePort(s).toLowerCase();
+          if (field === "charterer") return normaliseCharterer(s).toLowerCase();
+          return s.toLowerCase();
+        })
       );
       if (unique.size > 1) {
         discrepantFields.push({ field, values });

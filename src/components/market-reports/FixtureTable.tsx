@@ -110,6 +110,12 @@ export function FixtureTable({
     </TableHead>
   );
 
+  /** Render value or highlighted "—" for missing key data */
+  const val = (v: string | number | null | undefined, key?: boolean) => {
+    if (v != null && String(v).trim()) return String(v);
+    return key ? <span className="text-red-400">—</span> : "—";
+  };
+
   const formatLaycan = (from: string | null, to: string | null) => {
     if (!from) return "—";
     const f = new Date(from);
@@ -188,18 +194,18 @@ export function FixtureTable({
             {singles.map((row) => (
               <TableRow key={row.id} className="hover:bg-muted/30">
                 <TableCell className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                  {row.vessel_class || "—"}
+                  {val(row.vessel_class)}
                 </TableCell>
                 <TableCell className="text-xs font-semibold whitespace-nowrap">
                   {row.vessel_name || "TBN"}
                 </TableCell>
-                <TableCell className="text-xs">{row.charterer || "—"}</TableCell>
-                <TableCell className="text-xs uppercase">{row.cargo_grade || row.cargo_type || "—"}</TableCell>
-                <TableCell className="text-xs tabular-nums text-right">{row.quantity_mt ? row.quantity_mt.toLocaleString() : "—"}</TableCell>
-                <TableCell className="text-xs uppercase whitespace-nowrap">{row.load_port || "—"}</TableCell>
-                <TableCell className="text-xs uppercase whitespace-nowrap">{row.discharge_port || "—"}</TableCell>
-                <TableCell className="text-xs whitespace-nowrap">{formatLaycan(row.laycan_from, row.laycan_to)}</TableCell>
-                <TableCell className="text-xs font-mono whitespace-nowrap">{row.rate_value || "—"}</TableCell>
+                <TableCell className="text-xs">{val(row.charterer, true)}</TableCell>
+                <TableCell className="text-xs uppercase">{val(row.cargo_grade || row.cargo_type)}</TableCell>
+                <TableCell className="text-xs tabular-nums text-right">{row.quantity_mt ? row.quantity_mt.toLocaleString() : val(null, true)}</TableCell>
+                <TableCell className="text-xs uppercase whitespace-nowrap">{val(row.load_port, true)}</TableCell>
+                <TableCell className="text-xs uppercase whitespace-nowrap">{val(row.discharge_port, true)}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{row.laycan_from ? formatLaycan(row.laycan_from, row.laycan_to) : val(null, true)}</TableCell>
+                <TableCell className="text-xs font-mono whitespace-nowrap">{val(row.rate_value)}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={cn("text-[10px]", STATUS_COLORS[row.fixture_status ?? ""] ?? "")}>
                     {row.fixture_status ?? "—"}
