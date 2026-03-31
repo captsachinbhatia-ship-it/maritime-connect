@@ -126,20 +126,52 @@ export function groupFixtures(
 ): { singles: MarketRecord[]; groups: FixtureGroup[] } {
   const resMap = buildResolutionMap(resolutions);
 
-  // Group by normalised vessel name
-  const byVessel = new Map<string, MarketRecord[]>();
+  // Group by vessel name first, then split if fixtures are clearly different
+  // (different charterer AND different route = separate fixtures, not broker discrepancies)
+  const byVesselRaw = new Map<string, MarketRecord[]>();
   for (const f of fixtures) {
-    // Skip non-fixture records
     if (f.record_type && f.record_type !== "FIXTURE") continue;
-    const key = normalizeVesselName(f.vessel_name);
-    if (!key || key === "tbn" || key === "tba") {
-      // TBN vessels stay as singles — they're different enquiries
-      if (!byVessel.has(`__tbn_${f.id}`)) byVessel.set(`__tbn_${f.id}`, []);
-      byVessel.get(`__tbn_${f.id}`)!.push(f);
+    const vesselKey = normalizeVesselName(f.vessel_name);
+    if (!vesselKey || vesselKey === "tbn" || vesselKey === "tba") {
+      byVesselRaw.set(`__tbn_${f.id}`, [f]);
       continue;
     }
-    if (!byVessel.has(key)) byVessel.set(key, []);
-    byVessel.get(key)!.push(f);
+    if (!byVesselRaw.has(vesselKey)) byVesselRaw.set(vesselKey, []);
+    byVesselRaw.get(vesselKey)!.push(f);
+  }
+
+  // Split vessel groups where fixtures are clearly different deals
+  const byVessel = new Map<string, MarketRecord[]>();
+  for (const [vesselKey, group] of byVesselRaw) {
+    if (group.length <= 1 || vesselKey.startsWith("__tbn_")) {
+      byVessel.set(vesselKey, group);
+      continue;
+    }
+    // Cluster by charterer similarity — different charterer + different load = separate fixture
+    const clusters: MarketRecord[][] = [];
+    for (const f of group) {
+      const charterer = (f.charterer ?? "").trim().toLowerCase();
+      const load = (f.load_port ?? "").trim().toLowerCase();
+      let placed = false;
+      for (const cluster of clusters) {
+        const ref = cluster[0];
+        const refCharterer = (ref.charterer ?? "").trim().toLowerCase();
+        const refLoad = (ref.load_port ?? "").trim().toLowerCase();
+        // Same fixture if charterer matches OR load port matches (brokers may differ on one)
+        if (charterer && refCharterer && charterer === refCharterer) { cluster.push(f); placed = true; break; }
+        if (load && refLoad && load === refLoad) { cluster.push(f); placed = true; break; }
+        // Both empty — group together
+        if (!charterer && !refCharterer) { cluster.push(f); placed = true; break; }
+      }
+      if (!placed) clusters.push([f]);
+    }
+    if (clusters.length === 1) {
+      byVessel.set(vesselKey, group);
+    } else {
+      clusters.forEach((cluster, i) => {
+        byVessel.set(`${vesselKey}__${i}`, cluster);
+      });
+    }
   }
 
   const singles: MarketRecord[] = [];
