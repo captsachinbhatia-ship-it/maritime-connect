@@ -240,6 +240,8 @@ export default function MarketReports() {
   const displayed = useMemo(() => {
     let result = fixtureRecords;
     if (quickFilter === "fixed") result = result.filter((f) => f.fixture_status === "fixed");
+    if (quickFilter === "on_subs") result = result.filter((f) => f.fixture_status === "on_subs");
+    if (quickFilter === "reported") result = result.filter((f) => f.fixture_status === "reported");
     if (quickFilter === "discrepancies") result = result.filter((f) => fixtureFieldMap.has(f.id));
     if (cargoTab === "dirty") result = result.filter((f) => classifyCargo(f.cargo_type) === "dirty");
     if (cargoTab === "clean") result = result.filter((f) => classifyCargo(f.cargo_type) === "clean");
@@ -351,16 +353,35 @@ export default function MarketReports() {
 
         {/* ====== FIXTURES TAB ====== */}
         <TabsContent value="fixtures" className="space-y-5 mt-4">
-          {/* Row 1: Stats bar */}
+          {/* Row 1: Stats bar — all clickable as filters */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 text-sm">
-              <span className="font-semibold">{totalFixtures} fixtures</span>
+              <span
+                className={cn("cursor-pointer transition-colors", !quickFilter ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => setQuickFilter(null)}
+              >
+                {totalFixtures} fixtures
+              </span>
               <span className="text-muted-foreground">·</span>
               <span
-                className={cn("cursor-pointer transition-colors", quickFilter === "fixed" ? "text-green-700 font-medium" : "text-muted-foreground hover:text-foreground")}
+                className={cn("cursor-pointer transition-colors", quickFilter === "fixed" ? "text-green-700 font-medium underline underline-offset-4" : "text-muted-foreground hover:text-foreground")}
                 onClick={() => toggleQuickFilter("fixed")}
               >
                 {fixedCount} fixed
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span
+                className={cn("cursor-pointer transition-colors", quickFilter === "on_subs" ? "text-yellow-700 font-medium underline underline-offset-4" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => toggleQuickFilter("on_subs")}
+              >
+                {fixtureRecords.filter((f) => f.fixture_status === "on_subs").length} on subs
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span
+                className={cn("cursor-pointer transition-colors", quickFilter === "reported" ? "text-blue-700 font-medium underline underline-offset-4" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => toggleQuickFilter("reported")}
+              >
+                {fixtureRecords.filter((f) => f.fixture_status === "reported").length} reported
               </span>
               <span className="text-muted-foreground">·</span>
               <span className="text-muted-foreground">{sourcesCount} sources</span>
@@ -370,7 +391,7 @@ export default function MarketReports() {
                 <>
                   <span className="text-muted-foreground">·</span>
                   <span
-                    className={cn("cursor-pointer transition-colors", quickFilter === "discrepancies" ? "text-amber-700 font-medium" : "text-amber-600 hover:text-amber-800")}
+                    className={cn("cursor-pointer transition-colors", quickFilter === "discrepancies" ? "text-amber-700 font-medium underline underline-offset-4" : "text-amber-600 hover:text-amber-800")}
                     onClick={() => toggleQuickFilter("discrepancies")}
                   >
                     {discrepancyFixtureCount} discrepancies
