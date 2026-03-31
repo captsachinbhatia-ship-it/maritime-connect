@@ -47,13 +47,13 @@ export const COMMON = {
 
 // ── Column widths (mm) — A4 portrait, 186mm usable ────────────
 export const COL_WIDTHS = {
-  ch: 26, qty: 12, cgo: 11, lc: 15, route: 40, vsl: 28, rate: 22, st: 12,
-  // Total: 166mm (20mm breathing room)
+  ch: 26, qty: 12, cgo: 11, lc: 15, ld: 22, dis: 22, vsl: 26, rate: 20, st: 12,
+  // Total: 166mm
 };
 
 export const ENQ_COL_WIDTHS = {
-  ch: 28, qty: 8, cgo: 11, lc: 15, route: 52, comments: 58,
-  // Total: 172mm
+  ch: 26, qty: 12, cgo: 11, lc: 15, ld: 22, dis: 22, comments: 58,
+  // Total: 166mm
 };
 
 // ── Status styling ────────────────────────────────────────────

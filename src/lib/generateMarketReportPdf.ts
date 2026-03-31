@@ -123,18 +123,19 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     return y + 5;
   };
 
-  // ── Fixture table (Route = Load → Discharge, consistent with enquiries) ───
+  // ── Fixture table (LP + DP columns) ─────────────────────
   const drawFixtureTable = (y: number, fixtures: NormalisedFixture[]): number => {
     autoTable(doc, {
       startY: y,
       margin: TABLE_MARGIN,
-      head: [["Charterer", "Qty", "CGO", "LC", "Route", "Vessel", "Rate", "Status"].slice()],
+      head: [["Charterer", "Qty", "CGO", "LC", "LP", "DP", "Vessel", "Rate", "Status"]],
       body: fixtures.map((f) => [
         f.charterer.toUpperCase(),
         f.qty,
         f.cargo,
         f.laycan,
-        f.load && f.discharge ? `${f.load} \u2192 ${f.discharge}` : f.load || f.discharge || "",
+        f.load,
+        f.discharge,
         f.vessel.toUpperCase(),
         f.demurrage ? `${f.rate} (${f.demurrage})` : f.rate,
         f.status,
@@ -157,30 +158,31 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         1: { halign: "right", cellWidth: c.qty },
         2: { halign: "center", cellWidth: c.cgo, overflow: "visible" },
         3: { halign: "center", cellWidth: c.lc },
-        4: { cellWidth: c.route },
-        5: { cellWidth: c.vsl },
-        6: { halign: "right", cellWidth: c.rate },
-        7: { halign: "center", cellWidth: c.st, overflow: "visible" },
+        4: { cellWidth: c.ld },
+        5: { cellWidth: c.dis },
+        6: { cellWidth: c.vsl },
+        7: { halign: "right", cellWidth: c.rate },
+        8: { halign: "center", cellWidth: c.st, overflow: "visible" },
       } as Record<number, object>,
       didParseCell: (data) => {
         if (data.section !== "body") return;
-        const status = String(data.row.raw?.[7] ?? "");
+        const status = String(data.row.raw?.[8] ?? "");
         if (status === "FLD") {
           data.cell.styles.fillColor = theme.fldRow;
           data.cell.styles.textColor = theme.fldTxt;
           data.cell.styles.fontStyle = "bold";
         }
-        if (data.column.index === 7) {
+        if (data.column.index === 8) {
           const ss = getStatusStyle(status, theme);
           data.cell.styles.textColor = ss.color;
           data.cell.styles.fontStyle = ss.style as "bold" | "italic" | "bolditalic" | "normal";
         }
-        if (data.column.index === 5) data.cell.text = [String(data.cell.raw ?? "").toUpperCase()];
+        if (data.column.index === 6) data.cell.text = [String(data.cell.raw ?? "").toUpperCase()];
         if (data.column.index === 0) {
           data.cell.text = [String(data.cell.raw ?? "").toUpperCase()];
           data.cell.styles.textColor = isDirty ? theme.accent : CPP.dark;
         }
-        if (data.column.index === 6 && String(data.cell.raw ?? "").includes("(DEM")) {
+        if (data.column.index === 7 && String(data.cell.raw ?? "").includes("(DEM")) {
           data.cell.styles.fontSize = 7;
         }
       },
@@ -216,13 +218,14 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
     autoTable(doc, {
       startY: y,
       margin: TABLE_MARGIN,
-      head: [["Charterer", "Qty", "CGO", "LC", "Route", "Comments"].slice()],
+      head: [["Charterer", "Qty", "CGO", "LC", "LP", "DP", "Comments"]],
       body: enquiries.map((e) => [
         e.charterer.toUpperCase(),
         e.qty,
         e.cargo,
         e.laycan,
-        e.load && e.discharge ? `${e.load} \u2192 ${e.discharge}` : e.load || e.discharge || "",
+        e.load,
+        e.discharge,
         "",
       ]),
       headStyles: {
@@ -240,8 +243,9 @@ export async function generateMarketReportPdf({ reportType, reportDate, records,
         1: { halign: "right", cellWidth: ec.qty },
         2: { halign: "center", cellWidth: ec.cgo },
         3: { halign: "center", cellWidth: ec.lc },
-        4: { cellWidth: ec.route },
-        5: { fontStyle: "italic", textColor: COMMON.grey66 as unknown as number[] },
+        4: { cellWidth: ec.ld },
+        5: { cellWidth: ec.dis },
+        6: { fontStyle: "italic", textColor: COMMON.grey66 as unknown as number[] },
       } as Record<number, object>,
     });
     return getFinalY();
