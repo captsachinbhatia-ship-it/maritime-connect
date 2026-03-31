@@ -140,7 +140,7 @@ export function AddFixtureDialog({ open, onOpenChange, onSaved, editRecord }: Pr
       };
 
       if (isEdit) {
-        const { error } = await supabase.from("market_data").update(row).eq("id", editRecord.id);
+        const { error } = await supabase.from("market_data").update({ ...row, updated_at: new Date().toISOString() }).eq("id", editRecord.id);
         if (error) throw error;
         toast({ title: "Fixture updated", description: `${vesselName || "TBN"} amended successfully` });
       } else {

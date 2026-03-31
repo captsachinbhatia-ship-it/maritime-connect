@@ -71,10 +71,16 @@ function fieldVal(rec: MarketRecord, field: ConflictField): string | null {
   return String(v).trim() || null;
 }
 
+/** Is this a user-edited or manually entered record? */
+function isUserEdited(f: MarketRecord): boolean {
+  return f.report_source === "aq_manual" ||
+    f.report_source === "aq_maritime" ||
+    (f.updated_at != null && f.updated_at !== f.created_at);
+}
+
 /**
- * Auto-resolve a single conflict field:
- * - status: highest priority wins (fixed > on_subs > reported)
- * - all others: most recent report_date wins, then most recent created_at
+ * Auto-resolve a single conflict field.
+ * Priority: user-edited record > status priority (for status field) > most recently updated
  */
 function autoResolveField(
   field: ConflictField,
@@ -82,6 +88,10 @@ function autoResolveField(
 ): MarketRecord | null {
   const candidates = fixtures.filter((f) => fieldVal(f, field) != null);
   if (candidates.length === 0) return null;
+
+  // User-edited records always win
+  const edited = candidates.filter(isUserEdited);
+  if (edited.length > 0) return edited[0];
 
   if (field === "fixture_status") {
     return candidates.reduce((best, cur) => {
@@ -91,11 +101,11 @@ function autoResolveField(
     });
   }
 
-  // Most recent wins
+  // Most recently updated wins, then most recent created_at
   return candidates.sort((a, b) => {
-    const dateCompare = (b.report_date ?? "").localeCompare(a.report_date ?? "");
-    if (dateCompare !== 0) return dateCompare;
-    return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+    const aTime = a.updated_at ?? a.created_at ?? "";
+    const bTime = b.updated_at ?? b.created_at ?? "";
+    return bTime.localeCompare(aTime);
   })[0];
 }
 
@@ -228,11 +238,17 @@ export function groupFixtures(
       (f) => !vesselResolutions?.has(f)
     ).length;
 
-    // Build merged row: start from most recent fixture, overlay resolved values,
-    // and fill nulls from other fixtures (e.g. Bravo missing qty, Presco has it)
-    const sorted = [...group].sort((a, b) =>
-      (b.created_at ?? "").localeCompare(a.created_at ?? "")
-    );
+    // Build merged row: user-edited records first, then most recently updated
+    const sorted = [...group].sort((a, b) => {
+      // User-edited records always come first
+      const aEdited = isUserEdited(a) ? 1 : 0;
+      const bEdited = isUserEdited(b) ? 1 : 0;
+      if (bEdited !== aEdited) return bEdited - aEdited;
+      // Then by most recently updated
+      const aTime = a.updated_at ?? a.created_at ?? "";
+      const bTime = b.updated_at ?? b.created_at ?? "";
+      return bTime.localeCompare(aTime);
+    });
     const merged: MarketRecord = { ...sorted[0] };
     for (const field of CONFLICT_FIELDS) {
       if (resolved[field] != null) {

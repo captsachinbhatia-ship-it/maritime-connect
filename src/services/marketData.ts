@@ -56,6 +56,7 @@ export interface MarketRecord {
   rate_lumpsum?: number | null;
   // Meta
   created_at: string;
+  updated_at: string | null;
 }
 
 // Backward compat alias
@@ -68,7 +69,7 @@ const ALL_COLUMNS = `id, report_source, report_date, report_type, record_type, s
   broker, coating, raw_text, confidence, pdf_filename,
   baltic_route, baltic_description, baltic_size, world_scale, tc_earnings,
   bunker_region, vlsfo_price, vlsfo_change, ifo380_price, ifo380_change, mgo_price, mgo_change,
-  created_at`;
+  created_at, updated_at`;
 
 // ---------- Fetch ----------
 
