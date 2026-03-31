@@ -125,7 +125,7 @@ export function GroupedFixtureRow({ group, onResolve, onAutoResolve, onEdit, has
 
         <ConflictCell field="charterer" group={group} className="text-xs">{merged.charterer || "—"}</ConflictCell>
         <ConflictCell field="cargo_grade" group={group} className="text-xs uppercase">{merged.cargo_grade || merged.cargo_type || "—"}</ConflictCell>
-        <TableCell className="text-xs tabular-nums text-right">{merged.quantity_mt?.toLocaleString() ?? "—"}</TableCell>
+        <ConflictCell field="quantity_mt" group={group} className="text-xs tabular-nums text-right">{merged.quantity_mt?.toLocaleString() ?? "—"}</ConflictCell>
         <ConflictCell field="load_port" group={group} className="text-xs uppercase whitespace-nowrap">{merged.load_port || "—"}</ConflictCell>
         <ConflictCell field="discharge_port" group={group} className="text-xs uppercase whitespace-nowrap">{merged.discharge_port || "—"}</ConflictCell>
         <TableCell className="text-xs whitespace-nowrap">{formatLaycan(merged.laycan_from, merged.laycan_to)}</TableCell>

@@ -23,6 +23,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const FIELD_LABELS: Record<string, string> = {
   charterer: "Charterer", cargo_grade: "Cargo",
+  quantity_mt: "Quantity (MT)",
   load_port: "Load Port", discharge_port: "Discharge Port",
   rate_value: "Rate", rate_numeric: "Rate (numeric)",
   fixture_status: "Status",

@@ -10,6 +10,7 @@ import type { MarketRecord, Resolution } from "@/services/marketData";
 export const CONFLICT_FIELDS = [
   "charterer",
   "cargo_grade",
+  "quantity_mt",
   "load_port",
   "discharge_port",
   "rate_value",
@@ -29,6 +30,7 @@ const STATUS_PRIORITY: Record<string, number> = {
 const FIELD_LABEL: Record<string, string> = {
   charterer: "Charterer",
   cargo_grade: "Cargo",
+  quantity_mt: "Quantity",
   load_port: "Load Port",
   discharge_port: "Disch Port",
   rate_value: "Rate",
@@ -226,7 +228,8 @@ export function groupFixtures(
       (f) => !vesselResolutions?.has(f)
     ).length;
 
-    // Build merged row: start from most recent fixture, overlay resolved values
+    // Build merged row: start from most recent fixture, overlay resolved values,
+    // and fill nulls from other fixtures (e.g. Bravo missing qty, Presco has it)
     const sorted = [...group].sort((a, b) =>
       (b.created_at ?? "").localeCompare(a.created_at ?? "")
     );
@@ -234,6 +237,12 @@ export function groupFixtures(
     for (const field of CONFLICT_FIELDS) {
       if (resolved[field] != null) {
         (merged as unknown as Record<string, unknown>)[field] = resolved[field];
+      } else if (fieldVal(merged, field) == null) {
+        // Fill null from any fixture that has a value
+        const donor = group.find((f) => fieldVal(f, field) != null);
+        if (donor) {
+          (merged as unknown as Record<string, unknown>)[field] = fieldVal(donor, field);
+        }
       }
     }
 

@@ -14,6 +14,7 @@ export interface VesselDiscrepancy {
 const COMPARE_FIELDS = [
   "charterer",
   "cargo_grade",
+  "quantity_mt",
   "load_port",
   "discharge_port",
   "rate_value",
