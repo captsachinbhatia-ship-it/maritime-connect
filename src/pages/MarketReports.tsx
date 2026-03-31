@@ -229,7 +229,12 @@ export default function MarketReports() {
 
   // Split by record type
   const fixtureRecords = useMemo(() => filtered.filter((r) => r.record_type === "FIXTURE" || !r.record_type), [filtered]);
-  const enquiryRecords = useMemo(() => filtered.filter((r) => r.record_type === "ENQUIRY"), [filtered]);
+  const enquiryRecords = useMemo(() => {
+    let result = filtered.filter((r) => r.record_type === "ENQUIRY");
+    if (cargoTab === "dirty") result = result.filter((r) => classifyCargo(r.cargo_type) === "dirty");
+    if (cargoTab === "clean") result = result.filter((r) => classifyCargo(r.cargo_type) === "clean");
+    return result;
+  }, [filtered, cargoTab]);
 
   // Apply quick filter + cargo tab (only to fixtures)
   const displayed = useMemo(() => {
