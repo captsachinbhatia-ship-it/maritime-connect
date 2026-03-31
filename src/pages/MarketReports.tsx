@@ -350,69 +350,54 @@ export default function MarketReports() {
         </TabsList>
 
         {/* ====== FIXTURES TAB ====== */}
-        <TabsContent value="fixtures" className="space-y-4 mt-4">
-          {/* Stats — clickable to quick-filter */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge
-              variant={quickFilter === null ? "secondary" : "outline"}
-              className="text-xs cursor-pointer hover:bg-secondary/80"
-              onClick={() => setQuickFilter(null)}
-            >
-              {totalFixtures} fixture{totalFixtures !== 1 ? "s" : ""}
-              {quickFilter && ` (showing ${displayedCount})`}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs cursor-pointer",
-                quickFilter === "fixed"
-                  ? "bg-green-200 text-green-900 border-green-400"
-                  : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-              )}
-              onClick={() => toggleQuickFilter("fixed")}
-            >
-              {fixedCount} fixed
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              {sourcesCount} source{sourcesCount !== 1 ? "s" : ""}
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              {dateCount} date{dateCount !== 1 ? "s" : ""}
-            </Badge>
-            {vesselDiscrepancies.size > 0 && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-xs cursor-pointer",
-                  quickFilter === "discrepancies"
-                    ? "bg-amber-200 text-amber-900 border-amber-400"
-                    : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                )}
-                onClick={() => toggleQuickFilter("discrepancies")}
+        <TabsContent value="fixtures" className="space-y-5 mt-4">
+          {/* Row 1: Stats bar */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="font-semibold">{totalFixtures} fixtures</span>
+              <span className="text-muted-foreground">·</span>
+              <span
+                className={cn("cursor-pointer transition-colors", quickFilter === "fixed" ? "text-green-700 font-medium" : "text-muted-foreground hover:text-foreground")}
+                onClick={() => toggleQuickFilter("fixed")}
               >
-                {discrepancyFixtureCount} discrepanc{vesselDiscrepancies.size === 1 ? "y" : "ies"}
-              </Badge>
-            )}
+                {fixedCount} fixed
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground">{sourcesCount} sources</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground">{dateCount} dates</span>
+              {vesselDiscrepancies.size > 0 && (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <span
+                    className={cn("cursor-pointer transition-colors", quickFilter === "discrepancies" ? "text-amber-700 font-medium" : "text-amber-600 hover:text-amber-800")}
+                    onClick={() => toggleQuickFilter("discrepancies")}
+                  >
+                    {discrepancyFixtureCount} discrepancies
+                  </span>
+                </>
+              )}
+            </div>
             {quickFilter && (
-              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-2" onClick={() => setQuickFilter(null)}>
-                Clear
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setQuickFilter(null)}>
+                Clear filter
               </Button>
             )}
           </div>
 
-          {/* Primary filters */}
+          {/* Row 2: Search + filters */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search vessel, charterer, cargo, port…"
-                className="pl-8 w-72 h-8 text-xs"
+                className="pl-8 h-9 text-xs"
               />
             </div>
             <Select value={filterSource} onValueChange={setFilterSource}>
-              <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-36 h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {SOURCE_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -420,7 +405,7 @@ export default function MarketReports() {
               </SelectContent>
             </Select>
             <Select value={filterVesselClass} onValueChange={setFilterVesselClass}>
-              <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40 h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {VESSEL_CLASS_FILTER_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -428,7 +413,7 @@ export default function MarketReports() {
               </SelectContent>
             </Select>
             <Select value={filterCargoType} onValueChange={setFilterCargoType}>
-              <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-36 h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {CARGO_TYPE_FILTER_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -436,7 +421,7 @@ export default function MarketReports() {
               </SelectContent>
             </Select>
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {STATUS_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -446,19 +431,14 @@ export default function MarketReports() {
             <Button
               variant={showMoreFilters ? "secondary" : "outline"}
               size="sm"
-              className="h-8 text-xs gap-1"
+              className="h-9 text-xs gap-1"
               onClick={() => setShowMoreFilters((p) => !p)}
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              More
-              {activeFilterCount > 5 && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">
-                  {activeFilterCount - 5}
-                </Badge>
-              )}
+              {activeFilterCount > 5 ? `Filters (${activeFilterCount - 5})` : "More"}
             </Button>
             {hasActiveFilters && (
-              <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={clearAll}>
+              <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={clearAll}>
                 Clear all
               </Button>
             )}
@@ -577,67 +557,49 @@ export default function MarketReports() {
             </Alert>
           )}
 
-          {/* Dirty / Clean / All sub-tabs */}
-          <div className="flex items-center gap-1 border-b">
-            {([
-              { key: "all" as const, label: "All", count: displayedCount },
-              { key: "dirty" as const, label: "Dirty (Crude/DPP)", count: dirtyCount },
-              { key: "clean" as const, label: "Clean (CPP/Chem/LPG)", count: cleanCount },
-            ]).map(({ key, label, count }) => (
-              <button
-                key={key}
-                onClick={() => setCargoTab(key)}
-                className={cn(
-                  "px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors",
-                  cargoTab === key
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {label}
-                <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-1.5">
-                  {count}
-                </Badge>
-              </button>
-            ))}
-          </div>
+          {/* Row 3: Cargo tabs + actions */}
+          <div className="flex items-center justify-between border-b pb-0">
+            {/* Left: DPP / CPP tabs */}
+            <div className="flex items-center gap-0">
+              {([
+                { key: "all" as const, label: "All", count: displayedCount },
+                { key: "dirty" as const, label: "DPP (Crude/Dirty)", count: dirtyCount },
+                { key: "clean" as const, label: "CPP (Clean/Chem)", count: cleanCount },
+              ]).map(({ key, label, count }) => (
+                <button
+                  key={key}
+                  onClick={() => setCargoTab(key)}
+                  className={cn(
+                    "px-4 py-2 text-xs font-medium border-b-2 -mb-px transition-colors",
+                    cargoTab === key
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {label}
+                  <span className="ml-1.5 text-[10px] tabular-nums opacity-70">{count}</span>
+                </button>
+              ))}
+            </div>
 
-          {/* Download report for specific date */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground">Download report for:</span>
-            <Input
-              type="date"
-              value={downloadDate}
-              onChange={(e) => setDownloadDate(e.target.value)}
-              className="w-36 h-8 text-xs"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1"
-              onClick={() => handleGeneratePdf("DPP")}
-            >
-              <FileDown className="h-3.5 w-3.5" />
-              DPP Report
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1"
-              onClick={() => handleGeneratePdf("CPP")}
-            >
-              <FileDown className="h-3.5 w-3.5" />
-              CPP Report
-            </Button>
-            <div className="w-px h-5 bg-border" />
-            <Button
-              size="sm"
-              className="h-8 text-xs gap-1"
-              onClick={() => { setEditFixture(null); setAddFixtureOpen(true); }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Fixture
-            </Button>
+            {/* Right: Download + Add */}
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={downloadDate}
+                onChange={(e) => setDownloadDate(e.target.value)}
+                className="w-36 h-8 text-xs"
+              />
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => handleGeneratePdf("DPP")}>
+                <FileDown className="h-3.5 w-3.5" /> DPP
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => handleGeneratePdf("CPP")}>
+                <FileDown className="h-3.5 w-3.5" /> CPP
+              </Button>
+              <Button size="sm" className="h-8 text-xs gap-1" onClick={() => { setEditFixture(null); setAddFixtureOpen(true); }}>
+                <Plus className="h-3.5 w-3.5" /> Add
+              </Button>
+            </div>
           </div>
 
           {/* Fixture tables */}
