@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowUpDown, AlertTriangle, Pencil } from "lucide-react";
+import { ArrowUpDown, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -9,12 +9,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { MarketFixture, Resolution } from "@/services/marketData";
 import type { VesselDiscrepancy } from "@/lib/discrepancies";
@@ -37,11 +31,13 @@ const SOURCE_LABELS: Record<string, string> = {
   vantage_dpp: "Vantage DPP",
   eastport: "Eastport",
   alliance: "Alliance",
-  bravo_tankers: "Bravo Tankers",
+  bravo_tankers: "Bravo",
+  aq_manual: "AQ Manual",
 };
 
 type SortCol =
   | "vessel_name"
+  | "vessel_class"
   | "charterer"
   | "load_port"
   | "discharge_port"
@@ -52,7 +48,6 @@ type SortCol =
 
 interface Props {
   fixtures: MarketFixture[];
-  vesselClass: string;
   fixtureFieldMap: Map<string, Set<string>>;
   vesselDiscrepancies: Map<string, VesselDiscrepancy>;
   resolutions?: Resolution[];
@@ -64,7 +59,6 @@ interface Props {
 
 export function FixtureTable({
   fixtures,
-  vesselClass,
   fixtureFieldMap,
   vesselDiscrepancies,
   onResolve,
@@ -73,16 +67,12 @@ export function FixtureTable({
   onEdit,
   resolutions = [],
 }: Props) {
-  const [sortCol, setSortCol] = useState<SortCol>("vessel_name");
+  const [sortCol, setSortCol] = useState<SortCol>("vessel_class");
   const [sortAsc, setSortAsc] = useState(true);
 
   const toggleSort = (col: SortCol) => {
-    if (sortCol === col) {
-      setSortAsc((p) => !p);
-    } else {
-      setSortCol(col);
-      setSortAsc(true);
-    }
+    if (sortCol === col) setSortAsc((p) => !p);
+    else { setSortCol(col); setSortAsc(true); }
   };
 
   const sorted = useMemo(() => {
@@ -95,42 +85,25 @@ export function FixtureTable({
       if (bv == null) return -1;
       if (typeof av === "number" && typeof bv === "number")
         return sortAsc ? av - bv : bv - av;
-      const cmp = String(av).localeCompare(String(bv), undefined, {
-        numeric: true,
-      });
+      const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
       return sortAsc ? cmp : -cmp;
     });
     return arr;
   }, [fixtures, sortCol, sortAsc]);
 
-  // Group fixtures by vessel name — multi-source vessels become collapsible groups
   const { singles, groups } = useMemo(
     () => groupFixtures(sorted, resolutions),
     [sorted, resolutions]
   );
 
-  // Sort singles the same way as the full list
-  const sortedSingles = singles;
+  const totalUnresolved = groups.reduce((sum, g) => sum + g.unresolvedCount, 0);
+  const colCount = onEdit ? 14 : 13;
 
-  const SortHeader = ({
-    col,
-    children,
-    className,
-  }: {
-    col: SortCol;
-    children: React.ReactNode;
-    className?: string;
-  }) => (
-    <TableHead
-      className={cn(
-        "cursor-pointer select-none whitespace-nowrap text-xs",
-        className
-      )}
-      onClick={() => toggleSort(col)}
-    >
+  const SortHeader = ({ col, children, className }: { col: SortCol; children: React.ReactNode; className?: string }) => (
+    <TableHead className={cn("cursor-pointer select-none whitespace-nowrap text-xs", className)} onClick={() => toggleSort(col)}>
       <span className="inline-flex items-center gap-1">
         {children}
-        <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+        <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />
       </span>
     </TableHead>
   );
@@ -144,152 +117,83 @@ export function FixtureTable({
     return `${fStr}–${t.getDate()}/${t.getMonth() + 1}`;
   };
 
-  const getDiscrepancyTooltip = (
-    fixtureId: string,
-    field: string
-  ): string | null => {
-    const fields = fixtureFieldMap.get(fixtureId);
-    if (!fields?.has(field)) return null;
-
-    // Find the vessel discrepancy for this fixture
-    for (const disc of vesselDiscrepancies.values()) {
-      if (!disc.fixtureIds.includes(fixtureId)) continue;
-      const fd = disc.fields.find((f) => f.field === field);
-      if (!fd) return null;
-      return Object.entries(fd.values)
-        .map(([src, val]) => `${SOURCE_LABELS[src] ?? src}: ${val ?? "—"}`)
-        .join("\n");
-    }
-    return null;
-  };
-
-  const DiscrepantCell = ({
-    fixtureId,
-    field,
-    children,
-    className,
-  }: {
-    fixtureId: string;
-    field: string;
-    children: React.ReactNode;
-    className?: string;
-  }) => {
-    const tooltip = getDiscrepancyTooltip(fixtureId, field);
-    if (!tooltip) {
-      return <TableCell className={className}>{children}</TableCell>;
-    }
-    return (
-      <TableCell className={cn(className, "bg-amber-100/60")}>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="cursor-help">{children}</span>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">
-              <p className="text-xs font-semibold mb-1">Cross-report values:</p>
-              {tooltip.split("\n").map((line, i) => (
-                <p key={i} className="text-xs">
-                  {line}
-                </p>
-              ))}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </TableCell>
-    );
-  };
-
-  const groupedCount = groups.length;
-  const totalUnresolved = groups.reduce((sum, g) => sum + g.unresolvedCount, 0);
-  const totalConflicts = groups.reduce((sum, g) => sum + Object.keys(g.conflicts).length, 0);
-
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold">{vesselClass}</h3>
-        <Badge variant="secondary" className="text-xs">
-          {singles.length + groups.length} vessel{singles.length + groups.length !== 1 ? "s" : ""}
-        </Badge>
-        {groupedCount > 0 && (
-          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-            {groupedCount} grouped
-          </Badge>
+    <div className="space-y-3">
+      {/* Stats bar */}
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">{singles.length + groups.length} fixtures</span>
+        {groups.length > 0 && (
+          <span>{groups.length} grouped ({groups.reduce((s, g) => s + g.fixtures.length, 0)} reports)</span>
         )}
         {totalUnresolved > 0 && (
-          <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            {totalUnresolved} unresolved
+          <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+            {totalUnresolved} conflicts
           </Badge>
         )}
-        {totalConflicts > 0 && totalUnresolved === 0 && (
-          <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+        {groups.length > 0 && totalUnresolved === 0 && (
+          <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">
             All resolved
           </Badge>
         )}
       </div>
 
-      <div className="rounded-lg border overflow-auto max-h-[50vh]">
+      <div className="rounded-lg border overflow-auto">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="bg-muted/40">
+              <SortHeader col="vessel_class" className="w-[70px]">Type</SortHeader>
               <SortHeader col="vessel_name">Vessel</SortHeader>
-              <TableHead className="text-xs whitespace-nowrap">DWT</TableHead>
               <SortHeader col="charterer">Charterer</SortHeader>
               <TableHead className="text-xs">Cargo</TableHead>
-              <TableHead className="text-xs">Qty MT</TableHead>
+              <TableHead className="text-xs text-right">Qty</TableHead>
               <SortHeader col="load_port">Load</SortHeader>
               <SortHeader col="discharge_port">Disch</SortHeader>
               <TableHead className="text-xs">Laycan</TableHead>
               <SortHeader col="rate_numeric">Rate</SortHeader>
               <SortHeader col="fixture_status">Status</SortHeader>
               <SortHeader col="report_source">Source</SortHeader>
-              <SortHeader col="report_date">Report Date</SortHeader>
-              {onEdit && <TableHead className="text-xs w-10"></TableHead>}
+              <SortHeader col="report_date">Date</SortHeader>
+              <TableHead className="text-xs w-[50px]">DWT</TableHead>
+              {onEdit && <TableHead className="text-xs w-8" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={onEdit ? 13 : 12}
-                  className="text-center text-muted-foreground py-6 text-xs"
-                >
-                  No fixtures for {vesselClass}
+                <TableCell colSpan={colCount} className="text-center text-muted-foreground py-10 text-sm">
+                  No fixtures to display
                 </TableCell>
               </TableRow>
             )}
 
-            {/* Grouped rows (multi-source vessels) — collapsible */}
+            {/* Grouped rows — collapsible */}
             {groups.map((group) => (
               <GroupedFixtureRow
                 key={group.vesselKey}
                 group={group}
                 onResolve={(g) => {
-                  // Find the matching VesselDiscrepancy and call onResolve
                   const disc = vesselDiscrepancies.get(g.vesselKey);
                   if (disc && onResolve) onResolve(disc);
                   else if (onResolveGroup) onResolveGroup(g);
                 }}
-                onAutoResolve={(g) => {
-                  if (onAutoResolveGroup) onAutoResolveGroup(g);
-                }}
+                onAutoResolve={(g) => { if (onAutoResolveGroup) onAutoResolveGroup(g); }}
                 onEdit={onEdit}
                 hasEditCol={!!onEdit}
               />
             ))}
 
-            {/* Single rows (one source only) — standard rendering */}
-            {sortedSingles.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell className="text-xs font-medium whitespace-nowrap">
-                  {row.vessel_name || "TBN"}
+            {/* Single rows */}
+            {singles.map((row) => (
+              <TableRow key={row.id} className="hover:bg-muted/30">
+                <TableCell className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                  {row.vessel_class || "—"}
                 </TableCell>
-                <TableCell className="text-xs tabular-nums">
-                  {row.dwt ? row.dwt.toLocaleString() : "—"}
+                <TableCell className="text-xs font-semibold whitespace-nowrap">
+                  {row.vessel_name || "TBN"}
                 </TableCell>
                 <TableCell className="text-xs">{row.charterer || "—"}</TableCell>
                 <TableCell className="text-xs uppercase">{row.cargo_grade || row.cargo_type || "—"}</TableCell>
-                <TableCell className="text-xs tabular-nums">{row.quantity_mt ? row.quantity_mt.toLocaleString() : "—"}</TableCell>
+                <TableCell className="text-xs tabular-nums text-right">{row.quantity_mt ? row.quantity_mt.toLocaleString() : "—"}</TableCell>
                 <TableCell className="text-xs uppercase whitespace-nowrap">{row.load_port || "—"}</TableCell>
                 <TableCell className="text-xs uppercase whitespace-nowrap">{row.discharge_port || "—"}</TableCell>
                 <TableCell className="text-xs whitespace-nowrap">{formatLaycan(row.laycan_from, row.laycan_to)}</TableCell>
@@ -299,18 +203,18 @@ export function FixtureTable({
                     {row.fixture_status ?? "—"}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                <TableCell className="text-[10px] text-muted-foreground whitespace-nowrap">
                   {SOURCE_LABELS[row.report_source] ?? row.report_source}
                 </TableCell>
-                <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{row.report_date ?? "—"}</TableCell>
+                <TableCell className="text-[10px] whitespace-nowrap text-muted-foreground">{row.report_date ?? "—"}</TableCell>
+                <TableCell className="text-[10px] tabular-nums text-muted-foreground">{row.dwt ? `${(row.dwt / 1000).toFixed(0)}k` : "—"}</TableCell>
                 {onEdit && (
                   <TableCell className="text-center">
                     <button
                       className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
                       onClick={() => onEdit(row)}
-                      title="Edit fixture"
                     >
-                      <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
                     </button>
                   </TableCell>
                 )}

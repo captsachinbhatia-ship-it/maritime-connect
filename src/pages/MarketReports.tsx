@@ -656,48 +656,39 @@ export default function MarketReports() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Fixtures grouped by vessel class */}
-              {[...VESSEL_CLASSES, "Other"].map(
-                (cls) =>
-                  grouped[cls] &&
-                  grouped[cls].length > 0 && (
-                    <FixtureTable
-                      key={cls}
-                      vesselClass={cls}
-                      fixtures={grouped[cls]}
-                      fixtureFieldMap={fixtureFieldMap}
-                      vesselDiscrepancies={vesselDiscrepancies}
-                      resolutions={resolutions}
-                      onResolve={setResolveTarget}
-                      onResolveGroup={(g) => {
-                        const disc = vesselDiscrepancies.get(g.vesselKey);
-                        if (disc) setResolveTarget(disc);
-                      }}
-                      onAutoResolveGroup={async (g) => {
-                        // Auto-resolve: for each unresolved conflict, pick best value and save
-                        for (const field of Object.keys(g.conflicts)) {
-                          if (g.resolved[field as keyof typeof g.resolved]) continue;
-                          const val = g.merged[field as keyof typeof g.merged];
-                          if (val == null) continue;
-                          await resolveDiscrepancy({
-                            vesselName: g.vesselKey,
-                            reportDate: g.merged.report_date ?? "",
-                            fieldName: field,
-                            resolvedValue: String(val),
-                            displayName: String(val),
-                            remark: "Auto-resolved",
-                            resolvedBy: crmUserId,
-                            resolvedByName: crmUser?.full_name ?? "System",
-                          });
-                        }
-                        loadFixtures();
-                        fetchResolutions().then(({ data }) => setResolutions(data ?? []));
-                        toast({ title: "Auto-resolved", description: `${g.vesselName} — all conflicts resolved automatically` });
-                      }}
-                      onEdit={(f) => { setEditFixture(f); setAddFixtureOpen(true); }}
-                    />
-                  )
-              )}
+              {/* Unified fixture table */}
+              <FixtureTable
+                fixtures={displayed}
+                fixtureFieldMap={fixtureFieldMap}
+                vesselDiscrepancies={vesselDiscrepancies}
+                resolutions={resolutions}
+                onResolve={setResolveTarget}
+                onResolveGroup={(g) => {
+                  const disc = vesselDiscrepancies.get(g.vesselKey);
+                  if (disc) setResolveTarget(disc);
+                }}
+                onAutoResolveGroup={async (g) => {
+                  for (const field of Object.keys(g.conflicts)) {
+                    if (g.resolved[field as keyof typeof g.resolved]) continue;
+                    const val = g.merged[field as keyof typeof g.merged];
+                    if (val == null) continue;
+                    await resolveDiscrepancy({
+                      vesselName: g.vesselKey,
+                      reportDate: g.merged.report_date ?? "",
+                      fieldName: field,
+                      resolvedValue: String(val),
+                      displayName: String(val),
+                      remark: "Auto-resolved",
+                      resolvedBy: crmUserId,
+                      resolvedByName: crmUser?.full_name ?? "System",
+                    });
+                  }
+                  loadFixtures();
+                  fetchResolutions().then(({ data }) => setResolutions(data ?? []));
+                  toast({ title: "Auto-resolved", description: `${g.vesselName} — all conflicts resolved automatically` });
+                }}
+                onEdit={(f) => { setEditFixture(f); setAddFixtureOpen(true); }}
+              />
 
               {/* Enquiries section */}
               {enquiryRecords.length > 0 && (
