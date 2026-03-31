@@ -5,6 +5,7 @@
  */
 
 import type { MarketRecord, Resolution } from "@/services/marketData";
+import { normalisePort } from "@/lib/fixtureNormaliser";
 
 // Fields we compare across broker reports
 export const CONFLICT_FIELDS = [
@@ -196,12 +197,20 @@ export function groupFixtures(
     }
 
     // Multiple reports for same vessel — detect conflicts
+    // Normalise port names before comparing (HKG = HONG KONG = HONGKONG)
     const conflicts: Partial<Record<ConflictField, boolean>> = {};
     for (const field of CONFLICT_FIELDS) {
       const values = new Set(
-        group.map((f) => (fieldVal(f, field) ?? "__null__").toLowerCase())
+        group.map((f) => {
+          const raw = fieldVal(f, field);
+          if (raw == null) return "__null__";
+          // Normalise ports so HKG/HONG KONG/HONGKONG don't flag as conflicts
+          if (field === "load_port" || field === "discharge_port") {
+            return normalisePort(raw).toLowerCase();
+          }
+          return raw.toLowerCase();
+        })
       );
-      // Exclude null-only sets
       values.delete("__null__");
       if (values.size > 1) {
         conflicts[field] = true;
@@ -258,6 +267,17 @@ export function groupFixtures(
         const donor = group.find((f) => fieldVal(f, field) != null);
         if (donor) {
           (merged as unknown as Record<string, unknown>)[field] = fieldVal(donor, field);
+        }
+      }
+    }
+
+    // Fill null non-conflict fields from other fixtures (laycan, dwt, etc.)
+    const FILL_FIELDS = ["laycan_from", "laycan_to", "dwt", "built_year", "owner", "coating", "cargo_type"] as const;
+    for (const field of FILL_FIELDS) {
+      if (merged[field] == null) {
+        const donor = group.find((f) => f[field] != null);
+        if (donor) {
+          (merged as unknown as Record<string, unknown>)[field] = donor[field];
         }
       }
     }
