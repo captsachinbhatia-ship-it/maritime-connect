@@ -34,6 +34,7 @@ import MarketBunker from "./pages/MarketBunker";
 import { AdminRoute } from "./components/AdminRoute";
 import BalticRoutes from "./pages/BalticRoutes";
 import WhatsAppParser from "./pages/WhatsAppParser";
+import VesselPositions from "./pages/VesselPositions";
 
 import CompleteProfile from "./pages/CompleteProfile";
 import AuthCallback from "./pages/AuthCallback";
@@ -97,6 +98,7 @@ const App = () => {
                 <Route path="bulk-import" element={<Navigate to="/contacts/bulk-import" replace />} />
                 <Route path="baltic-routes" element={<BalticRoutes />} />
                 <Route path="whatsapp-parser" element={<WhatsAppParser />} />
+                <Route path="vessel-positions" element={<VesselPositions />} />
                 <Route path="account/security" element={<AccountSecurity />} />
               </Route>
               <Route path="*" element={<NotFound />} />

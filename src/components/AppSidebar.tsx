@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/sidebar';
 
 const marketItems = [
+  { title: 'Vessel Positions', url: '/vessel-positions', icon: Anchor },
   { title: 'Fixtures', url: '/market-reports', icon: Newspaper },
   { title: 'Baltic & Rates', url: '/baltic-routes', icon: Anchor },
   { title: 'Bunker Prices', url: '/market-reports/bunker', icon: Newspaper },
