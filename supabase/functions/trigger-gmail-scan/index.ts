@@ -1,6 +1,6 @@
 // supabase/functions/trigger-gmail-scan/index.ts
-// Proxies CRM "Scan Now" button to the Gmail Apps Script Web App
-// that scans fixture report emails.
+// Proxies CRM "Scan Now" button to the Gmail Apps Script Web App.
+// Fire-and-forget: returns immediately, Apps Script runs in background.
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -28,26 +28,18 @@ Deno.serve(async (req: Request) => {
 
     console.log("Triggering fixture scan via Apps Script:", appsScriptUrl);
 
-    const response = await fetch(appsScriptUrl, {
+    // Fire-and-forget: kick off the request but don't await the full response.
+    // Apps Script scans can take 2-5 minutes — we return success immediately.
+    fetch(appsScriptUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ trigger: "crm_scan_now", timestamp: new Date().toISOString() }),
-    });
-
-    const responseText = await response.text();
-
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch {
-      result = { raw_response: responseText.slice(0, 500), status: response.status };
-    }
+    }).catch((err) => console.error("Apps Script background error:", err));
 
     return new Response(
       JSON.stringify({
-        success: response.ok || response.status === 302,
-        apps_script_status: response.status,
-        result,
+        success: true,
+        message: "Fixture scan triggered. Emails are being processed in background — new fixtures will appear shortly.",
       }),
       { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
     );

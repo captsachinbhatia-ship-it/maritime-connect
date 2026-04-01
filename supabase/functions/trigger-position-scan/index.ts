@@ -1,6 +1,6 @@
 // supabase/functions/trigger-position-scan/index.ts
-// Proxies CRM "Scan Now" button to the Gmail Apps Script Web App
-// that scans position list emails.
+// Proxies CRM "Scan Now" button to the Gmail Apps Script Web App.
+// Fire-and-forget: returns immediately, Apps Script runs in background.
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -26,34 +26,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log("Triggering position scan via Apps Script:", appsScriptUrl);
-
     // Ensure ?type=positions is appended for routing in Apps Script
     const url = appsScriptUrl.includes("type=positions")
       ? appsScriptUrl
       : appsScriptUrl + (appsScriptUrl.includes("?") ? "&" : "?") + "type=positions";
 
-    const response = await fetch(url, {
+    console.log("Triggering position scan via Apps Script:", url);
+
+    // Fire-and-forget: kick off the request but don't await the full response.
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "positions", trigger: "crm_scan_now", timestamp: new Date().toISOString() }),
-    });
-
-    // Apps Script may redirect (302) for Web Apps — follow redirects
-    const responseText = await response.text();
-
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch {
-      result = { raw_response: responseText.slice(0, 500), status: response.status };
-    }
+    }).catch((err) => console.error("Apps Script background error:", err));
 
     return new Response(
       JSON.stringify({
-        success: response.ok || response.status === 302,
-        apps_script_status: response.status,
-        result,
+        success: true,
+        message: "Position scan triggered. Emails are being processed in background — new positions will appear shortly.",
       }),
       { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }
     );

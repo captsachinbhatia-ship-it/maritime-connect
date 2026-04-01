@@ -21,15 +21,12 @@ export function FixtureScanPanel({ onScanComplete }: Props) {
       });
       if (error) throw error;
 
-      const res = data as { success?: boolean; result?: { imported?: number; scanned?: number; errors?: number } };
-      const imported = res.result?.imported ?? 0;
-      const scanned = res.result?.scanned ?? 0;
-
       setResult({
         success: true,
-        message: `Scan complete. ${scanned} emails scanned, ${imported} fixtures imported.`,
+        message: data?.message ?? "Scan triggered. New fixtures will appear shortly.",
       });
-      onScanComplete();
+      // Refresh data after a short delay to catch early results
+      setTimeout(onScanComplete, 5000);
     } catch (err) {
       setResult({
         success: false,
@@ -63,7 +60,7 @@ export function FixtureScanPanel({ onScanComplete }: Props) {
             ) : (
               <Mail className="h-4 w-4" />
             )}
-            {scanning ? "Scanning..." : "Scan Now"}
+            {scanning ? "Triggering..." : "Scan Now"}
           </Button>
           <span className="text-xs text-muted-foreground">
             Pulls fixture reports from the last 2 days
