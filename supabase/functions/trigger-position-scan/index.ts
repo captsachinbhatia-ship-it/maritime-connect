@@ -28,10 +28,15 @@ Deno.serve(async (req: Request) => {
 
     console.log("Triggering position scan via Apps Script:", appsScriptUrl);
 
-    const response = await fetch(appsScriptUrl, {
+    // Ensure ?type=positions is appended for routing in Apps Script
+    const url = appsScriptUrl.includes("type=positions")
+      ? appsScriptUrl
+      : appsScriptUrl + (appsScriptUrl.includes("?") ? "&" : "?") + "type=positions";
+
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trigger: "crm_scan_now", timestamp: new Date().toISOString() }),
+      body: JSON.stringify({ type: "positions", trigger: "crm_scan_now", timestamp: new Date().toISOString() }),
     });
 
     // Apps Script may redirect (302) for Web Apps — follow redirects
