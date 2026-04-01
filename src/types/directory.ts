@@ -8,6 +8,8 @@ export interface DirectoryRow {
   id: string;
   full_name: string | null;
   email: string | null;
+  designation: string | null;
+  phone: string | null;
   company_id: string | null;
   company_name: string | null;
   created_at: string | null;

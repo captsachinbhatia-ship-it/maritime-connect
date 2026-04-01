@@ -14,7 +14,7 @@ import { upsertOwners, addAssignment, changeContactStage } from "@/services/assi
 import { getUserNames } from "@/services/interactions";
 import { fetchDirectoryRows } from "@/services/directoryView";
 import { DirectoryRow, AssignmentStage } from "@/types/directory";
-import { SortableHeader, type SortColumn, type SortDirection } from "./ColumnFilters";
+import { ColumnFiltersBar, useColumnFilters, EMPTY_FILTERS, type ColumnFilters as ColFilters, SortableHeader, type SortColumn, type SortDirection } from "./ColumnFilters";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { DirectoryBulkToolbar } from "./DirectoryBulkToolbar";
@@ -57,12 +57,9 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
   const [isLoading, setIsLoading] = useState(true);
 
   // filters
-  const [nameFilter, setNameFilter] = useState("");
-  const [companyFilter, setCompanyFilter] = useState("");
+  const [colFilters, setColFilters] = useState<ColFilters>({ ...EMPTY_FILTERS, status: "active" });
   const [ownerSummaryFilter, setOwnerSummaryFilter] = useState<OwnerFilterState | null>(null);
   const [addedByFilter, setAddedByFilter] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
 
   const [sortConfig, setSortConfig] = useState<{ column: SortColumn; direction: SortDirection }>({
     column: "created_at",
@@ -150,15 +147,21 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     return counts;
   }, [contacts]);
 
-  const filteredContacts = useMemo(() => {
-    let filtered = contacts;
+  const colFilterGetters = useMemo(() => ({
+    fullName: (c: DirectoryRow) => c.full_name || '',
+    company: (c: DirectoryRow) => c.company_name || '',
+    designation: (c: DirectoryRow) => c.designation || '',
+    email: (c: DirectoryRow) => c.email || '',
+    phone: (c: DirectoryRow) => c.phone || '',
+    secondaryOwner: (c: DirectoryRow) => c.secondary_owner_id ? (userNamesMap[c.secondary_owner_id] || '') : '',
+    stage: (c: DirectoryRow) => c.primary_stage || '',
+    isActive: (c: DirectoryRow) => c.is_active !== false,
+  }), [userNamesMap]);
 
-    // Status filter
-    if (statusFilter === "active") {
-      filtered = filtered.filter((c) => c.is_active !== false);
-    } else if (statusFilter === "inactive") {
-      filtered = filtered.filter((c) => c.is_active === false);
-    }
+  const columnFiltered = useColumnFilters(contacts, colFilters, colFilterGetters);
+
+  const filteredContacts = useMemo(() => {
+    let filtered = columnFiltered;
 
     // Owner summary table filter
     if (ownerSummaryFilter) {
@@ -174,22 +177,6 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     // Added By
     if (addedByFilter !== "all") {
       filtered = filtered.filter((c) => c.created_by_crm_user_id === addedByFilter);
-    }
-
-    // Stage
-    if (stageFilter !== "all") {
-      filtered = filtered.filter((c) => (c.primary_stage || "") === stageFilter);
-    }
-
-    // Search (name, email, company)
-    if (nameFilter.trim()) {
-      const s = nameFilter.toLowerCase().trim();
-      filtered = filtered.filter(
-        (c) =>
-          (c.full_name || "").toLowerCase().includes(s) ||
-          (c.email || "").toLowerCase().includes(s) ||
-          (c.company_name || "").toLowerCase().includes(s)
-      );
     }
 
     // Sort
@@ -232,7 +219,7 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
     });
 
     return filtered;
-  }, [contacts, nameFilter, ownerSummaryFilter, addedByFilter, stageFilter, statusFilter, sortConfig, editingContactId]);
+  }, [columnFiltered, ownerSummaryFilter, addedByFilter, sortConfig, editingContactId]);
 
   const handleSort = (column: SortColumn) => {
     setSortConfig((prev) => ({
@@ -456,62 +443,30 @@ export function DirectoryTab({ onCountsChanged }: DirectoryTabProps = {}) {
             />
           )}
 
-          {/* Clean filters row */}
+          {/* Filters */}
+          <ColumnFiltersBar filters={colFilters} onFiltersChange={setColFilters} />
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <Input
-              placeholder="Search name, email, company…"
-              value={nameFilter}
-              onChange={(e) => setNameFilter(e.target.value)}
-              className="h-8 w-[220px] text-sm"
-            />
-
-            <div className="flex items-center gap-1.5">
-              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-              <Select value={addedByFilter} onValueChange={setAddedByFilter}>
-                <SelectTrigger className="h-8 w-[170px] text-sm">
-                  <SelectValue placeholder="Added By" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  <SelectItem value="all">Added By: All</SelectItem>
-                  {crmUsers.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "inactive")}>
-              <SelectTrigger className="h-8 w-[110px] text-sm">
-                <SelectValue />
+            <Select value={addedByFilter} onValueChange={setAddedByFilter}>
+              <SelectTrigger className="h-8 w-[170px] text-xs">
+                <SelectValue placeholder="Added By" />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="all">Added By: All</SelectItem>
+                {crmUsers.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-
             <div className="flex items-center gap-1.5 ml-auto flex-wrap">
-              <Button
-                variant={stageFilter === "all" ? "default" : "outline"}
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setStageFilter("all")}
-              >
-                All Stages
-              </Button>
               {STAGE_OPTIONS.map((s) => (
-                <Button
+                <Badge
                   key={s.value}
-                  variant={stageFilter === s.value ? "default" : "outline"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setStageFilter(s.value)}
+                  variant={colFilters.stage === s.value ? "default" : "outline"}
+                  className="cursor-pointer text-xs"
+                  onClick={() => setColFilters((f) => ({ ...f, stage: f.stage === s.value ? "all" : s.value }))}
                 >
                   {s.label} ({stageCounts[s.value] || 0})
-                </Button>
+                </Badge>
               ))}
             </div>
           </div>

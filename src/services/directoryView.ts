@@ -5,6 +5,8 @@ const VIEW_COLUMNS = `
   id,
   full_name,
   email,
+  designation,
+  phone,
   company_id,
   company_name,
   created_at,
