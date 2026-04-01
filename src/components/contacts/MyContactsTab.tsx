@@ -30,7 +30,7 @@ import { useCrmUser } from '@/hooks/useCrmUser';
 // stage update is done directly via supabase in handleStageUpdate
 import { getNextFollowupDueMap, getFollowupStatusLabel } from '@/services/followups';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
-import { ContactsSearch } from './ContactsSearch';
+import { ColumnFiltersBar, useColumnFilters, EMPTY_FILTERS, type ColumnFilters as ColFilters } from './ColumnFilters';
 import { ContactWithCompany } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { SendNudgeDialog } from './SendNudgeDialog';
@@ -78,7 +78,7 @@ export function MyContactsTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingStage, setIsUpdatingStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [colFilters, setColFilters] = useState<ColFilters>({ ...EMPTY_FILTERS });
 
   // Drawer state
   const [selectedContact, setSelectedContact] = useState<ContactWithCompany | null>(null);
@@ -219,21 +219,18 @@ export function MyContactsTab() {
       .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
   }, [allContacts, activeStage]);
 
-  // Client-side search filter for multi-field search
-  const filteredContacts = useMemo(() => {
-    if (!search.trim()) return contacts;
-    const searchLower = search.toLowerCase().trim();
-    return contacts.filter(contact => {
-      const fullName = (contact.full_name || '').toLowerCase();
-      const companyName = ((contact as any).company_name || '').toLowerCase();
-      const email = (contact.email || '').toLowerCase();
-      const phone = (contact.primary_phone || '').toLowerCase();
-      return fullName.includes(searchLower) || 
-             companyName.includes(searchLower) || 
-             email.includes(searchLower) || 
-             phone.includes(searchLower);
-    });
-  }, [contacts, search]);
+  const colFilterGetters = useMemo(() => ({
+    fullName: (c: ContactWithCompany) => c.full_name || '',
+    company: (c: ContactWithCompany) => (c as unknown as Record<string, string>).company_name || '',
+    designation: (c: ContactWithCompany) => c.designation || '',
+    email: (c: ContactWithCompany) => c.email || '',
+    phone: (c: ContactWithCompany) => c.primary_phone || '',
+    secondaryOwner: () => '',
+    stage: (c: ContactWithCompany) => (c as unknown as Record<string, string>)._stage || '',
+    isActive: (c: ContactWithCompany) => c.is_active !== false,
+  }), []);
+
+  const filteredContacts = useColumnFilters(contacts, colFilters, colFilterGetters);
 
   useEffect(() => {
     if (!authLoading) {
@@ -563,7 +560,7 @@ export function MyContactsTab() {
               </TabsTrigger>
             ))}
           </TabsList>
-          <ContactsSearch value={search} onChange={setSearch} />
+          <ColumnFiltersBar filters={colFilters} onFiltersChange={setColFilters} showStage={false} showStatus={false} showSecondaryOwner={false} />
         </div>
       </Tabs>
 

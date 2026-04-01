@@ -21,7 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCrmUser } from '@/hooks/useCrmUser';
 import { getUserNames } from '@/services/interactions';
 import { getNudgeStatusMap } from '@/services/nudgeStatus';
-import { ContactsSearch } from './ContactsSearch';
+import { ColumnFiltersBar, useColumnFilters, EMPTY_FILTERS, type ColumnFilters as ColFilters } from './ColumnFilters';
 import { ContactDetailsDrawer } from './ContactDetailsDrawer';
 import { AcknowledgeNudgeButton } from './AcknowledgeNudgeButton';
 import { ContactWithCompany } from '@/types';
@@ -77,7 +77,7 @@ export function SecondaryContactsTab() {
   const [nudgeStatusMap, setNudgeStatusMap] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [colFilters, setColFilters] = useState<ColFilters>({ ...EMPTY_FILTERS });
   const [activeStage, setActiveStage] = useState<StageFilter>('ALL');
 
   // Drawer state
@@ -225,25 +225,24 @@ export function SecondaryContactsTab() {
     return counts;
   }, [contacts]);
 
-  // Filter by active stage then search
-  const filteredContacts = useMemo(() => {
-    let list = contacts;
-    if (activeStage !== 'ALL') {
-      list = list.filter(c => (c.stage ?? '').trim().toUpperCase() === activeStage);
-    }
-    if (!search.trim()) return list;
-    const searchLower = search.toLowerCase().trim();
-    return list.filter(contact => {
-      const fullName = (contact.full_name || '').toLowerCase();
-      const companyName = ((contact as any).company_name || '').toLowerCase();
-      const email = (contact.email || '').toLowerCase();
-      const phone = (contact.primary_phone || '').toLowerCase();
-      return fullName.includes(searchLower) || 
-             companyName.includes(searchLower) || 
-             email.includes(searchLower) || 
-             phone.includes(searchLower);
-    });
-  }, [contacts, activeStage, search]);
+  const colFilterGetters = useMemo(() => ({
+    fullName: (c: typeof contacts[0]) => c.full_name || '',
+    company: (c: typeof contacts[0]) => (c as unknown as Record<string, string>).company_name || '',
+    designation: (c: typeof contacts[0]) => c.designation || '',
+    email: (c: typeof contacts[0]) => c.email || '',
+    phone: (c: typeof contacts[0]) => c.primary_phone || '',
+    secondaryOwner: () => '',
+    stage: (c: typeof contacts[0]) => c.stage || '',
+    isActive: (c: typeof contacts[0]) => c.is_active !== false,
+  }), []);
+
+  // Filter by active stage then column filters
+  const stageFiltered = useMemo(() => {
+    if (activeStage === 'ALL') return contacts;
+    return contacts.filter(c => (c.stage ?? '').trim().toUpperCase() === activeStage);
+  }, [contacts, activeStage]);
+
+  const filteredContacts = useColumnFilters(stageFiltered, colFilters, colFilterGetters as never);
 
   const handleRowClick = (e: React.MouseEvent, contact: SecondaryContact) => {
     const target = e.target as HTMLElement;
@@ -300,7 +299,7 @@ export function SecondaryContactsTab() {
                 ))}
               </TabsList>
             </Tabs>
-            <ContactsSearch value={search} onChange={setSearch} />
+            <ColumnFiltersBar filters={colFilters} onFiltersChange={setColFilters} showStage={false} showStatus={false} showSecondaryOwner={false} />
           </div>
 
           {isLoading ? (
@@ -334,7 +333,7 @@ export function SecondaryContactsTab() {
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Users className="mb-2 h-10 w-10 text-muted-foreground/50" />
               <p className="text-muted-foreground">
-                {search.trim() ? 'No contacts match your search.' : 'No secondary contacts assigned to you.'}
+                No secondary contacts match your filters.
               </p>
             </div>
           ) : (
