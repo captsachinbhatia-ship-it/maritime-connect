@@ -39,6 +39,7 @@ import { UploadReportDialog } from "@/components/market-reports/UploadReportDial
 import { ReportHistoryTable } from "@/components/market-reports/ReportHistoryTable";
 import { ResolveDiscrepancyDialog } from "@/components/market-reports/ResolveDiscrepancyDialog";
 import { AddFixtureDialog } from "@/components/market-reports/AddFixtureDialog";
+import { FixtureScanPanel } from "@/components/market-reports/FixtureScanPanel";
 import { generateMarketReportPdf } from "@/lib/generateMarketReportPdf";
 import { detectDiscrepancies, type VesselDiscrepancy } from "@/lib/discrepancies";
 import {
@@ -727,8 +728,11 @@ export default function MarketReports() {
 
         {/* ====== IMPORT TAB ====== */}
         <TabsContent value="import" className="space-y-6 mt-4">
+          {/* Gmail Auto-Scan section */}
+          <FixtureScanPanel onScanComplete={() => { loadFixtures(); setHistoryRefresh((r) => r + 1); }} />
+
           {/* Upload section */}
-          <div className="space-y-3">
+          <div className="space-y-3 border-t pt-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Upload Broker Reports</h2>
