@@ -46,6 +46,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ColumnFiltersBar, useColumnFilters, EMPTY_FILTERS, type ColumnFilters } from '@/components/contacts/ColumnFilters';
 import { AddContactModal } from '@/components/contacts/AddContactModal';
 import { ContactDetailsDrawer } from '@/components/contacts/ContactDetailsDrawer';
 import { AssignContactModal } from '@/components/contacts/AssignContactModal';
@@ -947,6 +948,33 @@ export default function ContactsV2() {
 
   const cumulative = useCumulativeCounts();
 
+  // ── Column filters (My Primary / My Secondary / My Added / Inactive / Deleted) ──
+  const [colFilters, setColFilters] = useState<ColumnFilters>({ ...EMPTY_FILTERS });
+
+  // Reset column filters on tab change
+  useEffect(() => {
+    setColFilters({ ...EMPTY_FILTERS });
+  }, [activeTab]);
+
+  const colFilterGetters = useMemo(() => ({
+    fullName: (r: ContactV2Row) => r.full_name || '',
+    company: (r: ContactV2Row) => r.company_name || '',
+    designation: (r: ContactV2Row) => r.designation || '',
+    email: (r: ContactV2Row) => r.email || '',
+    phone: (r: ContactV2Row) => {
+      if (!r.phone) return '';
+      const cc = String(r.country_code || '').replace(/\D/g, '');
+      return cc ? `+${cc} ${r.phone}` : `+91 ${r.phone}`;
+    },
+    secondaryOwner: (r: ContactV2Row) => r.secondary_owner || '',
+    stage: (r: ContactV2Row) => r.stage || '',
+    isActive: (r: ContactV2Row) => r.is_active !== false,
+  }), []);
+
+  const isNonDirectoryTab = activeTab !== 'directory';
+  const filteredRows = useColumnFilters(isNonDirectoryTab ? rows : [], colFilters, colFilterGetters);
+  const displayRows = isNonDirectoryTab ? filteredRows : rows;
+
   // ── View mode (table vs kanban) ────────────────────────────────
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>(() => {
     return (localStorage.getItem('contacts-view-mode') as 'table' | 'kanban') || 'table';
@@ -1550,7 +1578,7 @@ export default function ContactsV2() {
       {/* Kanban view */}
       {viewMode === 'kanban' ? (
         <ContactKanbanView
-          rows={rows}
+          rows={displayRows}
           isLoading={isLoading}
           onRefresh={refetchAll}
           onOpenContact={(contact, stage) => {
@@ -1572,12 +1600,23 @@ export default function ContactsV2() {
             </div>
           )}
 
+          {/* Column filters (non-Directory tabs) */}
+          {!isDirectory && !isLoading && (
+            <ColumnFiltersBar
+              filters={colFilters}
+              onFiltersChange={setColFilters}
+              showStage={false}
+              showStatus={false}
+              showSecondaryOwner={activeTab === 'my-primary'}
+            />
+          )}
+
           {/* Table */}
           {isLoading ? (
             <TableSkeleton />
           ) : (
             <ContactsV2Table
-              rows={rows}
+              rows={displayRows}
               activeTab={activeTab}
               isAdmin={isAdmin}
               crmUserId={crmUserId}

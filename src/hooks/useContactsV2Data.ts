@@ -441,28 +441,59 @@ export function useContactsV2Data() {
             (companies || []).forEach((co: any) => companyMap.set(co.id, co.company_name));
           }
 
-          const normalized: ContactV2Row[] = (contacts || []).map((row: any) => ({
-            id: row.id,
-            full_name: row.full_name || "",
-            company_name: row.company_id ? (companyMap.get(row.company_id) ?? null) : null,
-            designation: row.designation ?? null,
-            email: row.email ?? null,
-            phone: row.phone ?? null,
-            country_code: row.country_code ?? null,
-            primary_owner: null,
-            primary_owner_id: crmUserId,
-            secondary_owner: null,
-            secondary_owner_id: null,
-            stage: normalizeStage(stageMap.get(row.id)),
-            is_active: typeof row.is_active === "boolean" ? row.is_active : null,
-            updated_at: row.updated_at ?? null,
-            last_interaction_at: null,
-            created_by_crm_user_id: row.created_by_crm_user_id ?? null,
-            created_by_name: null,
-            company_type: null,
-            is_deleted: row.is_deleted ?? false,
-            deleted_at: row.deleted_at ?? null,
-          }));
+          // Lookup secondary owners for these contacts
+          const contactIds = (contacts || []).map((c: any) => c.id);
+          let secOwnerMap = new Map<string, { id: string; name: string }>();
+          if (contactIds.length > 0) {
+            const { data: secAssigns } = await supabase
+              .from("contact_assignments")
+              .select("contact_id, assigned_to_crm_user_id")
+              .in("contact_id", contactIds)
+              .eq("assignment_role", "SECONDARY")
+              .eq("status", "ACTIVE")
+              .is("ended_at", null);
+            if (secAssigns && secAssigns.length > 0) {
+              const secUserIds = [...new Set(secAssigns.map((a: any) => a.assigned_to_crm_user_id).filter(Boolean))];
+              if (secUserIds.length > 0) {
+                const { data: secUsers } = await supabase
+                  .from("crm_users")
+                  .select("id, full_name")
+                  .in("id", secUserIds);
+                const secNameMap = new Map<string, string>();
+                (secUsers || []).forEach((u: any) => secNameMap.set(u.id, u.full_name));
+                secAssigns.forEach((a: any) => {
+                  const name = secNameMap.get(a.assigned_to_crm_user_id);
+                  if (name) secOwnerMap.set(a.contact_id, { id: a.assigned_to_crm_user_id, name });
+                });
+              }
+            }
+          }
+
+          const normalized: ContactV2Row[] = (contacts || []).map((row: any) => {
+            const sec = secOwnerMap.get(row.id);
+            return {
+              id: row.id,
+              full_name: row.full_name || "",
+              company_name: row.company_id ? (companyMap.get(row.company_id) ?? null) : null,
+              designation: row.designation ?? null,
+              email: row.email ?? null,
+              phone: row.phone ?? null,
+              country_code: row.country_code ?? null,
+              primary_owner: null,
+              primary_owner_id: crmUserId,
+              secondary_owner: sec?.name ?? null,
+              secondary_owner_id: sec?.id ?? null,
+              stage: normalizeStage(stageMap.get(row.id)),
+              is_active: typeof row.is_active === "boolean" ? row.is_active : null,
+              updated_at: row.updated_at ?? null,
+              last_interaction_at: null,
+              created_by_crm_user_id: row.created_by_crm_user_id ?? null,
+              created_by_name: null,
+              company_type: null,
+              is_deleted: row.is_deleted ?? false,
+              deleted_at: row.deleted_at ?? null,
+            };
+          });
 
           setRows(normalized);
           setTotalRows(cCount ?? normalized.length);
